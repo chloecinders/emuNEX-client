@@ -17,13 +17,32 @@ jobs:
         steps:
             - uses: actions/checkout@v4
 
+            - name: install pnpm
+              uses: pnpm/action-setup@v4
+              with:
+                  version: 9
+
             - name: setup node
               uses: actions/setup-node@v4
               with:
                   node-version: lts/*
+                  cache: "pnpm"
 
             - name: install rust stable
               uses: dtolnay/rust-toolchain@stable
+
+            - name: cargo cache
+              uses: actions/cache@v4
+              with:
+                  path: |
+                      ~/.cargo/bin/
+                      ~/.cargo/registry/index/
+                      ~/.cargo/registry/cache/
+                      ~/.cargo/git/db/
+                      src-tauri/target/
+                  key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+                  restore-keys: |
+                      ${{ runner.os }}-cargo-
 
             - name: install dependencies (ubuntu only)
               if: matrix.platform == 'ubuntu-22.04'
@@ -39,15 +58,24 @@ jobs:
                     patchelf
 
             - name: install frontend dependencies
-              run: npm install
+              run: pnpm install
 
-            - uses: tauri-apps/tauri-action@v0
+            - name: build tauri
+              run: pnpm tauri build
               env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
                   TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
                   TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
+            - name: release
+              uses: softprops/action-gh-release@v2
               with:
-                  tagName: ${{ github.ref_name }}
-                  releaseName: "App ${{ github.ref_name }}"
-                  releaseBody: "See the assets below for the latest installers."
-                  releaseDraft: true
+                  tag_name: ${{ github.ref_name }}
+                  name: "App ${{ github.ref_name }}"
+                  body: "See the assets below for the latest installers."
+                  draft: true
+                  files: |
+                      src-tauri/target/release/bundle/msi/*.msi
+                      src-tauri/target/release/bundle/setup.exe
+                      src-tauri/target/release/bundle/dmg/*.dmg
+                      src-tauri/target/release/bundle/deb/*.deb
+                      src-tauri/target/release/bundle/appimage/*.AppImage
