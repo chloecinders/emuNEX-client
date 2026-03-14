@@ -45,6 +45,6 @@ export const useMetadataStore = defineStore("metadata", () => {
         consoles,
         loading,
         fetchCategories,
-        fetchConsoles
+        fetchConsoles,
     };
 });

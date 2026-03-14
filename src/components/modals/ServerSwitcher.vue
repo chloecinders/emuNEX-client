@@ -21,13 +21,15 @@ const isConnecting = ref(false);
 async function loadDomains() {
     const rawDomains = await getSavedDomains();
 
-    const domainStatuses = await Promise.all(rawDomains.map(async (d) => {
-        const store = await getDomainStore(d);
-        const token = await store.get<string>("token");
-        return { domain: d, hasToken: !!token };
-    }));
-    
-    domains.value = domainStatuses.filter(d => d.hasToken).map(d => d.domain);
+    const domainStatuses = await Promise.all(
+        rawDomains.map(async (d) => {
+            const store = await getDomainStore(d);
+            const token = await store.get<string>("token");
+            return { domain: d, hasToken: !!token };
+        }),
+    );
+
+    domains.value = domainStatuses.filter((d) => d.hasToken).map((d) => d.domain);
 }
 
 async function startConnection(normalizedDomain: string) {
@@ -70,9 +72,9 @@ async function handleSwitch(domain: string) {
 async function handleAdd() {
     const rawDomain = newDomain.value.trim();
     if (!rawDomain) return;
-    
+
     const normalized = normalizeDomain(rawDomain);
-    
+
     try {
         new URL(normalized);
     } catch (e) {
@@ -83,9 +85,12 @@ async function handleAdd() {
     await startConnection(normalized);
 }
 
-watch(() => props.show, (newVal) => {
-    if (newVal) loadDomains();
-});
+watch(
+    () => props.show,
+    (newVal) => {
+        if (newVal) loadDomains();
+    },
+);
 
 onMounted(loadDomains);
 </script>

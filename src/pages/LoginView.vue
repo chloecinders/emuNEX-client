@@ -14,18 +14,20 @@ const errorMessage = ref("");
 const authStore = useAuthStore();
 const isConnecting = ref(false);
 
-const savedDomains = ref<{ domain: string, hasToken: boolean }[]>([]);
+const savedDomains = ref<{ domain: string; hasToken: boolean }[]>([]);
 
 onMounted(async () => {
     const domains = await getSavedDomains();
-    const domainStatuses = await Promise.all(domains.map(async (d) => {
-        const store = await getDomainStore(d);
-        const token = await store.get<string>("token");
-        return { domain: d, hasToken: !!token };
-    }));
-    
+    const domainStatuses = await Promise.all(
+        domains.map(async (d) => {
+            const store = await getDomainStore(d);
+            const token = await store.get<string>("token");
+            return { domain: d, hasToken: !!token };
+        }),
+    );
+
     savedDomains.value = domainStatuses;
-    
+
     if (authStore.domain && authStore.token) {
         router.push("/");
     } else if (authStore.domain) {

@@ -15,11 +15,7 @@ export interface V1ApiError {
 export type V1ApiResponseType<T> = Promise<V1ApiResponse<T>>;
 
 class ApiClient {
-    private async request<T>(
-        endpoint: string,
-        method: string,
-        body?: any
-    ): V1ApiResponseType<T> {
+    private async request<T>(endpoint: string, method: string, body?: any): V1ApiResponseType<T> {
         const store = useAuthStore();
         const baseUrl = `${store.domain}/api/v1`;
         const url = `${baseUrl}${endpoint}`;
@@ -43,13 +39,13 @@ class ApiClient {
                 parsedError = {
                     error: data.error || "API Error",
                     code: data.code || "ApiError",
-                    success: false
+                    success: false,
                 };
             } catch {
                 parsedError = {
                     error: error.toString(),
                     code: "NetworkError",
-                    success: false
+                    success: false,
                 };
             }
 
@@ -58,11 +54,11 @@ class ApiClient {
     }
 
     public get<T>(path: string): V1ApiResponseType<T> {
-        return this.request<T>(path, 'GET');
+        return this.request<T>(path, "GET");
     }
 
     public post<T>(path: string, body: any): V1ApiResponseType<T> {
-        return this.request<T>(path, 'POST', body);
+        return this.request<T>(path, "POST", body);
     }
 }
 
@@ -70,5 +66,5 @@ export const http = new ApiClient();
 
 export function useStoragePath(route: string): string {
     const authStore = useAuthStore();
-    return `${authStore.domain}${authStore.storagePath}/${route}`
+    return `${authStore.domain}${authStore.storagePath}/${route}`;
 }

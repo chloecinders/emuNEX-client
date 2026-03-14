@@ -1,6 +1,6 @@
 import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
-import { relaunch } from '@tauri-apps/plugin-process';
-import { check } from '@tauri-apps/plugin-updater';
+import { relaunch } from "@tauri-apps/plugin-process";
+import { check } from "@tauri-apps/plugin-updater";
 import { createPinia } from "pinia";
 import { createApp } from "vue";
 import App from "./App.vue";
@@ -15,7 +15,7 @@ async function checkForUpdates() {
             await relaunch();
         }
     } catch (e) {
-        console.warn("Couldn't check/download updates:", e)
+        console.warn("Couldn't check/download updates:", e);
     }
 }
 
@@ -66,7 +66,7 @@ const urlHandler = async (urls: string[]) => {
 
         window.location.href = "/";
     }
-}
+};
 
 onOpenUrl(urlHandler);
 

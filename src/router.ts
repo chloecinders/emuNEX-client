@@ -9,34 +9,34 @@ import { useGameStore } from "./stores/GameStore";
 
 const routes = [
     {
-        path: '/login',
-        name: 'login',
+        path: "/login",
+        name: "login",
         component: LoginView,
-        meta: {}
+        meta: {},
     },
     {
-        path: '/',
-        name: 'home',
+        path: "/",
+        name: "home",
         component: IndexView,
-        meta: { layout: markRaw(ShellLayout) }
+        meta: { layout: markRaw(ShellLayout) },
     },
     {
-        path: '/search',
-        name: 'search',
+        path: "/search",
+        name: "search",
         component: SearchView,
-        meta: { layout: markRaw(ShellLayout) }
-    }
+        meta: { layout: markRaw(ShellLayout) },
+    },
 ];
 
 export const router = createRouter({
     history: createMemoryHistory(),
     routes,
-})
+});
 
 router.beforeEach((to, _from, next) => {
     const authStore = useAuthStore();
-    if (to.name !== 'login' && !authStore.token) {
-        next({ name: 'login' });
+    if (to.name !== "login" && !authStore.token) {
+        next({ name: "login" });
     } else {
         next();
     }
@@ -45,4 +45,4 @@ router.beforeEach((to, _from, next) => {
 router.afterEach((_to, _from) => {
     const gameStore = useGameStore();
     gameStore.currentSelectedGame = null;
-})
+});

@@ -12,7 +12,7 @@ const authStore = useAuthStore();
 
 const onClick = async () => {
     const currentDomain = authStore.domain;
-    
+
     if (currentDomain) {
         const domainStore = await getDomainStore(currentDomain);
         await domainStore.set("token", null);
@@ -27,6 +27,6 @@ const onClick = async () => {
     authStore.token = null;
     authStore.domain = null;
 
-    router.push({ name: 'login' });
+    router.push({ name: "login" });
 };
 </script>

@@ -85,7 +85,7 @@ export const useGameStore = defineStore("gameStore", () => {
 
     async function fetchGame(id: number, force = false): Promise<Game | null> {
         if (!force) {
-            const foundGame = games.value.find(g => g.id === id);
+            const foundGame = games.value.find((g) => g.id === id);
             if (foundGame) return foundGame;
         }
 
@@ -93,7 +93,7 @@ export const useGameStore = defineStore("gameStore", () => {
             const res = await http.get<Game>(`/roms/${id}`);
 
             if (res.success) {
-                games.value = games.value.filter(g => g.id !== id);
+                games.value = games.value.filter((g) => g.id !== id);
                 games.value.push(res.data);
                 return res.data;
             }
@@ -130,6 +130,6 @@ export const useGameStore = defineStore("gameStore", () => {
         fetchLibrary,
         startGame,
         fetchGame,
-        searchGames
+        searchGames,
     };
 });

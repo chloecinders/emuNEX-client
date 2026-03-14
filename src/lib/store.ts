@@ -1,6 +1,6 @@
 import { appDataDir, join } from "@tauri-apps/api/path";
 import { mkdir } from "@tauri-apps/plugin-fs";
-import { load, Store } from "@tauri-apps/plugin-store";
+import { load, type Store } from "@tauri-apps/plugin-store";
 
 let globalStore: Store | null = null;
 const domainStores: Record<string, Store> = {};
@@ -18,7 +18,14 @@ export function normalizeDomain(domain: string): string {
         let protocol = "https://";
 
         const plainDomain = hasProtocol ? domain.split("://")[1] : domain;
-        if (plainDomain.startsWith("127.0.0.1") || plainDomain.startsWith("localhost") || plainDomain.split(":")[0].split(".").every(part => !isNaN(Number(part)))) {
+        if (
+            plainDomain.startsWith("127.0.0.1") ||
+            plainDomain.startsWith("localhost") ||
+            plainDomain
+                .split(":")[0]
+                .split(".")
+                .every((part) => !isNaN(Number(part)))
+        ) {
             protocol = "http://";
         }
 

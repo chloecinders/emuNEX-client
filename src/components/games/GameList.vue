@@ -1,6 +1,6 @@
 <script lang="ts" setup>
 import { ref } from "vue";
-import { PartialGame, useGameStore } from "../../stores/GameStore";
+import { type PartialGame, useGameStore } from "../../stores/GameStore";
 import { useStoragePath } from "../../utils/http";
 
 const gamesStore = useGameStore();

@@ -9,12 +9,12 @@ export default defineConfig(async () => ({
     plugins: [vue()],
     clearScreen: false,
     build: {
-        target: "esnext"
+        target: "esnext",
     },
     esbuild: {
         supported: {
-            "top-level-await": true
-        }
+            "top-level-await": true,
+        },
     },
     server: {
         port: 1420,
@@ -22,10 +22,10 @@ export default defineConfig(async () => ({
         host: host || false,
         hmr: host
             ? {
-                protocol: "ws",
-                host,
-                port: 1421,
-            }
+                  protocol: "ws",
+                  host,
+                  port: 1421,
+              }
             : undefined,
         watch: {
             ignored: ["**/src-tauri/**"],

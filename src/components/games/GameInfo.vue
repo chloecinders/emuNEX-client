@@ -1,9 +1,9 @@
 <script lang="ts" setup>
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { computed, onMounted, ref, Ref, watch } from "vue";
+import { computed, onMounted, ref, type Ref, watch } from "vue";
 import { useEmulatorStore } from "../../stores/EmulatorStore";
-import { Game, useGameStore } from "../../stores/GameStore";
+import { type Game, useGameStore } from "../../stores/GameStore";
 import { useStoragePath } from "../../utils/http";
 import SaveConflict from "../modals/SaveConflict.vue";
 

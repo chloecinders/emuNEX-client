@@ -18,5 +18,5 @@ export const useAuthStore = defineStore("authStore", () => {
         storagePath.value = null;
     }
 
-    return { domain, token, storagePath, setAuth, clearAuth }
-})
+    return { domain, token, storagePath, setAuth, clearAuth };
+});

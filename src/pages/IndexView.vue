@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { Ref, ref, watch } from "vue";
+import { type Ref, ref, watch } from "vue";
 import GameInfo from "../components/games/GameInfo.vue";
 import GameLibrary from "../components/games/GameLibrary.vue";
-import { LibraryGame, useGameStore } from "../stores/GameStore";
+import { type LibraryGame, useGameStore } from "../stores/GameStore";
 
 const gameStore = useGameStore();
 const library: Ref<LibraryGame[]> = ref([]);
