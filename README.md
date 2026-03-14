@@ -13,7 +13,7 @@ This client does not work without an emuNEX server. This client itself provides 
 
 ## Installation
 
-Coming soon.
+Grab an installer from https://github.com/chloecinders/emuNEX-client/releases!
 
 ## Contributing
 
