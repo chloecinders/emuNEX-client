@@ -8,10 +8,14 @@ import App from "./App.vue";
 import { router } from "./router";
 
 async function checkForUpdates() {
-    const update = await check();
-    if (update) {
-        await update.downloadAndInstall();
-        await relaunch();
+    try {
+        const update = await check();
+        if (update) {
+            await update.downloadAndInstall();
+            await relaunch();
+        }
+    } catch (e) {
+        console.warn("Couldn't check/download updates:", e)
     }
 }
 
