@@ -1,6 +1,8 @@
 # emuNEX (client)
 Emulation made easy.
 
+![image](https://github.com/user-attachments/assets/cf2cb2fe-ffd4-4c2a-8338-d1ccf58fba0c)
+
 emuNEX is a service, think of it like Steam, but for emulators. The client connects to a remote server which provides emulators, games and in the future could handle features such as saving game save files or profiles/friends.
 
 Playing old games is as easy as searching for a game and pressing (download and then) play!
