@@ -70,7 +70,7 @@ jobs:
               uses: softprops/action-gh-release@v2
               with:
                   tag_name: ${{ github.ref_name }}
-                  name: "App ${{ github.ref_name }}"
+                  name: "emuNex Client ${{ github.ref_name }}"
                   body: "See the assets below for the latest installers."
                   draft: true
                   files: |
