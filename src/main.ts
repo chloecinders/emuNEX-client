@@ -21,14 +21,28 @@ async function checkForUpdates() {
 
 await checkForUpdates();
 
-const globalStore = await getGlobalStore();
+const app = createApp(App);
+const pinia = createPinia();
+app.use(pinia);
 
-const app = createApp(App).use(router)
+import { useAuthStore } from "./stores/AuthStore";
+import { useUserStore } from "./stores/UserStore";
+import { useGameStore } from "./stores/GameStore";
+import { useMetadataStore } from "./stores/MetadataStore";
+
+const authStore = useAuthStore(pinia);
+const userStore = useUserStore(pinia);
+const gameStore = useGameStore(pinia);
+const metadataStore = useMetadataStore(pinia);
+
+app.use(router);
+
+const globalStore = await getGlobalStore();
 
 const urlHandler = async (urls: string[]) => {
     const url = new URL(urls[0]);
 
-    if (url.host == "login") {
+    if (url.host === "login") {
         const domain = url.searchParams.get("domain");
         const token = url.searchParams.get("token");
         const storagePath = url.searchParams.get("storage_path");
@@ -46,6 +60,8 @@ const urlHandler = async (urls: string[]) => {
             await domainStore.save();
             await globalStore.set("domain", normalizedDomain);
             await globalStore.save();
+
+            authStore.setAuth(normalizedDomain, token || "", storagePath || "");
         }
 
         window.location.href = "/";
@@ -54,22 +70,21 @@ const urlHandler = async (urls: string[]) => {
 
 onOpenUrl(urlHandler);
 
-const pinia = createPinia();
-
 const domain = await globalStore.get<string>("domain");
 if (domain) {
-    app.provide("auth_domain", domain);
     const domainStore = await getDomainStore(domain);
     const token = await domainStore.get<string>("token");
     const storagePath = await domainStore.get<string>("storage_path");
 
-    if (token) {
-        app.provide("auth_token", token);
-    }
+    if (token && storagePath) {
+        authStore.setAuth(domain, token, storagePath);
 
-    if (storagePath) {
-        app.provide("auth_storage", storagePath);
+        await userStore.fetchUser();
+        await gameStore.fetchPartialGames();
+        await gameStore.fetchLibrary();
+        await metadataStore.fetchCategories();
+        await metadataStore.fetchConsoles();
     }
 }
 
-app.use(pinia).mount("#app");
+app.mount("#app");

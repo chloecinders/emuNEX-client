@@ -5,6 +5,7 @@ import { computed, onMounted, ref, Ref, watch } from "vue";
 import { useEmulatorStore } from "../../stores/EmulatorStore";
 import { Game, useGameStore } from "../../stores/GameStore";
 import { useStoragePath } from "../../utils/http";
+import SaveConflict from "../modals/SaveConflict.vue";
 
 const gameStore = useGameStore();
 const emulatorStore = useEmulatorStore();
@@ -53,8 +54,9 @@ const handleInstallEmulator = async () => {
     if (!game.value || isDownloading.value) return;
     try {
         isDownloading.value = true;
+
         await invoke("download_emulator", { console: game.value.console });
-        await emulatorStore.getEmulators();
+        await emulatorStore.fetchEmulators();
         await checkInstallation();
     } catch (error) {
         alert(`Failed to download: ${error}`);
@@ -70,6 +72,7 @@ let resolveConflict: ((value: boolean) => void) | null = null;
 const promptSyncConflict = (version: number): Promise<boolean> => {
     conflictVersion.value = version;
     showConflictModal.value = true;
+
     return new Promise((resolve) => {
         resolveConflict = resolve;
     });
@@ -122,31 +125,58 @@ const handlePlay = async () => {
                     <img :src="useStoragePath(game.image_path)" alt="Game Icon" class="game-thumb" />
                     <span class="console-tag">{{ game.console.toUpperCase() }}</span>
                 </div>
+
                 <div class="titles">
                     <h3>{{ game.title }}</h3>
                     <p class="subtitle">{{ game.category }} | {{ game.region }}</p>
 
-                    <div v-if="libraryStats" class="library-meta">
-                        <span>Played {{ libraryStats.play_count }} times</span>
-                        <span class="separator">•</span>
-                        <span>Last: {{ formatDate(libraryStats.last_played) }}</span>
-                    </div>
+                    <transition name="fade">
+                        <div v-if="libraryStats" class="library-meta">
+                            <span class="stat-item">
+                                <span class="stat-label">PLAYED:</span> {{ libraryStats.play_count }}
+                            </span>
+
+                            <span class="separator">/</span>
+
+                            <span class="stat-item">
+                                <span class="stat-label">LAST:</span> {{ formatDate(libraryStats.last_played) }}
+                            </span>
+                        </div>
+                    </transition>
                 </div>
             </div>
 
             <div class="action-area">
-                <button v-if="isEmulatorInstalled" class="btn-3ds btn-play" @click="handlePlay" :disabled="isLaunching">
-                    {{ isLaunching ? "Running..." : "Open" }}
-                </button>
+                <div class="btn-container">
+                    <button v-if="isEmulatorInstalled" 
+                        class="nintendo-btn blue" 
+                        @click="handlePlay" 
+                        :disabled="isLaunching"
+                    >
+                        <span class="btn-edge"></span>
 
-                <button v-else class="btn-3ds btn-install" @click="handleInstallEmulator" :disabled="isDownloading">
-                    {{ isDownloading ? "Downloading..." : "Download Emulator" }}
-                </button>
+                        <span class="btn-front">
+                            {{ isLaunching ? "LAUNCHING..." : "PLAY GAME" }}
+                        </span>
+                    </button>
+
+                    <button v-else 
+                        class="nintendo-btn green" 
+                        @click="handleInstallEmulator" 
+                        :disabled="isDownloading"
+                    >
+                        <span class="btn-edge"></span>
+
+                        <span class="btn-front">
+                            {{ isDownloading ? "DOWNLOADING..." : "INSTALL EMULATOR" }}
+                        </span>
+                    </button>
+                </div>
             </div>
         </div>
     </transition>
 
-    <SaveConflictModal :show="showConflictModal" :version="conflictVersion" @choice="handleConflictChoice" />
+    <SaveConflict :show="showConflictModal" :version="conflictVersion" @choice="handleConflictChoice" />
 </template>
 
 <style scoped>
@@ -155,53 +185,57 @@ const handlePlay = async () => {
     bottom: 0;
     left: 0;
     right: 0;
-    height: 100px;
-    background: linear-gradient(to bottom, #ffffff, #e9e9e9);
-    border-top: 3px solid #0089cf;
-    padding: 0 30px;
+    height: 120px;
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-top: 2px solid var(--color-border);
+    padding: 0 var(--spacing-xl);
     display: flex;
     justify-content: space-between;
     align-items: center;
-    box-shadow: 0 -5px 15px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.05);
     z-index: 100;
 }
 
 .banner-icon {
     position: relative;
-    width: 64px;
-    height: 64px;
-    background: white;
-    border-radius: 10px;
-    padding: 4px;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+    width: 80px;
+    height: 80px;
+    background: var(--color-surface);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-xs);
+    box-shadow: var(--shadow-subtle);
     display: flex;
     align-items: center;
     justify-content: center;
+    border: 1px solid var(--color-border);
 }
 
 .game-thumb {
     width: 100%;
     height: 100%;
     object-fit: cover;
-    border-radius: 6px;
+    border-radius: calc(var(--radius-md) - 4px);
 }
 
 .console-tag {
     position: absolute;
-    bottom: -5px;
-    right: -5px;
-    background: #444;
+    top: -8px;
+    right: -8px;
+    background: var(--color-primary);
     color: white;
-    font-size: 8px;
-    padding: 2px 5px;
-    border-radius: 4px;
-    font-weight: bold;
-    border: 1px solid white;
+    font-size: 10px;
+    padding: var(--spacing-xxs) var(--spacing-sm);
+    border-radius: var(--radius-full);
+    font-weight: 900;
+    border: 2px solid var(--color-surface);
+    box-shadow: var(--shadow-subtle);
 }
 
 .info-header {
     display: flex;
-    gap: 20px;
+    gap: var(--spacing-lg);
     align-items: center;
 }
 
@@ -212,65 +246,137 @@ const handlePlay = async () => {
 
 h3 {
     margin: 0;
-    font-size: 1.1rem;
-    color: #333;
-    font-weight: 800;
+    font-size: 1.5rem;
+    color: var(--color-text);
+    font-weight: 900;
+    letter-spacing: -0.5px;
 }
 
 .subtitle {
-    margin: 2px 0 0 0;
-    font-size: 0.75rem;
-    color: #888;
+    margin: var(--spacing-xs) 0 0 0;
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.library-meta {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--color-text-muted);
+}
+
+.stat-label {
+    opacity: 0.6;
+    margin-right: var(--spacing-xs);
+}
+
+.separator {
+    opacity: 0.3;
+}
+
+.action-area {
+    display: flex;
+    align-items: center;
+}
+
+.btn-container {
+    position: relative;
+    height: 52px;
+    width: 240px;
+}
+
+.nintendo-btn {
+    position: relative;
+    border: none;
+    background: transparent;
+    padding: 0;
+    cursor: pointer;
+    user-select: none;
+    width: 100%;
+    height: 100%;
+    font-family: inherit;
+    font-weight: 800;
+    font-size: 1rem;
     text-transform: uppercase;
     letter-spacing: 0.5px;
 }
 
-.library-meta {
-    margin-top: 4px;
-    font-size: 0.7rem;
-    color: #0089cf;
-    font-weight: bold;
+.btn-front {
     display: flex;
-    gap: 6px;
-}
-
-.separator {
-    color: #ccc;
-}
-
-.btn-3ds {
-    padding: 12px 45px;
-    border-radius: 50px;
-    border: none;
-    font-weight: bold;
-    font-size: 1rem;
-    cursor: pointer;
-    box-shadow: 0 4px 0 rgba(0, 0, 0, 0.2);
-    transition: all 0.1s;
-}
-
-.btn-play {
-    background: linear-gradient(to bottom, #82d84a, #4caf50);
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    width: 100%;
+    height: 100%;
+    padding: 0 32px;
+    border-radius: var(--radius-md);
     color: white;
+    transform: translateY(-4px);
+    transition: transform 150ms cubic-bezier(0.3, 0.7, 0.4, 1);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    z-index: 2;
 }
 
-.btn-install {
-    background: linear-gradient(to bottom, #50b6ff, #0089cf);
-    color: white;
+.btn-edge {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: var(--radius-md);
+    z-index: 1;
 }
 
-.btn-3ds:active {
-    transform: translateY(2px);
-    box-shadow: 0 2px 0 rgba(0, 0, 0, 0.2);
+.blue .btn-front { background: var(--color-primary); }
+.blue .btn-edge { background: var(--color-primary-dark); }
+
+.green .btn-front { background: #4caf50; }
+.green .btn-edge { background: #3d8b40; }
+
+.nintendo-btn:hover .btn-front {
+    transform: translateY(-6px);
+    filter: brightness(110%);
+}
+
+.nintendo-btn:active .btn-front {
+    transform: translateY(-1px);
+    transition: transform 34ms;
+}
+
+.nintendo-btn:disabled {
+    cursor: not-allowed;
+    filter: grayscale(0.8);
+    opacity: 0.7;
+}
+
+.nintendo-btn:disabled .btn-front {
+    transform: translateY(-1px);
 }
 
 .slide-up-enter-active,
 .slide-up-leave-active {
-    transition: transform 0.3s ease-out;
+    transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .slide-up-enter-from,
 .slide-up-leave-to {
     transform: translateY(100%);
+    opacity: 0;
+}
+
+.fade-enter-active,
+.fade-leave-active {
+    transition: opacity 0.3s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+    opacity: 0;
 }
 </style>

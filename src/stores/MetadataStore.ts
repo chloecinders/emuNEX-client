@@ -14,43 +14,36 @@ export interface Console {
 export const useMetadataStore = defineStore("metadata", () => {
     const categories = ref<Category[]>([]);
     const consoles = ref<Console[]>([]);
-
-    const loadingCategories = ref(false);
-    const loadingConsoles = ref(false);
+    const loading = ref(false);
 
     async function fetchCategories() {
-        if (categories.value.length > 0) return;
-
-        loadingCategories.value = true;
+        loading.value = true;
         try {
             const res = await http.get<Category[]>("/roms/categories");
-            categories.value = res.data;
+            if (res.success) categories.value = res.data;
         } catch (err) {
             console.error("Failed to fetch categories:", err);
         } finally {
-            loadingCategories.value = false;
+            loading.value = false;
         }
     }
 
     async function fetchConsoles() {
-        if (consoles.value.length > 0) return;
-
-        loadingConsoles.value = true;
+        loading.value = true;
         try {
             const res = await http.get<Console[]>("/roms/consoles");
-            consoles.value = res.data;
+            if (res.success) consoles.value = res.data;
         } catch (err) {
             console.error("Failed to fetch consoles:", err);
         } finally {
-            loadingConsoles.value = false;
+            loading.value = false;
         }
     }
 
     return {
         categories,
         consoles,
-        loadingCategories,
-        loadingConsoles,
+        loading,
         fetchCategories,
         fetchConsoles
     };

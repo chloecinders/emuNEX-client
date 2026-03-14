@@ -38,20 +38,23 @@ const emit = defineEmits(["click"]);
     transition: filter 250ms;
     user-select: none;
     touch-action: manipulation;
-    font-family: system-ui, sans-serif;
-    font-weight: bold;
-    font-size: 1.1rem;
+    font-family: inherit;
+    font-weight: 800;
+    font-size: 1rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
 .btn-front {
     display: block;
     position: relative;
-    padding: 10px 35px;
-    border-radius: 50px;
+    padding: 12px 28px;
+    border-radius: var(--radius-md);
     color: white;
     transform: translateY(-4px);
     transition: transform 150ms cubic-bezier(0.3, 0.7, 0.4, 1);
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .btn-edge {
@@ -60,36 +63,21 @@ const emit = defineEmits(["click"]);
     left: 0;
     width: 100%;
     height: 100%;
-    border-radius: 50px;
+    border-radius: var(--radius-md);
 }
 
-.blue .btn-front {
-    background: linear-gradient(to bottom, #50b6ff 0%, #0089cf 100%);
-}
-.blue .btn-edge {
-    background: #006da4;
-}
+/* Variants */
+.blue .btn-front { background: var(--color-primary); }
+.blue .btn-edge { background: var(--color-primary-dark); }
 
-.green .btn-front {
-    background: linear-gradient(to bottom, #82d84a 0%, #4caf50 100%);
-}
-.green .btn-edge {
-    background: #3d8b40;
-}
+.green .btn-front { background: #4caf50; }
+.green .btn-edge { background: #3d8b40; }
 
-.red .btn-front {
-    background: linear-gradient(to bottom, #ff5f5f 0%, #e60012 100%);
-}
-.red .btn-edge {
-    background: #b3000e;
-}
+.red .btn-front { background: #e60012; }
+.red .btn-edge { background: #b3000e; }
 
-.grey .btn-front {
-    background: linear-gradient(to bottom, #bbb 0%, #888 100%);
-}
-.grey .btn-edge {
-    background: #666;
-}
+.grey .btn-front { background: var(--color-text-muted); }
+.grey .btn-edge { background: #555; }
 
 .nintendo-btn:hover .btn-front {
     transform: translateY(-6px);

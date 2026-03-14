@@ -68,16 +68,17 @@ const handleConnect = async () => {
 </script>
 
 <template>
-    <div class="login-page">
+    <div class="login-view">
         <div class="login-card">
-            <div class="header-accent"></div>
+            <header class="card-header">
+                <h1>emuNEX</h1>
+                <p class="tagline">Remote Emulation & Library Management</p>
+            </header>
 
             <div class="content">
-                <h1>emuNEX Login</h1>
-                <p class="description">Select a server or enter a new address.</p>
-
                 <div v-if="savedDomains.some(d => d.hasToken)" class="saved-sessions">
-                    <p class="section-hint">Previous Sessions:</p>
+                    <p class="section-hint">Select a Library</p>
+
                     <div class="domains-grid">
                         <button 
                             v-for="item in savedDomains.filter(d => d.hasToken)" 
@@ -87,179 +88,178 @@ const handleConnect = async () => {
                             @click="handleSelectDomain(item.domain)"
                         >
                             <span class="session-name">{{ item.domain }}</span>
+
+                            <span class="card-arrow">→</span>
                         </button>
                     </div>
                 </div>
 
                 <div v-if="errorMessage" class="error-bubble">
-                    <span class="error-icon">!</span>
                     {{ errorMessage }}
                 </div>
 
                 <form @submit.prevent="handleConnect" class="login-form">
-                    <div class="add-new-title">Connect to New Server</div>
-                    <Input v-model="serverUrl" label="Server Address" placeholder="https://example.com" />
-
+                    <div class="add-new-title">Connect to Server</div>
+                    <Input 
+                        v-model="serverUrl" 
+                        label="Server Address" 
+                        placeholder="https://emu.example.com"
+                    />
+                    
                     <div class="form-actions">
                         <Button type="submit" color="blue" :disabled="isConnecting || !serverUrl">
-                            {{ isConnecting ? "Connecting..." : "Connect" }}
+                            {{ isConnecting ? "CONNECTING..." : "CONNECT" }}
                         </Button>
                     </div>
                 </form>
             </div>
-
-            <div class="footer-hint">Using this client requires a constant internet connection.</div>
         </div>
     </div>
 </template>
 
 <style scoped>
-.login-page {
+.login-view {
+    min-height: 100%;
     display: flex;
-    justify-content: center;
     align-items: center;
-    min-height: 80vh;
+    justify-content: center;
+    padding: var(--spacing-xl);
 }
 
 .login-card {
+    background: var(--color-surface);
     width: 100%;
-    max-width: 400px;
-    background: #fff;
-    border-radius: 15px;
+    max-width: 440px;
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-subtle);
+    border: 1px solid var(--color-border);
     overflow: hidden;
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
-    border: 1px solid #ddd;
+    animation: card-appear 0.4s ease-out;
 }
 
-.header-accent {
-    height: 6px;
-    background: linear-gradient(90deg, #e60012 25%, #0089cf 25%, #0089cf 50%, #82d84a 50%, #82d84a 75%, #ffcc00 75%);
+@keyframes card-appear {
+    from { opacity: 0; transform: translateY(var(--spacing-sm)); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.card-header {
+    padding: var(--spacing-lg) var(--spacing-lg) var(--spacing-md) var(--spacing-lg);
+    text-align: center;
+}
+
+.card-header h1 {
+    font-size: 2.5rem;
+    font-weight: 900;
+    margin: 0;
+    letter-spacing: -1.5px;
+    color: var(--color-primary);
+}
+
+.tagline {
+    margin-top: var(--spacing-xs);
+    font-size: 0.75rem;
+    font-weight: 800;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 2px;
 }
 
 .content {
-    padding: 30px;
-}
-
-h1 {
-    margin: 0 0 10px 0;
-    font-size: 1.5rem;
-    color: #333;
-    text-align: center;
-}
-
-.description {
-    color: #777;
-    text-align: center;
-    font-size: 0.9rem;
-    margin-bottom: 25px;
-    line-height: 1.4;
-}
-
-.error-bubble {
-    background: #fff0f0;
-    border: 1px solid #ffcccc;
-    color: #cc0000;
-    padding: 10px;
-    border-radius: 8px;
-    margin-bottom: 20px;
-    font-size: 0.85rem;
+    padding: var(--spacing-lg);
     display: flex;
-    align-items: center;
-    gap: 10px;
+    flex-direction: column;
+    gap: var(--spacing-md);
 }
 
-.error-icon {
-    background: #cc0000;
-    color: white;
-    width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: bold;
-}
-
-.saved-sessions {
-    margin-bottom: 30px;
-}
-
-.section-hint {
-    font-size: 0.75rem;
-    color: #999;
-    font-weight: 800;
+.section-hint, .add-new-title {
+    font-size: 0.7rem;
+    font-weight: 900;
+    color: var(--color-text-muted);
     text-transform: uppercase;
-    margin-bottom: 12px;
-    letter-spacing: 0.5px;
+    letter-spacing: 1px;
+    margin-bottom: var(--spacing-md);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+}
+
+.section-hint::after, .add-new-title::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--color-border);
 }
 
 .domains-grid {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: var(--spacing-sm);
 }
 
 .session-card {
-    background: #fff;
-    border: 2px solid #eee;
-    padding: 15px;
-    border-radius: 12px;
+    background: var(--color-surface-variant);
+    border: 2px solid var(--color-border);
+    padding: var(--spacing-md) var(--spacing-lg);
+    border-radius: var(--radius-md);
     cursor: pointer;
-    text-align: left;
     transition: all 0.2s;
     display: flex;
-    flex-direction: column;
-    gap: 8px;
-    position: relative;
-    overflow: hidden;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
 }
 
 .session-card:hover {
-    border-color: var(--3ds-blue);
-    background: #fdfdfd;
-    transform: translateY(-2px);
+    border-color: var(--color-primary);
+    background: var(--color-surface);
+    transform: translateY(-var(--spacing-xxs));
+    box-shadow: var(--shadow-subtle);
 }
 
 .session-name {
-    font-weight: 700;
-    color: #444;
-    font-size: 0.9rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.add-new-title {
-    font-size: 0.75rem;
-    color: #bbb;
     font-weight: 800;
-    text-transform: uppercase;
-    margin-bottom: 20px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
+    color: var(--color-text);
+    font-size: 0.95rem;
 }
 
-.add-new-title::before,
-.add-new-title::after {
-    content: "";
-    flex: 1;
-    height: 1px;
-    background: #eee;
+.card-arrow {
+    color: var(--color-primary);
+    font-weight: 900;
+    font-size: 1.1rem;
+    opacity: 0.4;
+}
+
+.session-card:hover .card-arrow {
+    opacity: 1;
+}
+
+.login-form {
+    display: flex;
+    flex-direction: column;
 }
 
 .form-actions {
-    display: flex;
-    justify-content: center;
-    margin-top: 15px;
+    margin-top: var(--spacing-md);
 }
 
-.footer-hint {
-    background: #f9f9f9;
-    padding: 15px;
-    border-top: 1px solid #eee;
+.form-actions :deep(.button), 
+.form-actions :deep(.nintendo-btn) {
+    width: 100% !important;
+}
+
+:deep(.nintendo-btn) {
+    width: 100% !important;
+    display: block;
+}
+
+.error-bubble {
+    background: #fff5f5;
+    border: 1px solid #ffccd1;
+    padding: var(--spacing-md) var(--spacing-lg);
+    border-radius: var(--radius-md);
+    color: #e53e3e;
+    font-weight: 700;
+    font-size: 0.85rem;
     text-align: center;
-    font-size: 0.75rem;
-    color: #aaa;
 }
 </style>

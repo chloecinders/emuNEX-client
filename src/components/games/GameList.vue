@@ -1,25 +1,14 @@
 <script lang="ts" setup>
 import { ref } from "vue";
 import { PartialGame, useGameStore } from "../../stores/GameStore";
-import { useMetadataStore } from "../../stores/MetadataStore";
 import { useStoragePath } from "../../utils/http";
 
 const gamesStore = useGameStore();
-const metadataStore = useMetadataStore();
 const localSelectedId = ref<number | null>(null);
 
 defineProps<{
     games: PartialGame[];
 }>();
-
-const getConsoleColor = (consoleName: string | undefined) => {
-    if (!consoleName) {
-        return "#ffffff";
-    }
-
-    const consoleData = metadataStore.consoles.find((c) => c.name === consoleName);
-    return consoleData?.card_color || "#ffffff";
-};
 
 const changeCurrentGame = (id: number) => {
     localSelectedId.value = id;
@@ -37,11 +26,9 @@ const changeCurrentGame = (id: number) => {
                 :key="game.id"
                 class="game-card"
                 :class="{ 'is-selected': localSelectedId === game.id }"
-                :style="{ backgroundColor: getConsoleColor(game.console) }"
                 @click="changeCurrentGame(game.id)"
             >
-                <img :src="useStoragePath(game.image_path)" :alt="game.title" />
-                <div class="selection-border"></div>
+                <img :src="useStoragePath(game.image_path)" :alt="game.title" class="game-cover" />
             </div>
         </div>
     </div>
@@ -50,57 +37,56 @@ const changeCurrentGame = (id: number) => {
 <style scoped>
 .menu-container {
     width: 100%;
-    overflow-x: auto;
-    scrollbar-width: thin;
 }
 
 .game-grid {
-    display: flex;
-    flex-direction: row;
-    gap: 15px;
-    padding: 20px;
-    align-content: flex-start;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: var(--spacing-lg);
+    padding: var(--spacing-lg) 0;
 }
 
 .game-card {
     position: relative;
-    width: 120px;
-    height: 120px;
-    border-radius: 12px;
-    padding: 8px;
-    box-shadow: 0 4px 0 rgba(0, 0, 0, 0.15);
+    aspect-ratio: 6/9;
+    width: 100%;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    box-shadow: var(--shadow-subtle);
     cursor: pointer;
-    transition: transform 0.1s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    transition: all 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    background: var(--color-surface);
+    border: var(--spacing-xxs) solid transparent;
 }
 
 .game-card:hover {
-    transform: scale(1.1);
+    transform: scale(1.08) translateY(-var(--spacing-xs));
     z-index: 10;
+    box-shadow: var(--shadow-md);
+    border-color: var(--color-primary-light);
 }
 
-.game-card img {
+.game-cover {
     width: 100%;
     height: 100%;
     object-fit: cover;
-    border-radius: 6px;
-    background: white;
 }
 
 .game-card:active {
     transform: scale(0.95);
-    box-shadow: 0 2px 0 rgba(0, 0, 0, 0.1);
 }
 
 .game-card.is-selected {
-    outline: 4px solid var(--3ds-blue);
-    outline-offset: 2px;
-    transform: scale(1.05);
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 4px rgba(107, 92, 177, 0.2);
+    transform: scale(1.08);
 }
 
 .empty-state {
-    padding: 40px;
+    padding: var(--spacing-xl);
     text-align: center;
-    color: #888;
-    font-weight: bold;
+    color: var(--color-text-muted);
+    font-weight: 800;
+    font-style: italic;
 }
 </style>

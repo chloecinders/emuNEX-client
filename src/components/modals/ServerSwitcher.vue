@@ -20,6 +20,7 @@ const isConnecting = ref(false);
 
 async function loadDomains() {
     const rawDomains = await getSavedDomains();
+
     const domainStatuses = await Promise.all(rawDomains.map(async (d) => {
         const store = await getDomainStore(d);
         const token = await store.get<string>("token");
@@ -92,10 +93,16 @@ onMounted(loadDomains);
 <template>
     <transition name="fade">
         <div v-if="show" class="modal-overlay" @click.self="emit('close')">
-            <div class="modal-content">
+            <div class="modal-card">
+                <button class="modal-close" @click="emit('close')">
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                        <path d="M1 1L11 11M11 1L1 11" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                </button>
+
                 <div class="modal-header">
-                    <h3>Switch Server</h3>
-                    <button class="close-btn" @click="emit('close')">&times;</button>
+                    <h2 class="title">Switch Server</h2>
+                    <p class="subtitle">Select a previously connected server or add a new one.</p>
                 </div>
                 
                 <div class="modal-body">
@@ -106,21 +113,25 @@ onMounted(loadDomains);
                             class="domain-item"
                             @click="handleSwitch(domain)"
                         >
-                            <span class="domain-name">{{ domain }}</span>
+                            <div class="domain-info">
+                                <span class="domain-name">{{ domain }}</span>
+                            </div>
                             <span class="chevron">&rsaquo;</span>
                         </div>
                     </div>
                     
                     <div class="add-section">
-                        <h4>Add New Server</h4>
+                        <div class="section-label">ADD NEW SERVER</div>
                         <div class="add-form">
-                            <div class="input-wrapper">
-                                <Input v-model="newDomain" placeholder="https://example.com" />
+                            <Input v-model="newDomain" placeholder="https://server.emunex.io" />
+
+                            <div class="btn-wrap">
+                                <Button @click="handleAdd" color="blue" :disabled="isConnecting">
+                                    {{ isConnecting ? "..." : "Connect" }}
+                                </Button>
                             </div>
-                            <Button @click="handleAdd" color="blue" :disabled="isConnecting">
-                                {{ isConnecting ? "..." : "Connect" }}
-                            </Button>
                         </div>
+
                         <p v-if="errorMessage" class="error-text">{{ errorMessage }}</p>
                     </div>
                 </div>
@@ -133,128 +144,156 @@ onMounted(loadDomains);
 .modal-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.6);
-    backdrop-filter: blur(4px);
+    background: rgba(10, 10, 30, 0.4);
+    backdrop-filter: blur(var(--spacing-sm));
+    -webkit-backdrop-filter: blur(var(--spacing-sm));
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 2000;
 }
 
-.modal-content {
-    background: #fff;
-    border: 3px solid var(--3ds-blue, #0089cf);
-    border-radius: 15px;
+.modal-card {
+    background: var(--color-surface);
+    border-radius: var(--radius-md);
     width: 90%;
-    max-width: 400px;
-    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.4);
-    overflow: hidden;
-    animation: pop-in 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    max-width: 440px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.12);
+    border: 1px solid var(--color-border);
+    position: relative;
+    padding: var(--spacing-xl);
+    animation: modal-pop 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-@keyframes pop-in {
-    from { transform: scale(0.8); opacity: 0; }
+@keyframes modal-pop {
+    from { transform: scale(0.95); opacity: 0; }
     to { transform: scale(1); opacity: 1; }
 }
 
-.modal-header {
-    background: linear-gradient(to right, var(--3ds-blue, #0089cf), #00b0ff);
-    padding: 15px 20px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    color: white;
-}
-
-.modal-header h3 {
-    margin: 0;
-    font-size: 1.1rem;
-    font-weight: 900;
-    text-transform: uppercase;
-}
-
-.close-btn {
-    background: none;
+.modal-close {
+    position: absolute;
+    top: var(--spacing-md);
+    right: var(--spacing-md);
+    width: var(--spacing-xl);
+    height: var(--spacing-xl);
+    border-radius: var(--radius-full);
     border: none;
-    color: white;
-    font-size: 1.5rem;
+    background: var(--color-surface-variant);
+    color: var(--color-text-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
     cursor: pointer;
-    line-height: 1;
+    transition: all 0.2s;
+    z-index: 10;
 }
 
-.modal-body {
-    padding: 20px;
+.modal-close:hover {
+    background: var(--color-primary);
+    color: white;
+}
+
+.modal-header {
+    text-align: center;
+    margin-bottom: var(--spacing-xl);
+}
+
+.title {
+    font-size: 1.5rem;
+    font-weight: 950;
+    color: var(--color-primary);
+    margin: 0;
+    letter-spacing: -0.5px;
+}
+
+.subtitle {
+    margin-top: var(--spacing-sm);
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+    font-weight: 700;
 }
 
 .domain-list {
-    margin-bottom: 25px;
+    margin-bottom: var(--spacing-xl);
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--spacing-sm);
 }
 
 .domain-item {
-    background: #f8f8f8;
-    padding: 12px 16px;
-    border-radius: 10px;
+    background: var(--color-surface-variant);
+    padding: var(--spacing-md) var(--spacing-lg);
+    border-radius: var(--radius-md);
     display: flex;
     justify-content: space-between;
     align-items: center;
     cursor: pointer;
     transition: all 0.2s;
-    border: 1px solid #eee;
+    border: var(--spacing-xxs) solid var(--color-border);
 }
 
 .domain-item:hover {
-    background: #f0f0f0;
-    border-color: #ddd;
-    transform: translateX(5px);
+    border-color: var(--color-primary);
+    background: var(--color-surface);
+    transform: translateY(-var(--spacing-xxs));
+    box-shadow: var(--shadow-subtle);
+}
+
+.domain-info {
+    display: flex;
+    align-items: center;
 }
 
 .domain-name {
-    font-weight: 700;
-    color: #444;
+    font-weight: 800;
+    font-size: 0.95rem;
+    color: var(--color-text);
 }
 
 .chevron {
-    font-size: 1.5rem;
-    color: #bbb;
+    color: var(--color-primary);
+    font-weight: 900;
+    font-size: 1.2rem;
+    opacity: 0.4;
+    line-height: 1;
+    display: flex;
+    align-items: center;
 }
 
-.add-section h4 {
-    margin: 0 0 12px 0;
-    font-size: 0.9rem;
-    color: #888;
-    text-transform: uppercase;
+.domain-item:hover .chevron {
+    opacity: 1;
+}
+
+.section-label {
+    font-size: 0.7rem;
+    color: var(--color-primary);
+    font-weight: 900;
+    letter-spacing: 1px;
+    margin-bottom: var(--spacing-sm);
 }
 
 .add-form {
     display: flex;
-    gap: 10px;
-    align-items: flex-end;
+    flex-direction: column;
+    gap: var(--spacing-md);
 }
 
-.input-wrapper {
-    flex: 1;
+.btn-wrap {
+    width: 100%;
 }
 
-.add-form :deep(.input-container) {
-    margin-bottom: 0;
+.btn-wrap :deep(.nintendo-btn) {
+    width: 100%;
 }
 
 .error-text {
-    color: var(--3ds-red, #e60012);
+    color: #ff4d4f;
     font-size: 0.8rem;
-    margin-top: 8px;
+    margin-top: var(--spacing-sm);
+    font-weight: 700;
+    text-align: center;
 }
 
-.fade-enter-active,
-.fade-leave-active {
-    transition: opacity 0.2s ease;
-}
-
-.fade-enter-from,
-.fade-leave-to {
-    opacity: 0;
-}
+.fade-enter-active, .fade-leave-active { transition: opacity 0.3s ease; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
 </style>

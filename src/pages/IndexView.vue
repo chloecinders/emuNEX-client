@@ -1,28 +1,11 @@
 <script setup lang="ts">
-import { inject, Ref, ref, watch } from "vue";
+import { Ref, ref, watch } from "vue";
 import GameInfo from "../components/games/GameInfo.vue";
 import GameLibrary from "../components/games/GameLibrary.vue";
-import { router } from "../router";
-import { useAuthStore } from "../stores/AuthStore";
 import { LibraryGame, useGameStore } from "../stores/GameStore";
-import { useUserStore } from "../stores/UserStore";
 
-const authStore = useAuthStore();
-const userStore = useUserStore();
 const gameStore = useGameStore();
 const library: Ref<LibraryGame[]> = ref([]);
-
-if (!authStore.domain || !authStore.token) {
-    const token = inject<string>("auth_token");
-    const domain = inject<string>("auth_domain");
-
-    if (token && domain) {
-        authStore.token = token;
-        authStore.domain = domain;
-    } else {
-        router.push("/login");
-    }
-}
 
 gameStore.fetchLibrary();
 
@@ -36,15 +19,8 @@ watch(
 </script>
 
 <template>
-    <Teleport to="#header-tools">
-        <div class="user-pill">
-            <span class="username">Welcome, {{ userStore.user?.username }}!</span>
-        </div>
-    </Teleport>
-
     <div class="library-container">
-        <h1 class="section-title">Software Library</h1>
-
+        <h1 class="section-title">Game Library</h1>
         <GameLibrary :games="library" />
     </div>
 
@@ -53,26 +29,15 @@ watch(
 
 <style scoped>
 .library-container {
-    padding: 20px;
+    padding: var(--spacing-md) var(--spacing-lg);
 }
 
 .section-title {
     font-size: 1.5rem;
     font-weight: 900;
-    margin-bottom: 20px;
-    color: var(--3ds-text);
+    color: var(--color-text);
     text-transform: uppercase;
-    letter-spacing: 1px;
-}
-
-.user-pill {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.username {
-    font-weight: 800;
-    font-size: 0.9rem;
+    letter-spacing: -0.5px;
+    margin: 0 0 var(--spacing-md) 0;
 }
 </style>

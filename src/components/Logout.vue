@@ -6,6 +6,7 @@
 import { getGlobalStore, getDomainStore } from "../lib/store";
 import { useAuthStore } from "../stores/AuthStore";
 import Button from "./ui/Button.vue";
+import { router } from "../router";
 
 const authStore = useAuthStore();
 
@@ -26,7 +27,6 @@ const onClick = async () => {
     authStore.token = null;
     authStore.domain = null;
 
-    // Use href to force a full reload and clear all injected state
-    window.location.href = "/login";
+    router.push({ name: 'login' });
 };
 </script>

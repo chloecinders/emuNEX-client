@@ -31,6 +31,7 @@ onMounted(async () => {
 
 watch(searchQuery, (newQuery) => {
     clearTimeout(timeout);
+
     if (!newQuery.trim()) {
         searchResults.value = [];
         isSearching.value = false;
@@ -38,6 +39,7 @@ watch(searchQuery, (newQuery) => {
     }
 
     isSearching.value = true;
+
     timeout = setTimeout(async () => {
         try {
             searchResults.value = await gameStore.searchGames(newQuery);
@@ -72,12 +74,14 @@ watch(searchQuery, (newQuery) => {
 
         <div v-else class="overview-section">
             <h1 class="section-title">Consoles</h1>
+
             <div v-for="(games, consoleName) in consoleGroups" :key="consoleName" class="group-block">
                 <h2 class="group-title">{{ consoleName }}</h2>
                 <GameList :games="games" />
             </div>
 
             <h1 class="section-title">Categories</h1>
+
             <div v-for="(games, catName) in categoryGroups" :key="catName" class="group-block">
                 <h2 class="group-title">{{ catName }}</h2>
                 <GameList :games="games" />
@@ -89,77 +93,98 @@ watch(searchQuery, (newQuery) => {
 </template>
 
 <style scoped>
+.search-page {
+    padding: var(--spacing-md) var(--spacing-lg);
+}
+
 .section-title {
-    font-size: 2rem;
+    font-size: 2.25rem;
     font-weight: 900;
-    color: var(--3ds-text);
-    border-bottom: 4px solid #eee;
-    margin: 0 0 20px 0;
-    padding-bottom: 10px;
+    color: var(--color-text);
     text-transform: uppercase;
+    letter-spacing: -1px;
+    margin: 0 0 var(--spacing-xl) 0;
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+}
+
+.section-title::after {
+    content: "";
+    flex: 1;
+    height: var(--spacing-xxs);
+    background: var(--color-border);
 }
 
 .group-block {
-    margin-bottom: 40px;
+    margin-bottom: var(--spacing-xxl);
 }
 
 .group-title {
-    font-size: 1.2rem;
+    font-size: 1.1rem;
     font-weight: 800;
-    color: var(--3ds-blue);
-    margin-bottom: 15px;
+    color: var(--color-primary);
+    margin-bottom: var(--spacing-lg);
     display: flex;
     align-items: center;
-}
-
-.group-title::before {
-    content: "";
-    display: inline-block;
-    width: 8px;
-    height: 20px;
-    background: var(--3ds-blue);
-    margin-right: 10px;
-    border-radius: 4px;
+    background: var(--color-surface-variant);
+    padding: var(--spacing-sm) var(--spacing-md);
+    border-radius: var(--radius-full);
+    width: fit-content;
+    border: 1px solid var(--color-border);
 }
 
 .search-bar-container {
     flex: 1;
-    max-width: 400px;
+    max-width: 480px;
+    display: flex;
+    align-items: center;
 }
 
 .nintendo-input {
     width: 100%;
-    background: #fff;
-    border: 2px solid #ccc;
-    border-radius: 30px;
-    padding: 10px 20px;
-    font-size: 0.9rem;
-    font-weight: bold;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-full);
+    padding: var(--spacing-sm) var(--spacing-lg);
+    font-size: 0.85rem;
+    font-weight: 800;
     outline: none;
+    transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1);
+    color: var(--color-text);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
 .nintendo-input:focus {
-    border-color: var(--3ds-blue);
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 4px rgba(107, 92, 177, 0.1);
+    transform: translateY(-1px);
 }
 
 .loading-overlay {
     display: flex;
     justify-content: center;
-    padding: 50px;
+    padding: var(--spacing-xxl);
 }
 
 .spinner {
-    width: 40px;
-    height: 40px;
-    border: 4px solid #eee;
-    border-top: 4px solid var(--3ds-blue);
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
+    width: var(--spacing-xxl);
+    height: var(--spacing-xxl);
+    border: var(--spacing-xs) solid var(--color-surface-variant);
+    border-top: var(--spacing-xs) solid var(--color-primary);
+    border-radius: var(--radius-full);
+    animation: spin 0.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.search-prompt {
+    text-align: center;
+    padding: var(--spacing-xxl);
+    color: var(--color-text-muted);
+    font-weight: 800;
+    font-style: italic;
 }
 
 @keyframes spin {
-    to {
-        transform: rotate(360deg);
-    }
+    to { transform: rotate(360deg); }
 }
 </style>

@@ -1,12 +1,12 @@
 import { defineStore } from "pinia";
-import { Ref, ref } from "vue";
+import { ref } from "vue";
 import { http } from "../utils/http";
 
 export type PartialGame = {
-    id: number,
-    title: string,
-    console: string | undefined,
-    image_path: string,
+    id: number;
+    title: string;
+    console: string | undefined;
+    image_path: string;
 };
 
 export type LibraryGame = PartialGame & {
@@ -15,13 +15,13 @@ export type LibraryGame = PartialGame & {
 };
 
 export type Game = {
-    id: number,
-    title: string,
-    console: string,
-    region: string | null,
-    category: string,
-    rom_path: string,
-    image_path: string,
+    id: number;
+    title: string;
+    console: string;
+    region: string | null;
+    category: string;
+    rom_path: string;
+    image_path: string;
 };
 
 interface FetchFilters {
@@ -30,13 +30,13 @@ interface FetchFilters {
 }
 
 export const useGameStore = defineStore("gameStore", () => {
-    const currentSelectedGame: Ref<number | null> = ref(null);
-    const partialGames: Ref<PartialGame[]> = ref([]);
-    const library: Ref<LibraryGame[]> = ref([]);
-    const games: Ref<Game[]> = ref([]);
+    const currentSelectedGame = ref<number | null>(null);
+    const partialGames = ref<PartialGame[]>([]);
+    const library = ref<LibraryGame[]>([]);
+    const games = ref<Game[]>([]);
     const loading = ref(false);
 
-    async function fetchPartialGames(filters: FetchFilters = {}, force = false): Promise<PartialGame[]> {
+    async function fetchPartialGames(filters: FetchFilters = {}) {
         const params = new URLSearchParams();
         if (filters.category) params.append("category", filters.category);
         if (filters.console) params.append("console", filters.console);
@@ -44,48 +44,37 @@ export const useGameStore = defineStore("gameStore", () => {
         const queryString = params.toString();
         const url = `/roms/list${queryString ? `?${queryString}` : ""}`;
 
-        if (!queryString && !force && partialGames.value.length !== 0) {
-            return partialGames.value;
-        }
-
         loading.value = true;
+
         try {
             const res = await http.get<PartialGame[]>(url);
             if (res.success) {
-                if (!queryString) {
-                    partialGames.value = res.data;
-                }
+                if (!queryString) partialGames.value = res.data;
                 return res.data;
             }
         } catch (err) {
-            if (!queryString) {
-                partialGames.value = [];
-            }
             console.error("Failed to fetch games:", err);
         } finally {
             loading.value = false;
         }
-
         return [];
     }
 
-    async function fetchLibrary(): Promise<LibraryGame[]> {
+    async function fetchLibrary() {
         loading.value = true;
         try {
             const res = await http.get<LibraryGame[]>("/library");
             if (res.success) {
                 library.value = res.data;
-                return res.data;
             }
         } catch (err) {
             console.error("Failed to fetch library:", err);
         } finally {
             loading.value = false;
         }
-        return [];
     }
 
-    async function startGame(id: number): Promise<void> {
+    async function startGame(id: number) {
         try {
             await http.post(`/roms/${id}/start`, {});
             await fetchLibrary();
@@ -96,44 +85,40 @@ export const useGameStore = defineStore("gameStore", () => {
 
     async function fetchGame(id: number, force = false): Promise<Game | null> {
         if (!force) {
-            const foundGame = games.value.find(g => g.id == id);
-            if (foundGame) {
-                return foundGame;
-            }
+            const foundGame = games.value.find(g => g.id === id);
+            if (foundGame) return foundGame;
         }
 
         try {
             const res = await http.get<Game>(`/roms/${id}`);
-            games.value = games.value.filter(g => g.id != id);
+
             if (res.success) {
-                games.value = [...games.value, res.data];
+                games.value = games.value.filter(g => g.id !== id);
+                games.value.push(res.data);
                 return res.data;
             }
         } catch (err) {
-            games.value = games.value.filter(g => g.id != id);
-            console.error("Failed to fetch game:", err);
+            console.error("Failed to fetch game details:", err);
         }
+
         return null;
     }
 
     async function searchGames(query: string): Promise<PartialGame[]> {
         if (!query.trim()) return [];
         loading.value = true;
+
         try {
             const res = await http.get<PartialGame[]>(`/roms/search?query=${encodeURIComponent(query)}`);
-            if (res.success) {
-                return res.data;
-            }
+            if (res.success) return res.data;
         } catch (err) {
             console.error("Search failed:", err);
         } finally {
             loading.value = false;
         }
+
         return [];
     }
-
-    fetchPartialGames();
-    fetchLibrary();
 
     return {
         currentSelectedGame,

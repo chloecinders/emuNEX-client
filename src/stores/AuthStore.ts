@@ -1,26 +1,22 @@
 import { defineStore } from "pinia";
-import { inject, Ref, ref } from "vue";
+import { ref } from "vue";
 
 export const useAuthStore = defineStore("authStore", () => {
-    const domain: Ref<string | null> = ref(null);
-    const token: Ref<string | null> = ref(null);
-    const storagePath: Ref<string | null> = ref(null);
+    const domain = ref<string | null>(null);
+    const token = ref<string | null>(null);
+    const storagePath = ref<string | null>(null);
 
-    const appProvidedDomain = inject("auth_domain");
-    const appProvidedToken = inject("auth_token");
-    const appProvidedStoragePath = inject("auth_storage");
-
-    if (appProvidedDomain) {
-        domain.value = appProvidedDomain as string;
+    function setAuth(newDomain: string, newToken: string, newStoragePath: string) {
+        domain.value = newDomain;
+        token.value = newToken;
+        storagePath.value = newStoragePath;
     }
 
-    if (appProvidedToken) {
-        token.value = appProvidedToken as string;
+    function clearAuth() {
+        domain.value = null;
+        token.value = null;
+        storagePath.value = null;
     }
 
-    if (appProvidedStoragePath) {
-        storagePath.value = appProvidedStoragePath as string;
-    }
-
-    return { domain, token, storagePath }
+    return { domain, token, storagePath, setAuth, clearAuth }
 })
