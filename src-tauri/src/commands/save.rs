@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use tauri::{AppHandle, Manager, Runtime};
 use tauri_plugin_store::StoreExt;
 
-use crate::ApiResponse;
+use crate::{store, ApiResponse};
 
 #[derive(serde::Serialize)]
 pub struct SyncResult {
@@ -24,7 +24,7 @@ pub async fn check_save_status<R: Runtime>(
     app: AppHandle<R>,
     game_id: String,
 ) -> Result<SyncResult, String> {
-    let store = app.store("store.json").map_err(|e| e.to_string())?;
+    let store = store::get_current_store(&app)?;
     let domain = store
         .get("domain")
         .and_then(|v| v.as_str().map(|s| s.to_string()))
@@ -40,7 +40,7 @@ pub async fn check_save_status<R: Runtime>(
         .and_then(|v| v.as_i64().map(|i| i as i32))
         .unwrap_or(0);
 
-    let base_path = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let base_path = store::get_data_dir(&app)?;
     let save_dir = base_path.join("saves").join(&game_id);
 
     let client = reqwest::Client::new();
@@ -82,7 +82,7 @@ pub async fn download_save_files<R: Runtime>(
     app: AppHandle<R>,
     game_id: String,
 ) -> Result<(), String> {
-    let store = app.store("store.json").map_err(|e| e.to_string())?;
+    let store = store::get_current_store(&app)?;
     let domain = store
         .get("domain")
         .and_then(|v| v.as_str().map(|s| s.to_string()))
@@ -150,7 +150,7 @@ pub async fn upload_save_files<R: Runtime>(
     save_dir: &std::path::PathBuf,
     version_id: i32,
 ) -> Result<(), String> {
-    let store = app.store("store.json").map_err(|e| e.to_string())?;
+    let store = store::get_current_store(&app)?;
     let domain = store
         .get("domain")
         .and_then(|v| v.as_str().map(|s| s.to_string()))

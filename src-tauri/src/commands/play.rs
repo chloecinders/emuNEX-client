@@ -11,7 +11,7 @@ use tauri_plugin_store::StoreExt;
 
 use crate::commands::emulator::StoreEmulator;
 use crate::commands::save::{upload_save_files, SaveFileMetadata};
-use crate::{ApiResponse, AppState};
+use crate::{store, ApiResponse, AppState};
 
 #[tauri::command]
 pub async fn install_game<R: Runtime>(
@@ -20,7 +20,7 @@ pub async fn install_game<R: Runtime>(
     console: String,
     rom_path: String,
 ) -> Result<(), String> {
-    let store = app.store("store.json").map_err(|e| e.to_string())?;
+    let store = store::get_current_store(&app)?;
     let domain = store
         .get("domain")
         .and_then(|v| v.as_str().map(|s| s.to_string()))
@@ -34,7 +34,7 @@ pub async fn install_game<R: Runtime>(
         .and_then(|v| v.as_str().map(|s| s.to_string()))
         .ok_or("No storage_path")?;
 
-    let base_path = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let base_path = store::get_data_dir(&app)?;
 
     let mut rom_dir = base_path.clone();
     rom_dir.push("roms");
@@ -87,8 +87,8 @@ pub async fn play_game<R: Runtime>(
     game_id: String,
     console: String,
 ) -> Result<(), String> {
-    let store = app.store("store.json").map_err(|e| e.to_string())?;
-    let base_path = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let store = store::get_current_store(&app)?;
+    let base_path = store::get_data_dir(&app)?;
 
     let mut save_dir = base_path.clone();
     save_dir.push("saves");

@@ -32,6 +32,8 @@ tauri-plugin-process = "2"
 chrono = { version = "0.4.44", features = ["serde"] }
 tauri-plugin-dialog = "2"
 base64 = "0.22.1"
+tauri-plugin-fs = "2"
+url = "2.5.8"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-single-instance = "2"

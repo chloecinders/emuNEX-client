@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, Runtime};
 use tauri_plugin_store::StoreExt;
 
-use crate::ApiResponse;
+use crate::{store, ApiResponse};
 
 #[derive(Deserialize, Debug)]
 pub struct ApiEmulator {
@@ -34,7 +34,7 @@ pub async fn download_emulator<R: Runtime>(
     app: AppHandle<R>,
     console: String,
 ) -> Result<(), String> {
-    let store = app.store("store.json").map_err(|e| e.to_string())?;
+    let store = store::get_current_store(&app)?;
 
     let domain = store
         .get("domain")
@@ -73,7 +73,7 @@ pub async fn download_emulator<R: Runtime>(
     let emulators = api_res.data.ok_or("No data")?;
     let emulator = emulators.into_iter().next().ok_or("No emulator found")?;
 
-    let mut app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let mut app_data_dir = store::get_data_dir(&app)?;
     app_data_dir.push("emulators");
     app_data_dir.push(&console);
     std::fs::create_dir_all(&app_data_dir).map_err(|e| e.to_string())?;

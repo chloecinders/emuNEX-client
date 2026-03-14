@@ -1,11 +1,11 @@
 import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import { relaunch } from '@tauri-apps/plugin-process';
-import { load } from "@tauri-apps/plugin-store";
 import { check } from '@tauri-apps/plugin-updater';
 import { createPinia } from "pinia";
 import { createApp } from "vue";
 import App from "./App.vue";
 import { router } from "./router";
+import { getGlobalStore, getDomainStore, addSavedDomain, normalizeDomain } from "./lib/store";
 
 async function checkForUpdates() {
     try {
@@ -21,7 +21,7 @@ async function checkForUpdates() {
 
 await checkForUpdates();
 
-const store = await load("store.json");
+const globalStore = await getGlobalStore();
 
 const app = createApp(App).use(router)
 
@@ -31,14 +31,24 @@ const urlHandler = async (urls: string[]) => {
     if (url.host == "login") {
         const domain = url.searchParams.get("domain");
         const token = url.searchParams.get("token");
+        const storagePath = url.searchParams.get("storage_path");
 
-        app.provide("auth_domain", domain);
-        app.provide("auth_token", token);
-        await store.set("domain", domain);
-        await store.set("token", token);
+        if (domain) {
+            const normalizedDomain = normalizeDomain(domain);
+            await addSavedDomain(normalizedDomain);
+            const domainStore = await getDomainStore(normalizedDomain);
+            await domainStore.set("token", token);
 
-        router.push("/");
-        window.location.reload();
+            if (storagePath) {
+                await domainStore.set("storage_path", storagePath);
+            }
+
+            await domainStore.save();
+            await globalStore.set("domain", normalizedDomain);
+            await globalStore.save();
+        }
+
+        window.location.href = "/";
     }
 }
 
@@ -46,20 +56,20 @@ onOpenUrl(urlHandler);
 
 const pinia = createPinia();
 
-const domain = await store.get<string>("domain");
-const token = await store.get<string>("token");
-const storagePath = await store.get<string>("storage_path");
-
+const domain = await globalStore.get<string>("domain");
 if (domain) {
     app.provide("auth_domain", domain);
-}
+    const domainStore = await getDomainStore(domain);
+    const token = await domainStore.get<string>("token");
+    const storagePath = await domainStore.get<string>("storage_path");
 
-if (token) {
-    app.provide("auth_token", token);
-}
+    if (token) {
+        app.provide("auth_token", token);
+    }
 
-if (storagePath) {
-    app.provide("auth_storage", storagePath);
+    if (storagePath) {
+        app.provide("auth_storage", storagePath);
+    }
 }
 
 app.use(pinia).mount("#app");

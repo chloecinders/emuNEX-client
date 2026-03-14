@@ -3,30 +3,30 @@
 </template>
 
 <script lang="ts" setup>
-import { load } from "@tauri-apps/plugin-store";
-import { provide } from "vue";
-import { router } from "../router";
+import { getGlobalStore, getDomainStore } from "../lib/store";
 import { useAuthStore } from "../stores/AuthStore";
 import Button from "./ui/Button.vue";
 
 const authStore = useAuthStore();
 
 const onClick = async () => {
-    const store = await load("store.json", {
-        autoSave: false,
-        defaults: {},
-    });
+    const currentDomain = authStore.domain;
+    
+    if (currentDomain) {
+        const domainStore = await getDomainStore(currentDomain);
+        await domainStore.set("token", null);
+        await domainStore.save();
+    }
 
-    provide("domain", null);
-    provide("token", null);
+    const globalStore = await getGlobalStore();
 
-    await store.set("domain", null);
-    await store.set("token", null);
-    await store.save();
+    await globalStore.set("domain", null);
+    await globalStore.save();
 
     authStore.token = null;
     authStore.domain = null;
 
-    router.push("/login");
+    // Use href to force a full reload and clear all injected state
+    window.location.href = "/login";
 };
 </script>

@@ -1,19 +1,26 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import Logout from "../components/Logout.vue";
+import ServerSwitcher from "../components/modals/ServerSwitcher.vue";
 import { useAuthStore } from "../stores/AuthStore";
 import { useUserStore } from "../stores/UserStore";
 
 const userStore = useUserStore();
 const authStore = useAuthStore();
 const isSidebarOpen = ref(false);
+const isServerSwitcherOpen = ref(false);
 const toggleSidebar = () => (isSidebarOpen.value = !isSidebarOpen.value);
+const toggleServerSwitcher = () => (isServerSwitcherOpen.value = !isServerSwitcherOpen.value);
 const ready = ref(false);
 
 const menuItems = [
     { name: "Library", path: "/" },
     { name: "Search", path: "/search" },
 ];
+
+const displayDomain = computed(() => {
+    return (authStore?.domain || "").replace(/(^\w+:|^)\/\//, "").replace(/\/$/, "");
+});
 
 onMounted(() => {
     ready.value = true;
@@ -49,6 +56,13 @@ onMounted(() => {
                         <div class="nav-indicator"></div>
                         <span class="nav-text">{{ item.name }}</span>
                     </router-link>
+
+                    <div class="nav-spacer"></div>
+
+                    <button class="nav-link server-switch-btn" @click="toggleServerSwitcher(); toggleSidebar()">
+                        <div class="nav-indicator"></div>
+                        <span class="nav-text">Switch Server</span>
+                    </button>
                 </nav>
 
                 <div class="sidebar-footer">
@@ -64,7 +78,7 @@ onMounted(() => {
             <div id="header-tools" class="header-tools-container"></div>
 
             <div class="system-meta">
-                <span class="domain-label">{{ authStore.domain }}</span>
+                <span class="domain-label">{{ displayDomain }}</span>
                 <span class="status-dot pulse"></span>
             </div>
         </header>
@@ -72,6 +86,8 @@ onMounted(() => {
         <main class="page-content">
             <slot v-if="ready" />
         </main>
+
+        <ServerSwitcher :show="isServerSwitcherOpen" @close="isServerSwitcherOpen = false" />
     </div>
 </template>
 
@@ -230,6 +246,21 @@ onMounted(() => {
     transition: all 0.2s ease;
     position: relative;
     overflow: hidden;
+    background: transparent;
+    border: none;
+    width: 100%;
+    cursor: pointer;
+    font-family: inherit;
+    text-align: left;
+}
+
+.nav-spacer {
+    flex: 1;
+}
+
+.server-switch-btn {
+    margin-top: auto;
+    border: 2px solid #eee;
 }
 
 .nav-link:hover {

@@ -1,6 +1,6 @@
-import { load } from "@tauri-apps/plugin-store";
 import { defineStore } from "pinia";
 import { Ref, ref } from "vue";
+import { getStore } from "../lib/store";
 
 export type Emulator = {
     is_installed: boolean,
@@ -13,10 +13,10 @@ export const useEmulatorStore = defineStore("emulatorStore", () => {
     const emulators: Ref<Record<string, Emulator>> = ref({});
 
     async function getEmulators(): Promise<Record<string, Emulator>> {
-        const store = await load("store.json");
-        const emulators = await store.get<Record<string, Emulator>>("emulators");
+        const store = await getStore();
+        const ems = await store.get<Record<string, Emulator>>("emulators");
         loading.value = false;
-        return emulators || {};
+        return ems || {};
     }
 
     async function isEmulatorInstalled(cs: string): Promise<boolean> {

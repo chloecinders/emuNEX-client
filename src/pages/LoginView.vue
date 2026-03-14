@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { load } from "@tauri-apps/plugin-store";
-import { ref } from "vue";
+import { getDomainStore, addSavedDomain, normalizeDomain, getSavedDomains, getGlobalStore } from "../lib/store";
+import { onMounted, ref } from "vue";
 import { useAuthStore } from "../stores/AuthStore";
+import { router } from "../router";
 
 import Button from "../components/ui/Button.vue";
 import Input from "../components/ui/Input.vue";
@@ -13,21 +14,50 @@ const errorMessage = ref("");
 const authStore = useAuthStore();
 const isConnecting = ref(false);
 
+const savedDomains = ref<{ domain: string, hasToken: boolean }[]>([]);
+
+onMounted(async () => {
+    const domains = await getSavedDomains();
+    const domainStatuses = await Promise.all(domains.map(async (d) => {
+        const store = await getDomainStore(d);
+        const token = await store.get<string>("token");
+        return { domain: d, hasToken: !!token };
+    }));
+    
+    savedDomains.value = domainStatuses;
+    
+    if (authStore.domain && authStore.token) {
+        router.push("/");
+    } else if (authStore.domain) {
+        serverUrl.value = authStore.domain;
+    }
+});
+
+const handleSelectDomain = async (domain: string) => {
+    const globalStore = await getGlobalStore();
+    await globalStore.set("domain", domain);
+    await globalStore.save();
+    window.location.reload();
+};
+
 const handleConnect = async () => {
     if (!serverUrl.value) return;
     errorMessage.value = "";
     isConnecting.value = true;
 
     try {
-        const store = await load("store.json");
+        const normalized = normalizeDomain(serverUrl.value);
+        await addSavedDomain(normalized);
+        const store = await getDomainStore(normalized);
         const resp = await invoke<{ login_url: string; storage_path: string }>("get_client_start", {
-            serverUrl: serverUrl.value,
+            serverUrl: normalized,
         });
 
-        store.set("storage_path", resp.storage_path);
+        await store.set("storage_path", resp.storage_path);
+        await store.save();
         authStore.storagePath = resp.storage_path;
 
-        const fullUrl = new URL(resp.login_url, serverUrl.value).href;
+        const fullUrl = new URL(resp.login_url, normalized).href;
         await openUrl(fullUrl);
     } catch (err) {
         errorMessage.value = String(err);
@@ -44,7 +74,22 @@ const handleConnect = async () => {
 
             <div class="content">
                 <h1>emuNEX Login</h1>
-                <p class="description">Login to an emuNEX server.</p>
+                <p class="description">Select a server or enter a new address.</p>
+
+                <div v-if="savedDomains.some(d => d.hasToken)" class="saved-sessions">
+                    <p class="section-hint">Previous Sessions:</p>
+                    <div class="domains-grid">
+                        <button 
+                            v-for="item in savedDomains.filter(d => d.hasToken)" 
+                            :key="item.domain"
+                            type="button"
+                            class="session-card"
+                            @click="handleSelectDomain(item.domain)"
+                        >
+                            <span class="session-name">{{ item.domain }}</span>
+                        </button>
+                    </div>
+                </div>
 
                 <div v-if="errorMessage" class="error-bubble">
                     <span class="error-icon">!</span>
@@ -52,6 +97,7 @@ const handleConnect = async () => {
                 </div>
 
                 <form @submit.prevent="handleConnect" class="login-form">
+                    <div class="add-new-title">Connect to New Server</div>
                     <Input v-model="serverUrl" label="Server Address" placeholder="https://example.com" />
 
                     <div class="form-actions">
@@ -134,10 +180,78 @@ h1 {
     font-weight: bold;
 }
 
+.saved-sessions {
+    margin-bottom: 30px;
+}
+
+.section-hint {
+    font-size: 0.75rem;
+    color: #999;
+    font-weight: 800;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+    letter-spacing: 0.5px;
+}
+
+.domains-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.session-card {
+    background: #fff;
+    border: 2px solid #eee;
+    padding: 15px;
+    border-radius: 12px;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.2s;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    position: relative;
+    overflow: hidden;
+}
+
+.session-card:hover {
+    border-color: var(--3ds-blue);
+    background: #fdfdfd;
+    transform: translateY(-2px);
+}
+
+.session-name {
+    font-weight: 700;
+    color: #444;
+    font-size: 0.9rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.add-new-title {
+    font-size: 0.75rem;
+    color: #bbb;
+    font-weight: 800;
+    text-transform: uppercase;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.add-new-title::before,
+.add-new-title::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: #eee;
+}
+
 .form-actions {
     display: flex;
     justify-content: center;
-    margin-top: 25px;
+    margin-top: 15px;
 }
 
 .footer-hint {

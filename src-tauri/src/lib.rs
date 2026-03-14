@@ -9,6 +9,7 @@ use tauri_plugin_store::StoreExt;
 use crate::commands::emulator::StoreEmulator;
 
 mod commands;
+mod store;
 
 #[derive(Deserialize)]
 struct ApiResponse<T> {
@@ -24,6 +25,7 @@ pub struct AppState {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_fs::init())
         .manage(AppState {
             is_game_running: false.into(),
         })
@@ -62,7 +64,11 @@ pub fn run() {
             let handle = app.handle().clone();
             let temp_base = std::env::temp_dir();
 
-            let store = handle.store("store.json").ok();
+            let store = if let Some(domain) = store::get_current_domain(&handle) {
+                store::get_domain_store(&handle, &domain).ok()
+            } else {
+                handle.store("store.json").ok()
+            };
 
             if let Ok(entries) = std::fs::read_dir(temp_base) {
                 for entry in entries.flatten() {
@@ -71,7 +77,7 @@ pub fn run() {
                         let game_id = name.replace("emunex_", "");
                         let recovery_path = entry.path();
 
-                        let mut save_dir = handle.path().app_data_dir().unwrap();
+                        let mut save_dir = store::get_data_dir(&handle).unwrap();
                         save_dir.push("saves");
                         save_dir.push(&game_id);
                         let _ = std::fs::create_dir_all(&save_dir);
