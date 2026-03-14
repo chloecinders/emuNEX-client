@@ -29,7 +29,7 @@ export const router = createRouter({
     routes,
 })
 
-router.afterEach((to, from) => {
+router.afterEach((_to, _from) => {
     const gameStore = useGameStore();
     gameStore.currentSelectedGame = null;
 })
