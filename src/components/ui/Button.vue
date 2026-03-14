@@ -43,12 +43,11 @@ const emit = defineEmits(["click"]);
     font-size: 1.1rem;
 }
 
-/* Base layers */
 .btn-front {
     display: block;
     position: relative;
     padding: 10px 35px;
-    border-radius: 50px; /* Pill shape */
+    border-radius: 50px;
     color: white;
     transform: translateY(-4px);
     transition: transform 150ms cubic-bezier(0.3, 0.7, 0.4, 1);

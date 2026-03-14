@@ -63,23 +63,49 @@ const handleInstallEmulator = async () => {
     }
 };
 
+const showConflictModal = ref(false);
+const conflictVersion = ref<number | null>(null);
+let resolveConflict: ((value: boolean) => void) | null = null;
+
+const promptSyncConflict = (version: number): Promise<boolean> => {
+    conflictVersion.value = version;
+    showConflictModal.value = true;
+    return new Promise((resolve) => {
+        resolveConflict = resolve;
+    });
+};
+
+const handleConflictChoice = (choice: boolean) => {
+    showConflictModal.value = false;
+    if (resolveConflict) resolveConflict(choice);
+};
+
 const handlePlay = async () => {
     if (!game.value || isLaunching.value) return;
 
     try {
         isLaunching.value = true;
+        const gameIdStr = game.value.id.toString();
+
+        const status: any = await invoke("check_save_status", { gameId: gameIdStr });
+
+        if (status.latest_version !== null) {
+            let proceedWithDownload = false;
+
+            if (status.conflict) {
+                proceedWithDownload = await promptSyncConflict(status.latest_version);
+            } else if (status.latest_version > 0) {
+                proceedWithDownload = true;
+            }
+
+            if (proceedWithDownload) {
+                await invoke("download_save_files", { gameId: gameIdStr });
+            }
+        }
+
         await gameStore.startGame(game.value.id);
-
-        await invoke("install_game", {
-            gameId: game.value.id.toString(),
-            console: game.value.console,
-            romPath: game.value.rom_path,
-        });
-
-        await invoke("play_game", {
-            gameId: game.value.id.toString(),
-            console: game.value.console,
-        });
+        await invoke("install_game", { gameId: gameIdStr, console: game.value.console, romPath: game.value.rom_path });
+        await invoke("play_game", { gameId: gameIdStr, console: game.value.console });
     } catch (error) {
         alert(error);
     } finally {
@@ -119,6 +145,8 @@ const handlePlay = async () => {
             </div>
         </div>
     </transition>
+
+    <SaveConflictModal :show="showConflictModal" :version="conflictVersion" @choice="handleConflictChoice" />
 </template>
 
 <style scoped>

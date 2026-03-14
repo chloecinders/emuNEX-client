@@ -24,8 +24,6 @@ pub struct AppState {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_process::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(AppState {
             is_game_running: false.into(),
         })
@@ -41,6 +39,9 @@ pub fn run() {
                 }
             }
         })
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_single_instance::init(|_app, _args, _cwd| {}))
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_deep_link::init())
@@ -50,7 +51,9 @@ pub fn run() {
             commands::http::http,
             commands::emulator::download_emulator,
             commands::play::play_game,
-            commands::play::install_game
+            commands::play::install_game,
+            commands::save::check_save_status,
+            commands::save::download_save_files,
         ])
         .setup(|app| {
             #[cfg(desktop)]

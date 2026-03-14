@@ -12,27 +12,23 @@ const searchQuery = ref("");
 const searchResults = ref<PartialGame[]>([]);
 const isSearching = ref(false);
 
-// Stores grouped data for the "Overview" mode
 const consoleGroups = ref<Record<string, PartialGame[]>>({});
 const categoryGroups = ref<Record<string, PartialGame[]>>({});
 
 let timeout: ReturnType<typeof setTimeout>;
 
-// Fetch initial grouped data
 onMounted(async () => {
     await Promise.all([metaStore.fetchConsoles(), metaStore.fetchCategories()]);
 
-    // Fill console groups
     for (const con of metaStore.consoles) {
         consoleGroups.value[con.name] = await gameStore.fetchPartialGames({ console: con.name });
     }
-    // Fill category groups
+
     for (const cat of metaStore.categories) {
         categoryGroups.value[cat.name] = await gameStore.fetchPartialGames({ category: cat.name });
     }
 });
 
-// Watch only the search query
 watch(searchQuery, (newQuery) => {
     clearTimeout(timeout);
     if (!newQuery.trim()) {

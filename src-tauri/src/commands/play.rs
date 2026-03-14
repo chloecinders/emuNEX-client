@@ -4,10 +4,14 @@ use std::io::Write;
 use std::sync::atomic::Ordering;
 use std::{collections::HashMap, process::Command};
 use tauri::{AppHandle, Manager, Runtime, State};
+use tauri_plugin_dialog::{
+    DialogExt, MessageDialogButtons, MessageDialogKind, MessageDialogResult,
+};
 use tauri_plugin_store::StoreExt;
 
 use crate::commands::emulator::StoreEmulator;
-use crate::AppState;
+use crate::commands::save::{upload_save_files, SaveFileMetadata};
+use crate::{ApiResponse, AppState};
 
 #[tauri::command]
 pub async fn install_game<R: Runtime>(
@@ -79,14 +83,19 @@ pub async fn install_game<R: Runtime>(
 #[tauri::command]
 pub async fn play_game<R: Runtime>(
     app: AppHandle<R>,
-    state: State<'_, AppState>,
+    state: tauri::State<'_, AppState>,
     game_id: String,
     console: String,
 ) -> Result<(), String> {
-    state.is_game_running.store(true, Ordering::SeqCst);
-
     let store = app.store("store.json").map_err(|e| e.to_string())?;
     let base_path = app.path().app_data_dir().map_err(|e| e.to_string())?;
+
+    let mut save_dir = base_path.clone();
+    save_dir.push("saves");
+    save_dir.push(&game_id);
+    std::fs::create_dir_all(&save_dir).map_err(|e| e.to_string())?;
+
+    state.is_game_running.store(true, Ordering::SeqCst);
 
     let stored_emulators: HashMap<String, StoreEmulator> = store
         .get("emulators")
@@ -97,11 +106,6 @@ pub async fn play_game<R: Runtime>(
     let mut rom_dir = base_path.clone();
     rom_dir.push("roms");
     rom_dir.push(&console);
-
-    let mut save_dir = base_path.clone();
-    save_dir.push("saves");
-    save_dir.push(&game_id);
-    std::fs::create_dir_all(&save_dir).map_err(|e| e.to_string())?;
 
     let persistent_rom_path = std::fs::read_dir(&rom_dir)
         .map_err(|_| "ROM directory missing")?
@@ -123,7 +127,6 @@ pub async fn play_game<R: Runtime>(
     let emu_bin_path = std::path::Path::new(&emulator.binary_path);
     let emu_dir = emu_bin_path.parent().unwrap();
 
-    // Copy configs to temp_dir
     for config_name in &emulator.config_files {
         let src = emu_dir.join(config_name);
         if src.exists() {
@@ -149,10 +152,8 @@ pub async fn play_game<R: Runtime>(
     }
     args.push(temp_rom_path.to_string_lossy().to_string());
 
-    let working_dir = if emulator.zipped { emu_dir } else { &temp_dir };
-
     let mut child = Command::new(&emulator.binary_path)
-        .current_dir(working_dir)
+        .current_dir(if emulator.zipped { emu_dir } else { &temp_dir })
         .args(&args)
         .spawn()
         .map_err(|e| e.to_string())?;
@@ -163,14 +164,30 @@ pub async fn play_game<R: Runtime>(
         let entry = entry.map_err(|e| e.to_string())?;
         let path = entry.path();
         let fname = entry.file_name().to_string_lossy().to_string();
-
         if path == temp_rom_path || emulator.config_files.contains(&fname) {
             continue;
         }
-
-        let dest = save_dir.join(entry.file_name());
-        std::fs::copy(&path, &dest).map_err(|e| e.to_string())?;
+        std::fs::copy(&path, save_dir.join(entry.file_name())).map_err(|e| e.to_string())?;
     }
+
+    let mut sync_versions = store
+        .get("sync_versions")
+        .and_then(|v| v.as_object().cloned())
+        .unwrap_or_default();
+
+    let current_v = sync_versions
+        .get(&game_id)
+        .and_then(|v| v.as_i64().map(|i| i as i32))
+        .unwrap_or(0);
+
+    let new_v = current_v + 1;
+    upload_save_files(app.clone(), &game_id, &save_dir, new_v)
+        .await
+        .ok();
+
+    sync_versions.insert(game_id, serde_json::json!(new_v));
+    store.set("sync_versions", serde_json::json!(sync_versions));
+    let _ = store.save();
 
     std::fs::remove_dir_all(&temp_dir).ok();
     state.is_game_running.store(false, Ordering::SeqCst);

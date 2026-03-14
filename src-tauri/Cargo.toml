@@ -24,11 +24,14 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri-plugin-deep-link = "2"
 tauri-plugin-store = "2"
-reqwest = { version = "0.13.2", features = ["json", "stream"] }
+reqwest = { version = "0.13.2", features = ["json", "multipart", "stream"] }
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 futures-util = "0.3.32"
 zip = "8.2.0"
 tauri-plugin-process = "2"
+chrono = { version = "0.4.44", features = ["serde"] }
+tauri-plugin-dialog = "2"
+base64 = "0.22.1"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-single-instance = "2"

@@ -5,7 +5,6 @@ import { load } from "@tauri-apps/plugin-store";
 import { ref } from "vue";
 import { useAuthStore } from "../stores/AuthStore";
 
-// Components
 import Button from "../components/ui/Button.vue";
 import Input from "../components/ui/Input.vue";
 
