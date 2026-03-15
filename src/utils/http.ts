@@ -60,6 +60,14 @@ class ApiClient {
     public post<T>(path: string, body: any): V1ApiResponseType<T> {
         return this.request<T>(path, "POST", body);
     }
+
+    public put<T>(path: string, body: any): V1ApiResponseType<T> {
+        return this.request<T>(path, "PUT", body);
+    }
+
+    public delete<T>(path: string): V1ApiResponseType<T> {
+        return this.request<T>(path, "DELETE");
+    }
 }
 
 export const http = new ApiClient();

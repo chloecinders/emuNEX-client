@@ -26,6 +26,13 @@ pub async fn http(req: ProxyRequest) -> Result<serde_json::Value, String> {
     let method = match req.method.as_str() {
         "GET" => reqwest::Method::GET,
         "POST" => reqwest::Method::POST,
+        "PUT" => reqwest::Method::PUT,
+        "DELETE" => reqwest::Method::DELETE,
+        "PATCH" => reqwest::Method::PATCH,
+        "HEAD" => reqwest::Method::HEAD,
+        "OPTIONS" => reqwest::Method::OPTIONS,
+        "TRACE" => reqwest::Method::TRACE,
+        "CONNECT" => reqwest::Method::CONNECT,
         _ => return Err("Unsupported method".into()),
     };
 

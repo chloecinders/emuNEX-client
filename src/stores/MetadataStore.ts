@@ -31,7 +31,7 @@ export const useMetadataStore = defineStore("metadata", () => {
     async function fetchConsoles() {
         loading.value = true;
         try {
-            const res = await http.get<Console[]>("/roms/consoles");
+            const res = await http.get<Console[]>("/consoles");
             if (res.success) consoles.value = res.data;
         } catch (err) {
             console.error("Failed to fetch consoles:", err);

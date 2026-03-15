@@ -4,6 +4,7 @@ import Logout from "../components/Logout.vue";
 import ServerSwitcher from "../components/modals/ServerSwitcher.vue";
 import { useAuthStore } from "../stores/AuthStore";
 import { useUserStore } from "../stores/UserStore";
+import { Menu, ArrowLeftRight, Library, Search } from "lucide-vue-next";
 
 const userStore = useUserStore();
 const authStore = useAuthStore();
@@ -14,8 +15,8 @@ const toggleServerSwitcher = () => (isServerSwitcherOpen.value = !isServerSwitch
 const ready = ref(false);
 
 const menuItems = [
-    { name: "Library", path: "/" },
-    { name: "Search", path: "/search" },
+    { name: "Library", path: "/", icon: Library },
+    { name: "Search", path: "/search", icon: Search },
 ];
 
 const displayDomain = computed(() => {
@@ -44,6 +45,7 @@ onMounted(() => {
                         @click="toggleSidebar"
                     >
                         <div class="nav-indicator"></div>
+                        <component :is="item.icon" class="nav-icon" />
                         <span class="nav-text">{{ item.name }}</span>
                     </router-link>
 
@@ -59,7 +61,7 @@ onMounted(() => {
                             toggleSidebar();
                         "
                     >
-                        <span class="icon">⇄</span>
+                        <ArrowLeftRight class="icon" />
                     </button>
                     <Logout class="logout-wrapper" />
                 </div>
@@ -67,7 +69,9 @@ onMounted(() => {
         </Transition>
 
         <header class="status-bar">
-            <button class="menu-button" @click="toggleSidebar">MENU</button>
+            <button class="menu-button" @click="toggleSidebar">
+                <Menu class="menu-icon" />
+            </button>
 
             <div id="header-tools" class="header-tools-container"></div>
 
@@ -128,6 +132,25 @@ onMounted(() => {
 .menu-button:hover {
     border-color: var(--color-primary);
     transform: translateY(-1px);
+}
+
+.menu-icon {
+    width: 24px;
+    height: 24px;
+    stroke-width: 2.5px;
+    display: block;
+}
+
+.nav-icon {
+    width: 20px;
+    height: 20px;
+    margin-right: var(--spacing-md);
+    stroke-width: 2.5px;
+    color: var(--color-text-muted);
+}
+
+.router-link-active .nav-icon {
+    color: var(--color-primary);
 }
 
 .header-tools-container {
@@ -271,6 +294,12 @@ onMounted(() => {
     color: var(--color-primary);
     transform: translateY(-2px);
     background: white;
+}
+
+.icon {
+    width: 24px;
+    height: 24px;
+    stroke-width: 2.5px;
 }
 
 .logout-wrapper {

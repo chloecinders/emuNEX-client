@@ -54,6 +54,7 @@ pub fn run() {
             commands::emulator::download_emulator,
             commands::play::play_game,
             commands::play::install_game,
+            commands::play::is_game_installed,
             commands::save::check_save_status,
             commands::save::download_save_files,
         ])

@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import GameInfo from "../components/games/GameInfo.vue";
 import GameList from "../components/games/GameList.vue";
+import Select from "../components/ui/Select.vue";
 import { useGameStore, type PartialGame } from "../stores/GameStore";
 import { useMetadataStore } from "../stores/MetadataStore";
 
@@ -12,41 +13,80 @@ const searchQuery = ref("");
 const searchResults = ref<PartialGame[]>([]);
 const isSearching = ref(false);
 
-const consoleGroups = ref<Record<string, PartialGame[]>>({});
-const categoryGroups = ref<Record<string, PartialGame[]>>({});
+const selectedCategory = ref("");
+const selectedConsole = ref("");
+
+const overviewGroups = ref<Record<string, PartialGame[]>>({});
+
+const categoryOptions = computed(() => [
+    { name: "All Categories", value: "" },
+    ...metaStore.categories.map((c) => ({ name: c.name, value: c.name })),
+]);
+
+const consoleOptions = computed(() => [
+    { name: "All Consoles", value: "" },
+    ...metaStore.consoles.map((c) => ({ name: c.name, value: c.name })),
+]);
+
+const orderedGroups = computed(() => {
+    const keys = Object.keys(overviewGroups.value);
+    const result: { title: string; games: PartialGame[] }[] = [];
+
+    // 1. Most Played
+    if (overviewGroups.value["Most Played"]) {
+        result.push({ title: "Most Played", games: overviewGroups.value["Most Played"] });
+    }
+
+    // 2. Recently Added
+    if (overviewGroups.value["Recently Added"]) {
+        result.push({ title: "Recently Added", games: overviewGroups.value["Recently Added"] });
+    }
+
+    // 3. Categories (sorted alphabetically)
+    const categories = keys
+        .filter((k) => k !== "Most Played" && k !== "Recently Added")
+        .sort((a, b) => a.localeCompare(b));
+
+    for (const cat of categories) {
+        result.push({ title: cat, games: overviewGroups.value[cat] });
+    }
+
+    return result;
+});
 
 let timeout: ReturnType<typeof setTimeout>;
 
+async function refreshOverview() {
+    overviewGroups.value = await gameStore.fetchSearchOverview();
+}
+
 onMounted(async () => {
-    await Promise.all([metaStore.fetchConsoles(), metaStore.fetchCategories()]);
-
-    for (const con of metaStore.consoles) {
-        consoleGroups.value[con.name] = await gameStore.fetchPartialGames({ console: con.name });
-    }
-
-    for (const cat of metaStore.categories) {
-        categoryGroups.value[cat.name] = await gameStore.fetchPartialGames({ category: cat.name });
-    }
+    await Promise.all([metaStore.fetchConsoles(), metaStore.fetchCategories(), refreshOverview()]);
 });
 
-watch(searchQuery, (newQuery) => {
-    clearTimeout(timeout);
+async function performSearch() {
+    try {
+        searchResults.value = await gameStore.searchGames(searchQuery.value, {
+            category: selectedCategory.value || null,
+            console: selectedConsole.value || null,
+        });
+    } finally {
+        isSearching.value = false;
+    }
+}
 
-    if (!newQuery.trim()) {
+watch([searchQuery, selectedCategory, selectedConsole], () => {
+    clearTimeout(timeout);
+    
+    if (!searchQuery.value.trim() && !selectedCategory.value && !selectedConsole.value) {
         searchResults.value = [];
         isSearching.value = false;
         return;
     }
 
     isSearching.value = true;
-
-    timeout = setTimeout(async () => {
-        try {
-            searchResults.value = await gameStore.searchGames(newQuery);
-        } finally {
-            isSearching.value = false;
-        }
-    }, 400);
+    searchResults.value = []; // Clear immediately to show spinner
+    timeout = setTimeout(performSearch, 400);
 });
 </script>
 
@@ -58,34 +98,50 @@ watch(searchQuery, (newQuery) => {
     </Teleport>
 
     <div class="search-page">
-        <div v-if="searchQuery" class="search-results-section">
-            <h1 class="section-title">Search Results</h1>
+        <div class="filter-bar">
+            <div class="filter-item">
+                <Select
+                    v-model="selectedCategory"
+                    :options="categoryOptions"
+                    label="Category"
+                    placeholder="All Categories"
+                />
+            </div>
+
+            <div class="filter-item">
+                <Select
+                    v-model="selectedConsole"
+                    :options="consoleOptions"
+                    label="Console"
+                    placeholder="All Consoles"
+                />
+            </div>
+        </div>
+
+        <div v-if="searchQuery || selectedCategory || selectedConsole" class="search-results-section">
+            <h2 class="group-title">Search Results</h2>
 
             <div v-if="isSearching" class="loading-overlay">
                 <div class="spinner"></div>
             </div>
 
             <div v-else-if="!searchResults.length" class="search-prompt">
-                <p>No titles found for "{{ searchQuery }}"</p>
+                <p>No titles found for your filters</p>
             </div>
 
             <GameList v-else :games="searchResults" />
         </div>
 
         <div v-else class="overview-section">
-            <h1 class="section-title">Consoles</h1>
-
-            <div v-for="(games, consoleName) in consoleGroups" :key="consoleName" class="group-block">
-                <h2 class="group-title">{{ consoleName }}</h2>
-                <GameList :games="games" />
+            <div v-if="gameStore.loading" class="loading-overlay">
+                <div class="spinner"></div>
             </div>
-
-            <h1 class="section-title">Categories</h1>
-
-            <div v-for="(games, catName) in categoryGroups" :key="catName" class="group-block">
-                <h2 class="group-title">{{ catName }}</h2>
-                <GameList :games="games" />
-            </div>
+            <template v-else>
+                <div v-for="group in orderedGroups" :key="group.title" class="group-block">
+                    <h2 class="group-title">{{ group.title }}</h2>
+                    <GameList :games="group.games" />
+                </div>
+            </template>
         </div>
     </div>
 
@@ -97,23 +153,18 @@ watch(searchQuery, (newQuery) => {
     padding: var(--spacing-md) var(--spacing-lg);
 }
 
-.section-title {
-    font-size: 2.25rem;
-    font-weight: 900;
-    color: var(--color-text);
-    text-transform: uppercase;
-    letter-spacing: -1px;
-    margin: 0 0 var(--spacing-xl) 0;
+.filter-bar {
     display: flex;
-    align-items: center;
-    gap: var(--spacing-md);
+    gap: var(--spacing-lg);
+    margin-bottom: var(--spacing-xl);
+    padding: var(--spacing-lg);
+    background: var(--color-surface-variant);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border);
 }
 
-.section-title::after {
-    content: "";
+.filter-item {
     flex: 1;
-    height: var(--spacing-xxs);
-    background: var(--color-border);
 }
 
 .group-block {

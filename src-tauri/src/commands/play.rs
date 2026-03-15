@@ -3,7 +3,7 @@ use std::fs::File;
 use std::io::Write;
 use std::sync::atomic::Ordering;
 use std::{collections::HashMap, process::Command};
-use tauri::{AppHandle, Manager, Runtime, State};
+use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 use tauri_plugin_dialog::{
     DialogExt, MessageDialogButtons, MessageDialogKind, MessageDialogResult,
 };
@@ -95,6 +95,10 @@ pub async fn play_game<R: Runtime>(
     save_dir.push(&game_id);
     std::fs::create_dir_all(&save_dir).map_err(|e| e.to_string())?;
 
+    if state.is_game_running.load(Ordering::SeqCst) {
+        return Err("A game is already running".to_string());
+    }
+
     state.is_game_running.store(true, Ordering::SeqCst);
 
     let stored_emulators: HashMap<String, StoreEmulator> = store
@@ -158,6 +162,8 @@ pub async fn play_game<R: Runtime>(
         .spawn()
         .map_err(|e| e.to_string())?;
 
+    let _ = app.emit("game-status", "Playing");
+
     child.wait().map_err(|e| e.to_string())?;
 
     for entry in std::fs::read_dir(&temp_dir).map_err(|e| e.to_string())? {
@@ -191,5 +197,35 @@ pub async fn play_game<R: Runtime>(
 
     std::fs::remove_dir_all(&temp_dir).ok();
     state.is_game_running.store(false, Ordering::SeqCst);
+    let _ = app.emit("game-status", "Stopped");
     Ok(())
+}
+
+#[tauri::command]
+pub fn is_game_installed<R: Runtime>(
+    app: AppHandle<R>,
+    game_id: String,
+    console: String,
+) -> Result<bool, String> {
+    let store = store::get_current_store(&app)?;
+    let base_path = store::get_data_dir(&app)?;
+
+    let mut rom_dir = base_path.clone();
+    rom_dir.push("roms");
+    rom_dir.push(&console);
+
+    if !rom_dir.exists() {
+        return Ok(false);
+    }
+
+    let exists = std::fs::read_dir(&rom_dir)
+        .map_err(|e| e.to_string())?
+        .filter_map(|e| e.ok())
+        .any(|e| {
+            e.file_name()
+                .to_string_lossy()
+                .starts_with(&format!("{}.", game_id))
+        });
+
+    Ok(exists)
 }

@@ -7,15 +7,18 @@ import { type Game, useGameStore } from "../../stores/GameStore";
 import { useConsoleStore } from "../../stores/ConsoleStore";
 import { useStoragePath } from "../../utils/http";
 import SaveConflict from "../modals/SaveConflict.vue";
+import ShelfManager from "./ShelfManager.vue";
+import Button from "../ui/Button.vue";
+import { Library } from "lucide-vue-next";
 
 const gameStore = useGameStore();
 const emulatorStore = useEmulatorStore();
 const consoleStore = useConsoleStore();
 
 const game: Ref<Game | null> = ref(null);
-const isEmulatorInstalled = ref(false);
+const isReadyToPlay = ref(false);
 const isDownloading = ref(false);
-const isLaunching = ref(false);
+const showShelfManager = ref(false);
 
 const libraryStats = computed(() => {
     if (!game.value) return null;
@@ -36,7 +39,13 @@ onMounted(async () => {
 
 const checkInstallation = async () => {
     if (game.value) {
-        isEmulatorInstalled.value = await emulatorStore.isEmulatorInstalled(game.value.console);
+        const emulatorInstalled = await emulatorStore.isEmulatorInstalled(game.value.console);
+        const romInstalled = await invoke<boolean>("is_game_installed", {
+            gameId: game.value.id.toString(),
+            console: game.value.console,
+        });
+
+        isReadyToPlay.value = emulatorInstalled && romInstalled;
     }
 };
 
@@ -53,16 +62,35 @@ watch(
     { immediate: true },
 );
 
-const handleInstallEmulator = async () => {
+const handleInstall = async () => {
     if (!game.value || isDownloading.value) return;
     try {
         isDownloading.value = true;
 
-        await invoke("download_emulator", { console: game.value.console });
-        await emulatorStore.fetchEmulators();
+        // Check emulator
+        const emulatorInstalled = await emulatorStore.isEmulatorInstalled(game.value.console);
+        if (!emulatorInstalled) {
+            await invoke("download_emulator", { console: game.value.console });
+            await emulatorStore.fetchEmulators();
+        }
+
+        // Check ROM
+        const romInstalled = await invoke<boolean>("is_game_installed", {
+            gameId: game.value.id.toString(),
+            console: game.value.console,
+        });
+
+        if (!romInstalled) {
+            await invoke("install_game", {
+                gameId: game.value.id.toString(),
+                console: game.value.console,
+                romPath: game.value.rom_path,
+            });
+        }
+
         await checkInstallation();
     } catch (error) {
-        alert(`Failed to download: ${error}`);
+        alert(`Failed to install: ${error}`);
     } finally {
         isDownloading.value = false;
     }
@@ -87,10 +115,9 @@ const handleConflictChoice = (choice: boolean) => {
 };
 
 const handlePlay = async () => {
-    if (!game.value || isLaunching.value) return;
-
+    if (!game.value) return;
     try {
-        isLaunching.value = true;
+        gameStore.isLaunching = true;
         const gameIdStr = game.value.id.toString();
 
         const status: any = await invoke("check_save_status", { gameId: gameIdStr });
@@ -114,8 +141,9 @@ const handlePlay = async () => {
         await invoke("play_game", { gameId: gameIdStr, console: game.value.console });
     } catch (error) {
         alert(error);
+        gameStore.isLaunching = false;
     } finally {
-        isLaunching.value = false;
+        // We don't set isLaunching to false here because the backend event will handle it
     }
 };
 </script>
@@ -151,31 +179,31 @@ const handlePlay = async () => {
 
             <div class="action-area">
                 <div class="btn-container">
-                    <button
-                        v-if="isEmulatorInstalled"
-                        class="nintendo-btn blue"
+                    <Button
+                        v-if="isReadyToPlay"
+                        color="blue"
+                        full
                         @click="handlePlay"
-                        :disabled="isLaunching"
+                        :disabled="gameStore.isLaunching || gameStore.isPlaying"
                     >
-                        <span class="btn-edge"></span>
+                        <template v-if="gameStore.isLaunching">LAUNCHING</template>
+                        <template v-else-if="gameStore.isPlaying">PLAYING</template>
+                        <template v-else>PLAY</template>
+                    </Button>
 
-                        <span class="btn-front">
-                            {{ isLaunching ? "LAUNCHING..." : "PLAY GAME" }}
-                        </span>
-                    </button>
+                    <Button v-else color="green" full @click="handleInstall" :disabled="isDownloading">
+                        {{ isDownloading ? "DOWNLOADING" : "INSTALL" }}
+                    </Button>
 
-                    <button v-else class="nintendo-btn green" @click="handleInstallEmulator" :disabled="isDownloading">
-                        <span class="btn-edge"></span>
-
-                        <span class="btn-front">
-                            {{ isDownloading ? "DOWNLOADING..." : "INSTALL" }}
-                        </span>
+                    <button class="shelf-btn" @click="showShelfManager = true" title="Manage Shelves">
+                        <Library class="shelf-icon" />
                     </button>
                 </div>
             </div>
         </div>
     </transition>
 
+    <ShelfManager v-if="game" :game-id="game.id" :show="showShelfManager" @close="showShelfManager = false" />
     <SaveConflict :show="showConflictModal" :version="conflictVersion" @choice="handleConflictChoice" />
 </template>
 
@@ -286,85 +314,40 @@ h3 {
 
 .btn-container {
     position: relative;
-    height: 52px;
-    width: 240px;
+    height: 60px;
+    width: 320px;
+    display: flex;
+    gap: var(--spacing-lg);
 }
 
-.nintendo-btn {
-    position: relative;
-    border: none;
-    background: transparent;
-    padding: 0;
-    cursor: pointer;
-    user-select: none;
-    width: 100%;
-    height: 100%;
-    font-family: inherit;
-    font-weight: 800;
-    font-size: 1rem;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-.btn-front {
+.shelf-btn {
+    width: 60px;
+    height: 60px;
+    flex-shrink: 0;
+    background: var(--color-surface-variant);
+    border: 2px solid var(--color-border);
+    border-radius: var(--radius-md);
     display: flex;
     align-items: center;
     justify-content: center;
-    position: relative;
-    width: 100%;
-    height: 100%;
-    padding: 0 32px;
-    border-radius: var(--radius-md);
-    color: white;
-    transform: translateY(-4px);
-    transition: transform 150ms cubic-bezier(0.3, 0.7, 0.4, 1);
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    z-index: 2;
+    cursor: pointer;
+    color: var(--color-primary);
+    transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
 }
 
-.btn-edge {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    border-radius: var(--radius-md);
-    z-index: 1;
+.shelf-btn:hover {
+    background: var(--color-surface);
+    border-color: var(--color-primary);
+    transform: translateY(-4px) scale(1.05);
+    box-shadow: 0 8px 20px rgba(107, 92, 177, 0.2);
+    color: var(--color-primary-light);
 }
 
-.blue .btn-front {
-    background: var(--color-primary);
-}
-.blue .btn-edge {
-    background: var(--color-primary-dark);
-}
-
-.green .btn-front {
-    background: #4caf50;
-}
-.green .btn-edge {
-    background: #3d8b40;
-}
-
-.nintendo-btn:hover .btn-front {
-    transform: translateY(-6px);
-    filter: brightness(110%);
-}
-
-.nintendo-btn:active .btn-front {
-    transform: translateY(-1px);
-    transition: transform 34ms;
-}
-
-.nintendo-btn:disabled {
-    cursor: not-allowed;
-    filter: grayscale(0.8);
-    opacity: 0.7;
-}
-
-.nintendo-btn:disabled .btn-front {
-    transform: translateY(-1px);
+.shelf-icon {
+    width: 24px;
+    height: 24px;
+    stroke-width: 2.5px;
 }
 
 .slide-up-enter-active,

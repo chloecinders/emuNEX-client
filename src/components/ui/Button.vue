@@ -2,11 +2,13 @@
 interface Props {
     color?: "blue" | "green" | "red" | "grey";
     disabled?: boolean;
+    full?: boolean;
 }
 
 withDefaults(defineProps<Props>(), {
     color: "blue",
     disabled: false,
+    full: false,
 });
 
 const emit = defineEmits(["click"]);
@@ -14,8 +16,8 @@ const emit = defineEmits(["click"]);
 
 <template>
     <button
-        class="nintendo-btn"
-        :class="[color, { 'is-disabled': disabled }]"
+        class="popout-btn"
+        :class="[color, { 'is-disabled': disabled, 'is-full': full }]"
         :disabled="disabled"
         @click="emit('click')"
     >
@@ -28,7 +30,7 @@ const emit = defineEmits(["click"]);
 </template>
 
 <style scoped>
-.nintendo-btn {
+.popout-btn {
     position: relative;
     border: none;
     background: transparent;
@@ -45,9 +47,17 @@ const emit = defineEmits(["click"]);
     letter-spacing: 0.5px;
 }
 
+.popout-btn.is-full {
+    width: 100%;
+    height: 100%;
+}
+
 .btn-front {
-    display: block;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     position: relative;
+    width: 100%;
     padding: 12px 28px;
     border-radius: var(--radius-md);
     color: white;
@@ -55,6 +65,10 @@ const emit = defineEmits(["click"]);
     transition: transform 150ms cubic-bezier(0.3, 0.7, 0.4, 1);
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
     border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.is-full .btn-front {
+    height: 100%;
 }
 
 .btn-edge {
@@ -66,7 +80,6 @@ const emit = defineEmits(["click"]);
     border-radius: var(--radius-md);
 }
 
-/* Variants */
 .blue .btn-front { background: var(--color-primary); }
 .blue .btn-edge { background: var(--color-primary-dark); }
 
@@ -79,12 +92,12 @@ const emit = defineEmits(["click"]);
 .grey .btn-front { background: var(--color-text-muted); }
 .grey .btn-edge { background: #555; }
 
-.nintendo-btn:hover .btn-front {
+.popout-btn:hover .btn-front {
     transform: translateY(-6px);
     filter: brightness(110%);
 }
 
-.nintendo-btn:active .btn-front {
+.popout-btn:active .btn-front {
     transform: translateY(-1px);
     transition: transform 34ms;
 }

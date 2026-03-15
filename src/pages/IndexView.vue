@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { type Ref, ref, watch } from "vue";
-import GameInfo from "../components/games/GameInfo.vue";
 import GameLibrary from "../components/games/GameLibrary.vue";
 import { type LibraryGame, useGameStore } from "../stores/GameStore";
 
@@ -20,11 +19,8 @@ watch(
 
 <template>
     <div class="library-container">
-        <h1 class="section-title">Game Library</h1>
-        <GameLibrary :games="library" />
+        <GameLibrary />
     </div>
-
-    <GameInfo />
 </template>
 
 <style scoped>
