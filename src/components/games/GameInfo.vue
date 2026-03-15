@@ -9,6 +9,10 @@ import { useStoragePath } from "../../utils/http";
 import SaveConflict from "../modals/SaveConflict.vue";
 import ShelfManager from "./ShelfManager.vue";
 import Button from "../ui/Button.vue";
+import IconButton from "../ui/IconButton.vue";
+import Badge from "../ui/Badge.vue";
+import Heading from "../ui/Heading.vue";
+import Text from "../ui/Text.vue";
 import { Library } from "lucide-vue-next";
 
 const gameStore = useGameStore();
@@ -67,14 +71,12 @@ const handleInstall = async () => {
     try {
         isDownloading.value = true;
 
-        // Check emulator
         const emulatorInstalled = await emulatorStore.isEmulatorInstalled(game.value.console);
         if (!emulatorInstalled) {
             await invoke("download_emulator", { console: game.value.console });
             await emulatorStore.fetchEmulators();
         }
 
-        // Check ROM
         const romInstalled = await invoke<boolean>("is_game_installed", {
             gameId: game.value.id.toString(),
             console: game.value.console,
@@ -143,42 +145,43 @@ const handlePlay = async () => {
         alert(error);
         gameStore.isLaunching = false;
     } finally {
-        // We don't set isLaunching to false here because the backend event will handle it
     }
 };
 </script>
 
 <template>
     <transition name="slide-up">
-        <div v-if="game" class="bottom-panel">
-            <div class="info-header">
-                <div class="banner-icon" :style="{ background: consoleStore.getConsoleColor(game.console) }">
-                    <img :src="useStoragePath(game.image_path)" alt="Game Icon" class="game-thumb" />
-                    <span class="console-tag" :style="{ background: consoleStore.getConsoleColor(game.console) || 'var(--color-primary)' }">{{ game.console.toUpperCase() }}</span>
+        <div v-if="game" class="c-bottom-panel">
+            <div class="c-bottom-panel__header">
+                <div class="c-bottom-panel__banner" :style="{ background: consoleStore.getConsoleColor(game.console) }">
+                    <img :src="useStoragePath(game.image_path)" alt="Game Icon" class="c-bottom-panel__thumb" />
+                    <Badge class="c-bottom-panel__tag" :bg-color="consoleStore.getConsoleColor(game.console) || 'var(--color-primary)'">
+                        {{ game.console.toUpperCase() }}
+                    </Badge>
                 </div>
 
-                <div class="titles">
-                    <h3>{{ game.title }}</h3>
-                    <p class="subtitle">{{ game.category }} | {{ game.region }}</p>
+                <div class="c-bottom-panel__titles">
+                    <Heading :level="3">{{ game.title }}</Heading>
+                    <Text variant="label" size="xs" class="c-bottom-panel__subtitle">{{ game.category }} | {{ game.region }}</Text>
 
                     <transition name="fade">
-                        <div v-if="libraryStats" class="library-meta">
-                            <span class="stat-item">
-                                <span class="stat-label">PLAYED:</span> {{ libraryStats.play_count }}
+                        <div v-if="libraryStats" class="c-bottom-panel__meta">
+                            <span class="c-bottom-panel__stat">
+                                <span class="c-bottom-panel__stat-label">PLAYED:</span> {{ libraryStats.play_count }}
                             </span>
 
-                            <span class="separator">/</span>
+                            <span class="c-bottom-panel__separator">/</span>
 
-                            <span class="stat-item">
-                                <span class="stat-label">LAST:</span> {{ formatDate(libraryStats.last_played) }}
+                            <span class="c-bottom-panel__stat">
+                                <span class="c-bottom-panel__stat-label">LAST:</span> {{ formatDate(libraryStats.last_played) }}
                             </span>
                         </div>
                     </transition>
                 </div>
             </div>
 
-            <div class="action-area">
-                <div class="btn-container">
+            <div class="c-bottom-panel__action-area">
+                <div class="c-bottom-panel__btn-group">
                     <Button
                         v-if="isReadyToPlay"
                         color="blue"
@@ -195,9 +198,9 @@ const handlePlay = async () => {
                         {{ isDownloading ? "DOWNLOADING" : "INSTALL" }}
                     </Button>
 
-                    <button class="shelf-btn" @click="showShelfManager = true" title="Manage Shelves">
-                        <Library class="shelf-icon" />
-                    </button>
+                    <IconButton size="lg" title="Manage Shelves" @click="showShelfManager = true">
+                        <Library />
+                    </IconButton>
                 </div>
             </div>
         </div>
@@ -207,8 +210,8 @@ const handlePlay = async () => {
     <SaveConflict :show="showConflictModal" :version="conflictVersion" @choice="handleConflictChoice" />
 </template>
 
-<style scoped>
-.bottom-panel {
+<style lang="scss" scoped>
+.c-bottom-panel {
     position: fixed;
     bottom: 0;
     left: 0;
@@ -224,130 +227,79 @@ const handlePlay = async () => {
     align-items: center;
     box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.05);
     z-index: 100;
-}
 
-.banner-icon {
-    position: relative;
-    width: 80px;
-    height: 80px;
-    background: var(--color-surface);
-    border-radius: var(--radius-md);
-    padding: var(--spacing-xs);
-    box-shadow: var(--shadow-subtle);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid var(--color-border);
-}
+    &__header {
+        display: flex;
+        gap: var(--spacing-lg);
+        align-items: center;
+    }
 
-.game-thumb {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    border-radius: calc(var(--radius-md) - 4px);
-}
+    &__banner {
+        position: relative;
+        width: 80px;
+        height: 80px;
+        background: var(--color-surface);
+        border-radius: var(--radius-md);
+        padding: var(--spacing-xs);
+        box-shadow: var(--shadow-subtle);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid var(--color-border);
+    }
 
-.console-tag {
-    position: absolute;
-    top: -8px;
-    right: -8px;
-    background: var(--color-primary);
-    color: white;
-    font-size: 10px;
-    padding: var(--spacing-xxs) var(--spacing-sm);
-    border-radius: var(--radius-full);
-    font-weight: 900;
-    border: 2px solid var(--color-surface);
-    box-shadow: var(--shadow-subtle);
-}
+    &__thumb {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        border-radius: calc(var(--radius-md) - 4px);
+    }
 
-.info-header {
-    display: flex;
-    gap: var(--spacing-lg);
-    align-items: center;
-}
+    &__tag {
+        position: absolute;
+        top: -8px;
+        right: -8px;
+    }
 
-.titles {
-    display: flex;
-    flex-direction: column;
-}
+    &__titles {
+        display: flex;
+        flex-direction: column;
+    }
 
-h3 {
-    margin: 0;
-    font-size: 1.5rem;
-    color: var(--color-text);
-    font-weight: 900;
-    letter-spacing: -0.5px;
-}
+    &__subtitle {
+        margin: var(--spacing-xs) 0 0 0;
+    }
 
-.subtitle {
-    margin: var(--spacing-xs) 0 0 0;
-    font-size: 0.8rem;
-    color: var(--color-text-muted);
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-}
+    &__meta {
+        display: flex;
+        align-items: center;
+        gap: var(--spacing-md);
+        font-size: 0.85rem;
+        font-weight: 700;
+        color: var(--color-text-muted);
+    }
 
-.library-meta {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-md);
-    font-size: 0.85rem;
-    font-weight: 700;
-    color: var(--color-text-muted);
-}
+    &__stat-label {
+        opacity: 0.6;
+        margin-right: var(--spacing-xs);
+    }
 
-.stat-label {
-    opacity: 0.6;
-    margin-right: var(--spacing-xs);
-}
+    &__separator {
+        opacity: 0.3;
+    }
 
-.separator {
-    opacity: 0.3;
-}
+    &__action-area {
+        display: flex;
+        align-items: center;
+    }
 
-.action-area {
-    display: flex;
-    align-items: center;
-}
-
-.btn-container {
-    position: relative;
-    height: 60px;
-    width: 320px;
-    display: flex;
-    gap: var(--spacing-lg);
-}
-
-.shelf-btn {
-    width: 60px;
-    height: 60px;
-    flex-shrink: 0;
-    background: var(--color-surface-variant);
-    border: 2px solid var(--color-border);
-    border-radius: var(--radius-md);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    color: var(--color-primary);
-    transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1);
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
-}
-
-.shelf-btn:hover {
-    background: var(--color-surface);
-    border-color: var(--color-primary);
-    transform: translateY(-4px) scale(1.05);
-    box-shadow: 0 8px 20px rgba(107, 92, 177, 0.2);
-    color: var(--color-primary-light);
-}
-
-.shelf-icon {
-    width: 24px;
-    height: 24px;
-    stroke-width: 2.5px;
+    &__btn-group {
+        position: relative;
+        height: 60px;
+        width: 320px;
+        display: flex;
+        gap: var(--spacing-lg);
+    }
 }
 
 .slide-up-enter-active,

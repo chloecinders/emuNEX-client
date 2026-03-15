@@ -56,10 +56,6 @@ export const useGameStore = defineStore("gameStore", () => {
             } else if (event.payload === "Stopped") {
                 isPlaying.value = false;
                 isLaunching.value = false;
-                // We don't automatically set isDimmed to false here 
-                // because the user might have already dismissed it or 
-                // we might want it to stay until cleanup is done.
-                // But for a fresh "Stopped" event, let's reset it if it was still active.
                 isDimmed.value = false;
             }
         });

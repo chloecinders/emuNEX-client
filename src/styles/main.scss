@@ -1,0 +1,75 @@
+@use "variables";
+@use "mixins";
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Inter', sans-serif;
+  color: var(--color-text);
+  background-color: var(--color-background);
+  background-image: radial-gradient(#dcdcdc var(--spacing-xxs), transparent var(--spacing-xxs));
+  background-size: 20px 20px;
+  background-attachment: fixed;
+  overflow: hidden;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  margin-top: 0;
+  font-weight: 800;
+}
+
+.c-app-main {
+  margin-top: var(--titlebar-height);
+  height: calc(100vh - var(--titlebar-height));
+  position: relative;
+  overflow: hidden;
+}
+
+.c-app-dimmer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 1000;
+  @include mixins.flex-center;
+}
+
+.c-dimmer-content {
+  background: var(--color-surface);
+  padding: var(--spacing-xl);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  text-align: center;
+  border: 1px solid var(--color-border);
+
+  p {
+    margin: 0 0 var(--spacing-lg) 0;
+    font-weight: 800;
+    color: var(--color-text);
+    font-size: 1.2rem;
+  }
+}
+
+.dim-enter-active,
+.dim-leave-active {
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.dim-enter-from,
+.dim-leave-to {
+  opacity: 0;
+  backdrop-filter: blur(0px);
+}

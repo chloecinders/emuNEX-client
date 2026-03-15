@@ -16,21 +16,21 @@ const emit = defineEmits(["click"]);
 
 <template>
     <button
-        class="popout-btn"
-        :class="[color, { 'is-disabled': disabled, 'is-full': full }]"
+        class="c-button"
+        :class="[`c-button--${color}`, { 'c-button--disabled': disabled, 'c-button--full': full }]"
         :disabled="disabled"
         @click="emit('click')"
     >
-        <span class="btn-shadow"></span>
-        <span class="btn-edge"></span>
-        <span class="btn-front">
+        <span class="c-button__shadow"></span>
+        <span class="c-button__edge"></span>
+        <span class="c-button__front">
             <slot />
         </span>
     </button>
 </template>
 
-<style scoped>
-.popout-btn {
+<style lang="scss" scoped>
+.c-button {
     position: relative;
     border: none;
     background: transparent;
@@ -45,70 +45,78 @@ const emit = defineEmits(["click"]);
     font-size: 1rem;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-}
 
-.popout-btn.is-full {
-    width: 100%;
-    height: 100%;
-}
+    &--full {
+        width: 100%;
+        height: 100%;
 
-.btn-front {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    position: relative;
-    width: 100%;
-    padding: 12px 28px;
-    border-radius: var(--radius-md);
-    color: white;
-    transform: translateY(-4px);
-    transition: transform 150ms cubic-bezier(0.3, 0.7, 0.4, 1);
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-}
+        .c-button__front {
+            height: 100%;
+        }
+    }
 
-.is-full .btn-front {
-    height: 100%;
-}
+    &__front {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        width: 100%;
+        padding: 12px 28px;
+        border-radius: var(--radius-md);
+        color: white;
+        transform: translateY(-4px);
+        transition: transform 150ms cubic-bezier(0.3, 0.7, 0.4, 1);
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
 
-.btn-edge {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    border-radius: var(--radius-md);
-}
+    &__edge {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        border-radius: var(--radius-md);
+    }
 
-.blue .btn-front { background: var(--color-primary); }
-.blue .btn-edge { background: var(--color-primary-dark); }
+    &--blue {
+        .c-button__front { background: var(--color-primary); }
+        .c-button__edge { background: var(--color-primary-dark); }
+    }
 
-.green .btn-front { background: #4caf50; }
-.green .btn-edge { background: #3d8b40; }
+    &--green {
+        .c-button__front { background: #4caf50; }
+        .c-button__edge { background: #3d8b40; }
+    }
 
-.red .btn-front { background: #e60012; }
-.red .btn-edge { background: #b3000e; }
+    &--red {
+        .c-button__front { background: #e60012; }
+        .c-button__edge { background: #b3000e; }
+    }
 
-.grey .btn-front { background: var(--color-text-muted); }
-.grey .btn-edge { background: #555; }
+    &--grey {
+        .c-button__front { background: var(--color-text-muted); }
+        .c-button__edge { background: #555; }
+    }
 
-.popout-btn:hover .btn-front {
-    transform: translateY(-6px);
-    filter: brightness(110%);
-}
+    &:hover .c-button__front {
+        transform: translateY(-6px);
+        filter: brightness(110%);
+    }
 
-.popout-btn:active .btn-front {
-    transform: translateY(-1px);
-    transition: transform 34ms;
-}
+    &:active .c-button__front {
+        transform: translateY(-1px);
+        transition: transform 34ms;
+    }
 
-.is-disabled {
-    cursor: not-allowed;
-    filter: grayscale(0.8);
-    opacity: 0.7;
-}
+    &--disabled {
+        cursor: not-allowed;
+        filter: grayscale(0.8);
+        opacity: 0.7;
 
-.is-disabled .btn-front {
-    transform: translateY(-1px) !important;
+        .c-button__front {
+            transform: translateY(-1px) !important;
+        }
+    }
 }
 </style>

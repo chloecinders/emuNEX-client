@@ -108,109 +108,111 @@ onMounted(loadDomains);
         subtitle="Select a previously connected server or add a new one."
         @close="emit('close')"
     >
-        <div v-if="domains.length > 0" class="domain-list">
-            <div v-for="domain in domains" :key="domain" class="domain-item" @click="handleSwitch(domain)">
-                <div class="domain-info">
-                    <span class="domain-name">{{ domain }}</span>
+        <div v-if="domains.length > 0" class="c-server-switcher__list">
+            <div v-for="domain in domains" :key="domain" class="c-server-switcher__item" @click="handleSwitch(domain)">
+                <div class="c-server-switcher__info">
+                    <span class="c-server-switcher__name">{{ domain }}</span>
                 </div>
-                <ChevronRight class="chevron" />
+                <ChevronRight class="c-server-switcher__chevron" />
             </div>
         </div>
 
-        <div class="add-section">
-            <div class="section-label">ADD NEW SERVER</div>
-            <div class="add-form">
+        <div class="c-server-switcher__add-section">
+            <div class="c-server-switcher__section-label">ADD NEW SERVER</div>
+            <div class="c-server-switcher__form">
                 <Input v-model="newDomain" placeholder="https://emunex.example.com" />
 
-                <div class="btn-wrap">
+                <div class="c-server-switcher__actions">
                     <Button @click="handleAdd" color="blue" :disabled="isConnecting">
                         {{ isConnecting ? "..." : "Connect" }}
                     </Button>
                 </div>
             </div>
 
-            <p v-if="errorMessage" class="error-text">{{ errorMessage }}</p>
+            <p v-if="errorMessage" class="c-server-switcher__error">{{ errorMessage }}</p>
         </div>
     </Modal>
 </template>
 
-<style scoped>
-.domain-list {
-    margin-bottom: var(--spacing-xl);
-    display: flex;
-    flex-direction: column;
-    gap: var(--spacing-sm);
-}
+<style lang="scss" scoped>
+.c-server-switcher {
+    &__list {
+        margin-bottom: var(--spacing-xl);
+        display: flex;
+        flex-direction: column;
+        gap: var(--spacing-sm);
+    }
 
-.domain-item {
-    background: var(--color-surface-variant);
-    padding: var(--spacing-md) var(--spacing-lg);
-    border-radius: var(--radius-md);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    cursor: pointer;
-    transition: all 0.2s;
-    border: var(--spacing-xxs) solid var(--color-border);
-}
+    &__item {
+        background: var(--color-surface-variant);
+        padding: var(--spacing-md) var(--spacing-lg);
+        border-radius: var(--radius-md);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        cursor: pointer;
+        transition: all 0.2s;
+        border: var(--spacing-xxs) solid var(--color-border);
 
-.domain-item:hover {
-    border-color: var(--color-primary);
-    background: var(--color-surface);
-    transform: translateY(-var(--spacing-xxs));
-    box-shadow: var(--shadow-subtle);
-}
+        &:hover {
+            border-color: var(--color-primary);
+            background: var(--color-surface);
+            transform: translateY(-var(--spacing-xxs));
+            box-shadow: var(--shadow-subtle);
 
-.domain-info {
-    display: flex;
-    align-items: center;
-}
+            .c-server-switcher__chevron {
+                opacity: 1;
+            }
+        }
+    }
 
-.domain-name {
-    font-weight: 800;
-    font-size: 0.95rem;
-    color: var(--color-text);
-}
+    &__info {
+        display: flex;
+        align-items: center;
+    }
 
-.chevron {
-    color: var(--color-primary);
-    width: 24px;
-    height: 24px;
-    opacity: 0.4;
-    transition: all 0.2s;
-}
+    &__name {
+        font-weight: 800;
+        font-size: 0.95rem;
+        color: var(--color-text);
+    }
 
-.domain-item:hover .chevron {
-    opacity: 1;
-}
+    &__chevron {
+        color: var(--color-primary);
+        width: 24px;
+        height: 24px;
+        opacity: 0.4;
+        transition: all 0.2s;
+    }
 
-.section-label {
-    font-size: 0.7rem;
-    color: var(--color-primary);
-    font-weight: 900;
-    letter-spacing: 1px;
-    margin-bottom: var(--spacing-sm);
-}
+    &__section-label {
+        font-size: 0.7rem;
+        color: var(--color-primary);
+        font-weight: 900;
+        letter-spacing: 1px;
+        margin-bottom: var(--spacing-sm);
+    }
 
-.add-form {
-    display: flex;
-    flex-direction: column;
-    gap: var(--spacing-md);
-}
+    &__form {
+        display: flex;
+        flex-direction: column;
+        gap: var(--spacing-md);
+    }
 
-.btn-wrap {
-    width: 100%;
-}
+    &__actions {
+        width: 100%;
 
-.btn-wrap :deep(.nintendo-btn) {
-    width: 100%;
-}
+        :deep(.c-button) {
+            width: 100%;
+        }
+    }
 
-.error-text {
-    color: #ff4d4f;
-    font-size: 0.8rem;
-    margin-top: var(--spacing-sm);
-    font-weight: 700;
-    text-align: center;
+    &__error {
+        color: #ff4d4f;
+        font-size: 0.8rem;
+        margin-top: var(--spacing-sm);
+        font-weight: 700;
+        text-align: center;
+    }
 }
 </style>

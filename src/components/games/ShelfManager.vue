@@ -34,94 +34,94 @@ async function toggleShelf(shelfId: number) {
         title="Manage Shelves"
         @close="emit('close')"
     >
-        <div class="shelves-list">
-            <div v-if="!shelves.length" class="no-shelves">
+        <div class="c-shelf-manager">
+            <div v-if="!shelves.length" class="c-shelf-manager__empty">
                 No shelves found. Create one in the library!
             </div>
             <div 
                 v-for="shelf in shelves" 
                 :key="shelf.id" 
-                class="shelf-item"
+                class="c-shelf-manager__item"
                 @click="toggleShelf(shelf.id)"
             >
-                <div class="custom-checkbox" :class="{ 'is-checked': isGameInShelf(shelf.id) }">
-                    <svg viewBox="0 0 24 24" class="check-icon">
+                <div class="c-shelf-manager__checkbox" :class="{ 'c-shelf-manager__checkbox--checked': isGameInShelf(shelf.id) }">
+                    <svg viewBox="0 0 24 24" class="c-shelf-manager__check-icon">
                         <path stroke="currentColor" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
                     </svg>
                 </div>
-                <span class="shelf-name">{{ shelf.name }}</span>
+                <span class="c-shelf-manager__name">{{ shelf.name }}</span>
             </div>
         </div>
     </Modal>
 </template>
 
-<style scoped>
-.shelves-list {
+<style lang="scss" scoped>
+.c-shelf-manager {
     display: flex;
     flex-direction: column;
     gap: var(--spacing-sm);
-}
 
-.shelf-item {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-md);
-    padding: var(--spacing-md);
-    border-radius: var(--radius-md);
-    cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1);
-    background: var(--color-surface-variant);
-    border: 2px solid transparent;
-}
+    &__item {
+        display: flex;
+        align-items: center;
+        gap: var(--spacing-md);
+        padding: var(--spacing-md);
+        border-radius: var(--radius-md);
+        cursor: pointer;
+        transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1);
+        background: var(--color-surface-variant);
+        border: 2px solid transparent;
 
-.shelf-item:hover {
-    border-color: var(--color-border);
-    transform: translateY(-2px);
-}
+        &:hover {
+            border-color: var(--color-border);
+            transform: translateY(-2px);
+        }
+    }
 
-.custom-checkbox {
-    width: 24px;
-    height: 24px;
-    border-radius: 6px;
-    border: 2px solid var(--color-border);
-    background: var(--color-surface);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1);
-}
+    &__checkbox {
+        width: 24px;
+        height: 24px;
+        border-radius: 6px;
+        border: 2px solid var(--color-border);
+        background: var(--color-surface);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1);
 
-.check-icon {
-    width: 14px;
-    height: 14px;
-    color: white;
-    stroke-dasharray: 24;
-    stroke-dashoffset: 24;
-    transition: stroke-dashoffset 0.3s cubic-bezier(0.65, 0, 0.45, 1);
-}
+        &--checked {
+            background: var(--color-primary);
+            border-color: var(--color-primary);
+            transform: scale(1.1);
 
-.custom-checkbox.is-checked {
-    background: var(--color-primary);
-    border-color: var(--color-primary);
-    transform: scale(1.1);
-}
+            .c-shelf-manager__check-icon {
+                stroke-dashoffset: 0;
+            }
+        }
+    }
 
-.custom-checkbox.is-checked .check-icon {
-    stroke-dashoffset: 0;
-}
+    &__check-icon {
+        width: 14px;
+        height: 14px;
+        color: white;
+        stroke-dasharray: 24;
+        stroke-dashoffset: 24;
+        transition: stroke-dashoffset 0.3s cubic-bezier(0.65, 0, 0.45, 1);
+    }
 
-.shelf-name {
-    font-weight: 800;
-    font-size: 1rem;
-    color: var(--color-text);
-}
+    &__name {
+        font-weight: 800;
+        font-size: 1rem;
+        color: var(--color-text);
+    }
 
-.no-shelves {
-    font-size: 0.9rem;
-    color: var(--color-text-muted);
-    text-align: center;
-    padding: var(--spacing-xl);
-    font-style: italic;
-    font-weight: 700;
+    &__empty {
+        font-size: 0.9rem;
+        color: var(--color-text-muted);
+        text-align: center;
+        padding: var(--spacing-xl);
+        font-style: italic;
+        font-weight: 700;
+    }
 }
 </style>

@@ -18,22 +18,22 @@ watch(
 </script>
 
 <template>
-    <div class="library-container">
+    <div class="c-index-view">
         <GameLibrary />
     </div>
 </template>
 
-<style scoped>
-.library-container {
+<style lang="scss" scoped>
+.c-index-view {
     padding: var(--spacing-md) var(--spacing-lg);
-}
 
-.section-title {
-    font-size: 1.5rem;
-    font-weight: 900;
-    color: var(--color-text);
-    text-transform: uppercase;
-    letter-spacing: -0.5px;
-    margin: 0 0 var(--spacing-md) 0;
+    &__title {
+        font-size: 1.5rem;
+        font-weight: 900;
+        color: var(--color-text);
+        text-transform: uppercase;
+        letter-spacing: -0.5px;
+        margin: 0 0 var(--spacing-md) 0;
+    }
 }
 </style>
