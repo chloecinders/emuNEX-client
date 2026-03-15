@@ -1,5 +1,5 @@
 # emuNEX (client)
-Emulation made easy.
+Remote Emulation & Library Management.
 
 ![image](https://github.com/user-attachments/assets/cf2cb2fe-ffd4-4c2a-8338-d1ccf58fba0c)
 

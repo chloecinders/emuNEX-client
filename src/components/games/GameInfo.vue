@@ -148,9 +148,10 @@ const handlePlay = async () => {
 
             <div class="action-area">
                 <div class="btn-container">
-                    <button v-if="isEmulatorInstalled" 
-                        class="nintendo-btn blue" 
-                        @click="handlePlay" 
+                    <button
+                        v-if="isEmulatorInstalled"
+                        class="nintendo-btn blue"
+                        @click="handlePlay"
                         :disabled="isLaunching"
                     >
                         <span class="btn-edge"></span>
@@ -160,15 +161,11 @@ const handlePlay = async () => {
                         </span>
                     </button>
 
-                    <button v-else 
-                        class="nintendo-btn green" 
-                        @click="handleInstallEmulator" 
-                        :disabled="isDownloading"
-                    >
+                    <button v-else class="nintendo-btn green" @click="handleInstallEmulator" :disabled="isDownloading">
                         <span class="btn-edge"></span>
 
                         <span class="btn-front">
-                            {{ isDownloading ? "DOWNLOADING..." : "INSTALL EMULATOR" }}
+                            {{ isDownloading ? "DOWNLOADING..." : "INSTALL" }}
                         </span>
                     </button>
                 </div>
@@ -333,11 +330,19 @@ h3 {
     z-index: 1;
 }
 
-.blue .btn-front { background: var(--color-primary); }
-.blue .btn-edge { background: var(--color-primary-dark); }
+.blue .btn-front {
+    background: var(--color-primary);
+}
+.blue .btn-edge {
+    background: var(--color-primary-dark);
+}
 
-.green .btn-front { background: #4caf50; }
-.green .btn-edge { background: #3d8b40; }
+.green .btn-front {
+    background: #4caf50;
+}
+.green .btn-edge {
+    background: #3d8b40;
+}
 
 .nintendo-btn:hover .btn-front {
     transform: translateY(-6px);
