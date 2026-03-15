@@ -1,10 +1,17 @@
 <script lang="ts" setup>
 import { ref } from "vue";
 import { type LibraryGame, useGameStore } from "../../stores/GameStore";
+import { useConsoleStore } from "../../stores/ConsoleStore";
 import { useStoragePath } from "../../utils/http";
+import { onMounted } from "vue";
 
 const gamesStore = useGameStore();
+const consoleStore = useConsoleStore();
 const localSelectedId = ref<number | null>(null);
+
+onMounted(() => {
+    consoleStore.fetchConsoles();
+});
 
 defineProps<{
     games: LibraryGame[];
@@ -28,6 +35,7 @@ const changeCurrentGame = (id: number) => {
                 :class="{
                     'is-selected': localSelectedId === game.id,
                 }"
+                :style="{ background: consoleStore.getConsoleColor(game.console) }"
                 @click="changeCurrentGame(game.id)"
             >
                 <img :src="useStoragePath(game.image_path)" :alt="game.title" class="game-cover" />

@@ -68,7 +68,12 @@ pub fn get_current_domain<R: Runtime>(app: &AppHandle<R>) -> Option<String> {
 
 pub fn get_current_store<R: Runtime>(app: &AppHandle<R>) -> Result<Arc<Store<R>>, String> {
     if let Some(domain) = get_current_domain(app) {
-        get_domain_store(app, &domain)
+        let store = get_domain_store(app, &domain)?;
+        if store.get("domain").is_none() {
+            let _ = store.set("domain", serde_json::json!(domain));
+            let _ = store.save();
+        }
+        Ok(store)
     } else {
         get_global_store(app)
     }

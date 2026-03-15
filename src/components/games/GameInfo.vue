@@ -4,11 +4,13 @@ import { listen } from "@tauri-apps/api/event";
 import { computed, onMounted, ref, type Ref, watch } from "vue";
 import { useEmulatorStore } from "../../stores/EmulatorStore";
 import { type Game, useGameStore } from "../../stores/GameStore";
+import { useConsoleStore } from "../../stores/ConsoleStore";
 import { useStoragePath } from "../../utils/http";
 import SaveConflict from "../modals/SaveConflict.vue";
 
 const gameStore = useGameStore();
 const emulatorStore = useEmulatorStore();
+const consoleStore = useConsoleStore();
 
 const game: Ref<Game | null> = ref(null);
 const isEmulatorInstalled = ref(false);
@@ -26,6 +28,7 @@ const formatDate = (dateString: string | null) => {
 };
 
 onMounted(async () => {
+    consoleStore.fetchConsoles();
     await listen("close-prevented", (event) => {
         alert(event.payload);
     });
@@ -121,9 +124,9 @@ const handlePlay = async () => {
     <transition name="slide-up">
         <div v-if="game" class="bottom-panel">
             <div class="info-header">
-                <div class="banner-icon">
+                <div class="banner-icon" :style="{ background: consoleStore.getConsoleColor(game.console) }">
                     <img :src="useStoragePath(game.image_path)" alt="Game Icon" class="game-thumb" />
-                    <span class="console-tag">{{ game.console.toUpperCase() }}</span>
+                    <span class="console-tag" :style="{ background: consoleStore.getConsoleColor(game.console) || 'var(--color-primary)' }">{{ game.console.toUpperCase() }}</span>
                 </div>
 
                 <div class="titles">

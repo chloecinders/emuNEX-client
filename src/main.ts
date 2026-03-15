@@ -51,6 +51,7 @@ const urlHandler = async (urls: string[]) => {
             const normalizedDomain = normalizeDomain(domain);
             await addSavedDomain(normalizedDomain);
             const domainStore = await getDomainStore(normalizedDomain);
+            await domainStore.set("domain", normalizedDomain);
             await domainStore.set("token", token);
 
             if (storagePath) {

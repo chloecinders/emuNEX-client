@@ -73,7 +73,7 @@ onMounted(() => {
 
             <div class="system-meta">
                 <span class="domain-label">
-                    <span class="user-ref">{{ userStore.user?.username || "guest" }}@</span>{{ displayDomain }}
+                    {{ userStore.user?.username || "guest" }}@{{ displayDomain }}
                 </span>
                 <span class="status-dot pulse"></span>
             </div>
@@ -152,9 +152,6 @@ onMounted(() => {
     letter-spacing: 0.5px;
 }
 
-.user-ref {
-    color: var(--color-primary);
-}
 
 .status-dot {
     height: 10px;

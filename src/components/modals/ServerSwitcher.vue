@@ -41,6 +41,7 @@ async function startConnection(normalizedDomain: string) {
             serverUrl: normalizedDomain,
         });
 
+        await store.set("domain", normalizedDomain);
         await store.set("storage_path", resp.storage_path);
         await store.save();
 
@@ -60,6 +61,9 @@ async function handleSwitch(domain: string) {
     const token = await store.get<string>("token");
 
     if (token) {
+        await store.set("domain", normalized);
+        await store.save();
+        
         const globalStore = await getGlobalStore();
         await globalStore.set("domain", normalized);
         await globalStore.save();

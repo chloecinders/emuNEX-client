@@ -55,6 +55,7 @@ const handleConnect = async () => {
             serverUrl: normalized,
         });
 
+        await store.set("domain", normalized);
         await store.set("storage_path", resp.storage_path);
         await store.save();
         authStore.storagePath = resp.storage_path;
