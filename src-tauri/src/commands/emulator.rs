@@ -3,7 +3,6 @@ use std::{collections::HashMap, fs::File, io::Write};
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, Runtime};
-use tauri_plugin_store::StoreExt;
 
 use crate::{store, ApiResponse};
 

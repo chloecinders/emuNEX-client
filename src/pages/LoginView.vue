@@ -105,7 +105,7 @@ const handleConnect = async () => {
                     <Input 
                         v-model="serverUrl" 
                         label="Server Address" 
-                        placeholder="https://emu.example.com"
+                        placeholder="https://emunex.example.com"
                     />
                     
                     <div class="form-actions">

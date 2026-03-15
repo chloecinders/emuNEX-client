@@ -1,8 +1,8 @@
 <script lang="ts" setup>
-import { onMounted, ref, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { getSavedDomains, getGlobalStore, normalizeDomain, getDomainStore } from "../../lib/store";
+import { onMounted, ref, watch } from "vue";
+import { getDomainStore, getGlobalStore, getSavedDomains, normalizeDomain } from "../../lib/store";
 import Button from "../ui/Button.vue";
 import Input from "../ui/Input.vue";
 
@@ -101,7 +101,7 @@ onMounted(loadDomains);
             <div class="modal-card">
                 <button class="modal-close" @click="emit('close')">
                     <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                        <path d="M1 1L11 11M11 1L1 11" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        <path d="M1 1L11 11M11 1L1 11" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
                     </svg>
                 </button>
 
@@ -109,26 +109,21 @@ onMounted(loadDomains);
                     <h2 class="title">Switch Server</h2>
                     <p class="subtitle">Select a previously connected server or add a new one.</p>
                 </div>
-                
+
                 <div class="modal-body">
                     <div v-if="domains.length > 0" class="domain-list">
-                        <div 
-                            v-for="domain in domains" 
-                            :key="domain" 
-                            class="domain-item"
-                            @click="handleSwitch(domain)"
-                        >
+                        <div v-for="domain in domains" :key="domain" class="domain-item" @click="handleSwitch(domain)">
                             <div class="domain-info">
                                 <span class="domain-name">{{ domain }}</span>
                             </div>
                             <span class="chevron">&rsaquo;</span>
                         </div>
                     </div>
-                    
+
                     <div class="add-section">
                         <div class="section-label">ADD NEW SERVER</div>
                         <div class="add-form">
-                            <Input v-model="newDomain" placeholder="https://server.emunex.io" />
+                            <Input v-model="newDomain" placeholder="https://emunex.example.com" />
 
                             <div class="btn-wrap">
                                 <Button @click="handleAdd" color="blue" :disabled="isConnecting">
@@ -171,8 +166,14 @@ onMounted(loadDomains);
 }
 
 @keyframes modal-pop {
-    from { transform: scale(0.95); opacity: 0; }
-    to { transform: scale(1); opacity: 1; }
+    from {
+        transform: scale(0.95);
+        opacity: 0;
+    }
+    to {
+        transform: scale(1);
+        opacity: 1;
+    }
 }
 
 .modal-close {
@@ -299,6 +300,12 @@ onMounted(loadDomains);
     text-align: center;
 }
 
-.fade-enter-active, .fade-leave-active { transition: opacity 0.3s ease; }
-.fade-enter-from, .fade-leave-to { opacity: 0; }
+.fade-enter-active,
+.fade-leave-active {
+    transition: opacity 0.3s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+    opacity: 0;
+}
 </style>

@@ -35,7 +35,6 @@ onMounted(() => {
 
         <Transition name="slide-side">
             <aside v-if="isSidebarOpen" class="sidebar">
-
                 <nav class="sidebar-content">
                     <router-link
                         v-for="item in menuItems"
@@ -49,11 +48,17 @@ onMounted(() => {
                     </router-link>
 
                     <div class="nav-spacer"></div>
-
                 </nav>
 
                 <div class="sidebar-footer">
-                    <button class="footer-btn server-btn" title="Switch Server" @click="toggleServerSwitcher(); toggleSidebar()">
+                    <button
+                        class="footer-btn server-btn"
+                        title="Switch Server"
+                        @click="
+                            toggleServerSwitcher();
+                            toggleSidebar();
+                        "
+                    >
                         <span class="icon">⇄</span>
                     </button>
                     <Logout class="logout-wrapper" />
