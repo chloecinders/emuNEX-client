@@ -1,7 +1,7 @@
 # emuNEX (client)
 Remote Emulation & Library Management.
 
-![image](https://github.com/user-attachments/assets/cf2cb2fe-ffd4-4c2a-8338-d1ccf58fba0c)
+<img width="1227" height="1080" alt="image" src="https://github.com/user-attachments/assets/2e2d7a82-1a9f-4043-ade9-3c81c097d912" />
 
 emuNEX is a service, think of it like Steam, but for emulators. The client connects to a remote server which provides emulators, games and in the future could handle features such as profiles/friends.
 
