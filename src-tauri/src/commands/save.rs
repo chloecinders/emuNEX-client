@@ -1,8 +1,7 @@
 use base64::{engine::general_purpose, Engine as _};
 use serde::Deserialize;
 use std::collections::HashMap;
-use tauri::{AppHandle, Manager, Runtime};
-use tauri_plugin_store::StoreExt;
+use tauri::{AppHandle, Runtime};
 
 use crate::{store, ApiResponse};
 
@@ -92,7 +91,7 @@ pub async fn download_save_files<R: Runtime>(
         .and_then(|v| v.as_str().map(|s| s.to_string()))
         .ok_or("No token")?;
 
-    let base_path = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let base_path = store::get_data_dir(&app)?;
     let save_dir = base_path.join("saves").join(&game_id);
     std::fs::create_dir_all(&save_dir).map_err(|e| e.to_string())?;
 

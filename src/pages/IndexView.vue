@@ -25,7 +25,7 @@ watch(
 
 <style lang="scss" scoped>
 .c-index-view {
-    padding: var(--spacing-md) var(--spacing-lg);
+    padding: var(--spacing-md) var(--spacing-lg) var(--spacing-xl) var(--spacing-lg);
 
     &__title {
         font-size: 1.5rem;

@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { getDomainStore, addSavedDomain, normalizeDomain, getSavedDomains, getGlobalStore } from "../lib/store";
 import { onMounted, ref } from "vue";
-import { useAuthStore } from "../stores/AuthStore";
+import { addSavedDomain, getDomainStore, getGlobalStore, getSavedDomains, normalizeDomain } from "../lib/store";
 import { router } from "../router";
+import { useAuthStore } from "../stores/AuthStore";
 
 import Button from "../components/ui/Button.vue";
 import Input from "../components/ui/Input.vue";
@@ -79,12 +79,12 @@ const handleConnect = async () => {
             </header>
 
             <div class="c-login__content">
-                <div v-if="savedDomains.some(d => d.hasToken)" class="c-login__sessions">
+                <div v-if="savedDomains.some((d) => d.hasToken)" class="c-login__sessions">
                     <p class="c-login__section-hint">Select a Library</p>
 
                     <div class="c-login__domains-grid">
-                        <button 
-                            v-for="item in savedDomains.filter(d => d.hasToken)" 
+                        <button
+                            v-for="item in savedDomains.filter((d) => d.hasToken)"
                             :key="item.domain"
                             type="button"
                             class="c-login__session-card"
@@ -103,12 +103,8 @@ const handleConnect = async () => {
 
                 <form @submit.prevent="handleConnect" class="c-login__form">
                     <div class="c-login__add-new-title">Connect to Server</div>
-                    <Input 
-                        v-model="serverUrl" 
-                        label="Server Address" 
-                        placeholder="https://emunex.example.com"
-                    />
-                    
+                    <Input v-model="serverUrl" label="Server Address" placeholder="https://emunex.example.com" />
+
                     <div class="c-login__actions">
                         <Button type="submit" color="blue" :disabled="isConnecting || !serverUrl">
                             {{ isConnecting ? "CONNECTING..." : "CONNECT" }}
@@ -168,7 +164,8 @@ const handleConnect = async () => {
         gap: var(--spacing-md);
     }
 
-    &__section-hint, &__add-new-title {
+    &__section-hint,
+    &__add-new-title {
         font-size: 0.7rem;
         font-weight: 900;
         color: var(--color-text-muted);
@@ -257,7 +254,13 @@ const handleConnect = async () => {
 }
 
 @keyframes card-appear {
-    from { opacity: 0; transform: translateY(var(--spacing-sm)); }
-    to { opacity: 1; transform: translateY(0); }
+    from {
+        opacity: 0;
+        transform: translateY(var(--spacing-sm));
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 </style>

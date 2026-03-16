@@ -4,7 +4,7 @@ import { useGameStore } from "../../stores/GameStore";
 import Modal from "../ui/Modal.vue";
 
 const props = defineProps<{
-    gameId: number;
+    gameId: string;
     show: boolean;
 }>();
 
@@ -14,12 +14,12 @@ const gameStore = useGameStore();
 
 const shelves = computed(() => gameStore.shelves);
 
-const isGameInShelf = (shelfId: number) => {
-    const shelf = gameStore.shelves.find(s => s.id === shelfId);
-    return shelf?.games.some(g => g.id === props.gameId);
+const isGameInShelf = (shelfId: string) => {
+    const shelf = gameStore.shelves.find((s) => s.id === shelfId);
+    return shelf?.games.some((g) => g.id === props.gameId);
 };
 
-async function toggleShelf(shelfId: number) {
+async function toggleShelf(shelfId: string) {
     if (isGameInShelf(shelfId)) {
         await gameStore.removeRomFromShelf(shelfId, props.gameId);
     } else {
@@ -29,24 +29,25 @@ async function toggleShelf(shelfId: number) {
 </script>
 
 <template>
-    <Modal
-        :show="show"
-        title="Manage Shelves"
-        @close="emit('close')"
-    >
+    <Modal :show="show" title="Manage Shelves" @close="emit('close')">
         <div class="c-shelf-manager">
             <div v-if="!shelves.length" class="c-shelf-manager__empty">
                 No shelves found. Create one in the library!
             </div>
-            <div 
-                v-for="shelf in shelves" 
-                :key="shelf.id" 
-                class="c-shelf-manager__item"
-                @click="toggleShelf(shelf.id)"
-            >
-                <div class="c-shelf-manager__checkbox" :class="{ 'c-shelf-manager__checkbox--checked': isGameInShelf(shelf.id) }">
+            <div v-for="shelf in shelves" :key="shelf.id" class="c-shelf-manager__item" @click="toggleShelf(shelf.id)">
+                <div
+                    class="c-shelf-manager__checkbox"
+                    :class="{ 'c-shelf-manager__checkbox--checked': isGameInShelf(shelf.id) }"
+                >
                     <svg viewBox="0 0 24 24" class="c-shelf-manager__check-icon">
-                        <path stroke="currentColor" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                        <path
+                            stroke="currentColor"
+                            fill="none"
+                            stroke-width="3"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            d="M5 13l4 4L19 7"
+                        />
                     </svg>
                 </div>
                 <span class="c-shelf-manager__name">{{ shelf.name }}</span>

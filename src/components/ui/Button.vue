@@ -1,12 +1,14 @@
 <script setup lang="ts">
 interface Props {
     color?: "blue" | "green" | "red" | "grey";
+    size?: "sm" | "md";
     disabled?: boolean;
     full?: boolean;
 }
 
 withDefaults(defineProps<Props>(), {
     color: "blue",
+    size: "md",
     disabled: false,
     full: false,
 });
@@ -17,9 +19,9 @@ const emit = defineEmits(["click"]);
 <template>
     <button
         class="c-button"
-        :class="[`c-button--${color}`, { 'c-button--disabled': disabled, 'c-button--full': full }]"
+        :class="[`c-button--${color}`, `c-button--${size}`, { 'c-button--disabled': disabled, 'c-button--full': full }]"
         :disabled="disabled"
-        @click="emit('click')"
+        @click="emit('click', $event)"
     >
         <span class="c-button__shadow"></span>
         <span class="c-button__edge"></span>
@@ -59,6 +61,7 @@ const emit = defineEmits(["click"]);
         display: flex;
         align-items: center;
         justify-content: center;
+        gap: 8px;
         position: relative;
         width: 100%;
         padding: 12px 28px;
@@ -80,23 +83,47 @@ const emit = defineEmits(["click"]);
     }
 
     &--blue {
-        .c-button__front { background: var(--color-primary); }
-        .c-button__edge { background: var(--color-primary-dark); }
+        .c-button__front {
+            background: var(--color-primary);
+        }
+        .c-button__edge {
+            background: var(--color-primary-dark);
+        }
     }
 
     &--green {
-        .c-button__front { background: #4caf50; }
-        .c-button__edge { background: #3d8b40; }
+        .c-button__front {
+            background: #4caf50;
+        }
+        .c-button__edge {
+            background: #3d8b40;
+        }
     }
 
     &--red {
-        .c-button__front { background: #e60012; }
-        .c-button__edge { background: #b3000e; }
+        .c-button__front {
+            background: #e60012;
+        }
+        .c-button__edge {
+            background: #b3000e;
+        }
     }
 
     &--grey {
-        .c-button__front { background: var(--color-text-muted); }
-        .c-button__edge { background: #555; }
+        .c-button__front {
+            background: var(--color-text-muted);
+        }
+        .c-button__edge {
+            background: #555;
+        }
+    }
+
+    &--sm {
+        font-size: 0.8rem;
+        .c-button__front {
+            padding: 8px 16px;
+            transform: translateY(-3px);
+        }
     }
 
     &:hover .c-button__front {

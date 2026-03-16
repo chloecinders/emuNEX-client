@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 
 interface Option {
     name: string;
@@ -42,7 +42,7 @@ onUnmounted(() => {
 });
 
 const selectedLabel = computed(() => {
-    const selected = props.options.find(o => o.value === props.modelValue);
+    const selected = props.options.find((o) => o.value === props.modelValue);
     return selected ? selected.name : props.placeholder || "Select...";
 });
 </script>
@@ -58,16 +58,22 @@ const selectedLabel = computed(() => {
                 </span>
                 <span class="c-select__arrow">
                     <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                        <path d="M2 4L6 8L10 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path
+                            d="M2 4L6 8L10 4"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                        />
                     </svg>
                 </span>
             </div>
 
             <transition name="pop">
                 <div v-if="isOpen" class="c-select__menu">
-                    <div 
-                        v-for="option in options" 
-                        :key="option.value" 
+                    <div
+                        v-for="option in options"
+                        :key="option.value"
                         class="c-select__option"
                         :class="{ 'c-select__option--selected': option.value === modelValue }"
                         @click.stop="selectOption(option.value)"

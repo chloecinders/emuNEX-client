@@ -3,10 +3,10 @@
 </template>
 
 <script lang="ts" setup>
-import { getGlobalStore, getDomainStore } from "../lib/store";
+import { getDomainStore, getGlobalStore } from "../lib/store";
+import { router } from "../router";
 import { useAuthStore } from "../stores/AuthStore";
 import Button from "./ui/Button.vue";
-import { router } from "../router";
 
 const authStore = useAuthStore();
 

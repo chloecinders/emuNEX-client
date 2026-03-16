@@ -1,83 +1,53 @@
 <script setup lang="ts">
-interface Props {
+defineProps<{
+    color?: "default" | "red";
     title?: string;
-    size?: "sm" | "md" | "lg";
-}
-
-withDefaults(defineProps<Props>(), {
-    size: "md",
-});
+}>();
 
 const emit = defineEmits(["click"]);
 </script>
 
 <template>
     <button
-        class="c-icon-button"
-        :class="[`c-icon-button--${size}`]"
+        class="c-icon-btn"
+        :class="{ 'c-icon-btn--red': color === 'red' }"
         :title="title"
-        @click="emit('click')"
+        @click.stop="emit('click', $event)"
     >
         <slot />
     </button>
 </template>
 
 <style lang="scss" scoped>
-.c-icon-button {
-    flex-shrink: 0;
-    background: var(--color-surface-variant);
-    border: 2px solid var(--color-border);
+.c-icon-btn {
     display: flex;
     align-items: center;
     justify-content: center;
+    background: transparent;
+    border: none;
+    color: var(--color-text-muted);
     cursor: pointer;
-    color: var(--color-primary);
-    transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1);
-    box-shadow: var(--shadow-subtle);
-
-    &--sm {
-        width: 32px;
-        height: 32px;
-        border-radius: var(--radius-sm);
-        
-        :deep(svg) {
-            width: 16px;
-            height: 16px;
-        }
-    }
-
-    &--md {
-        width: 44px;
-        height: 44px;
-        border-radius: calc(var(--radius-md) - 2px);
-        
-        :deep(svg) {
-            width: 20px;
-            height: 20px;
-        }
-    }
-
-    &--lg {
-        width: 60px;
-        height: 60px;
-        border-radius: var(--radius-md);
-        
-        :deep(svg) {
-            width: 24px;
-            height: 24px;
-        }
-    }
+    padding: 8px;
+    border-radius: var(--radius-sm);
+    transition: all 0.2s ease;
 
     &:hover {
-        background: var(--color-surface);
-        border-color: var(--color-primary);
-        transform: translateY(-4px) scale(1.05);
-        box-shadow: 0 8px 20px rgba(107, 92, 177, 0.2);
-        color: var(--color-primary-light);
+        color: var(--color-primary);
+        background: color-mix(in srgb, var(--color-primary) 10%, transparent);
     }
 
-    &:active {
-        transform: scale(0.95);
+    &--red {
+        &:hover {
+            color: var(--color-danger);
+            background: rgba(255, 68, 68, 0.1);
+        }
+    }
+
+    :deep(svg) {
+        width: 20px;
+        height: 20px;
+        pointer-events: none;
+        stroke-width: 2.5px;
     }
 }
 </style>

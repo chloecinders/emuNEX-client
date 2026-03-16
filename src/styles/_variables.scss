@@ -12,6 +12,7 @@ $color-text-on-primary: #ffffff;
 $color-border: #e2e2ec;
 $color-border-hover: #d0d0e0;
 $color-danger: #e74c3c;
+$color-success: #4caf50;
 
 $spacing-xxs: 2px;
 $spacing-xs: 4px;
@@ -50,6 +51,7 @@ $titlebar-height: 32px;
   --color-border: #{$color-border};
   --color-border-hover: #{$color-border-hover};
   --color-danger: #{$color-danger};
+  --color-success: #{$color-success};
 
   --spacing-xxs: #{$spacing-xxs};
   --spacing-xs: #{$spacing-xs};

@@ -9,26 +9,33 @@ const emit = defineEmits(["close"]);
 </script>
 
 <template>
-    <transition name="fade">
-        <div v-if="show" class="c-modal__overlay" @click.self="emit('close')">
-            <div class="c-modal__card">
-                <button class="c-modal__close" @click="emit('close')">
-                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                        <path d="M1 1L11 11M11 1L1 11" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
-                    </svg>
-                </button>
+    <Teleport to="body">
+        <transition name="fade">
+            <div v-if="show" class="c-modal__overlay" @click.self="emit('close')">
+                <div class="c-modal__card">
+                    <button class="c-modal__close" @click="emit('close')">
+                        <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                            <path
+                                d="M1 1L11 11M11 1L1 11"
+                                stroke="currentColor"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                            />
+                        </svg>
+                    </button>
 
-                <div class="c-modal__header">
-                    <h2 class="c-modal__title">{{ title }}</h2>
-                    <p v-if="subtitle" class="c-modal__subtitle">{{ subtitle }}</p>
-                </div>
+                    <div class="c-modal__header">
+                        <h2 class="c-modal__title">{{ title }}</h2>
+                        <p v-if="subtitle" class="c-modal__subtitle">{{ subtitle }}</p>
+                    </div>
 
-                <div class="c-modal__body">
-                    <slot></slot>
+                    <div class="c-modal__body">
+                        <slot></slot>
+                    </div>
                 </div>
             </div>
-        </div>
-    </transition>
+        </transition>
+    </Teleport>
 </template>
 
 <style lang="scss" scoped>
@@ -82,7 +89,6 @@ const emit = defineEmits(["close"]);
 
     &__header {
         text-align: center;
-        margin-bottom: var(--spacing-xl);
     }
 
     &__title {
@@ -99,8 +105,6 @@ const emit = defineEmits(["close"]);
         color: var(--color-text-muted);
         font-weight: 700;
     }
-
-
 }
 
 @keyframes modal-pop {

@@ -52,9 +52,14 @@ pub fn run() {
             commands::auth::get_client_start,
             commands::http::http,
             commands::emulator::download_emulator,
+            commands::emulator::fetch_server_emulators,
+            commands::emulator::fetch_all_server_emulators,
             commands::play::play_game,
             commands::play::install_game,
             commands::play::is_game_installed,
+            commands::play::get_local_storage,
+            commands::play::delete_installed_rom,
+            commands::play::delete_local_save,
             commands::save::check_save_status,
             commands::save::download_save_files,
         ])
@@ -99,7 +104,7 @@ pub fn run() {
                                                 serde_json::from_value::<
                                                     std::collections::HashMap<
                                                         String,
-                                                        StoreEmulator,
+                                                        Vec<StoreEmulator>,
                                                     >,
                                                 >(
                                                     v.clone()
@@ -108,6 +113,7 @@ pub fn run() {
                                             })
                                             .map(|ems| {
                                                 ems.values()
+                                                    .flatten()
                                                     .any(|e| e.config_files.contains(&fname))
                                             })
                                             .unwrap_or(false)

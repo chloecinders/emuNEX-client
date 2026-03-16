@@ -1,13 +1,12 @@
 <script lang="ts" setup>
-import { ref } from "vue";
-import { type PartialGame, useGameStore } from "../../stores/GameStore";
+import { onMounted, ref } from "vue";
 import { useConsoleStore } from "../../stores/ConsoleStore";
+import { type PartialGame, useGameStore } from "../../stores/GameStore";
 import { useStoragePath } from "../../utils/http";
-import { onMounted } from "vue";
 
 const gamesStore = useGameStore();
 const consoleStore = useConsoleStore();
-const localSelectedId = ref<number | null>(null);
+const localSelectedId = ref<string | null>(null);
 
 onMounted(() => {
     consoleStore.fetchConsoles();
@@ -17,7 +16,7 @@ defineProps<{
     games: PartialGame[];
 }>();
 
-const changeCurrentGame = (id: number) => {
+const changeCurrentGame = (id: string) => {
     localSelectedId.value = id;
     gamesStore.currentSelectedGame = id;
 };

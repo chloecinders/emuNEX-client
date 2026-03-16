@@ -3,7 +3,7 @@ import { ref } from "vue";
 import { http } from "../utils/http";
 
 export type User = {
-    id: number;
+    id: string;
     username: string;
     role: string;
 };

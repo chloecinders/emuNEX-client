@@ -4,8 +4,8 @@ import { check } from "@tauri-apps/plugin-updater";
 import { createPinia } from "pinia";
 import { createApp } from "vue";
 import App from "./App.vue";
+import { addSavedDomain, getDomainStore, getGlobalStore, normalizeDomain } from "./lib/store";
 import { router } from "./router";
-import { getGlobalStore, getDomainStore, addSavedDomain, normalizeDomain } from "./lib/store";
 
 async function checkForUpdates() {
     try {
@@ -26,16 +26,12 @@ const pinia = createPinia();
 app.use(pinia);
 
 import { useAuthStore } from "./stores/AuthStore";
-import { useUserStore } from "./stores/UserStore";
-import { useGameStore } from "./stores/GameStore";
-import { useMetadataStore } from "./stores/MetadataStore";
 
 const authStore = useAuthStore(pinia);
-const userStore = useUserStore(pinia);
-const gameStore = useGameStore(pinia);
-const metadataStore = useMetadataStore(pinia);
 
 app.use(router);
+
+app.mount("#app");
 
 const globalStore = await getGlobalStore();
 
@@ -72,6 +68,7 @@ const urlHandler = async (urls: string[]) => {
 onOpenUrl(urlHandler);
 
 const domain = await globalStore.get<string>("domain");
+
 if (domain) {
     const domainStore = await getDomainStore(domain);
     const token = await domainStore.get<string>("token");
@@ -79,13 +76,10 @@ if (domain) {
 
     if (token && storagePath) {
         authStore.setAuth(domain, token, storagePath);
-
-        await userStore.fetchUser();
-        await gameStore.fetchPartialGames();
-        await gameStore.fetchLibrary();
-        await metadataStore.fetchCategories();
-        await metadataStore.fetchConsoles();
+        authStore.startup().then(() => {
+            if (router.currentRoute.value.name === "login") {
+                router.push("/");
+            }
+        });
     }
 }
-
-app.mount("#app");

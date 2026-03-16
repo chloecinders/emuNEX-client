@@ -13,7 +13,7 @@ export const useConsoleStore = defineStore("consoleStore", () => {
 
     async function fetchConsoles() {
         if (Object.keys(consoles.value).length > 0) return;
-        
+
         loading.value = true;
         try {
             const res = await http.get<ConsoleMetadata[]>("/consoles");

@@ -1,7 +1,15 @@
 {
     "name": "emunex-client",
+    "description": "Remote Emulation & Library Management - Client",
+    "author": {
+        "name": "chloecinders & contributors",
+        "url": "https://github.com/chloecinders/emuNEX-client/graphs/contributors"
+    },
+    "repository": {
+        "url": "https://github.com/chloecinders/emuNEX-client"
+    },
     "private": true,
-    "version": "0.1.0",
+    "version": "0.2.0",
     "type": "module",
     "scripts": {
         "dev": "vite",

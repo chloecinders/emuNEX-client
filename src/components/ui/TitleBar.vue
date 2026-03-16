@@ -23,17 +23,17 @@ const close = () => appWindow.close();
         <div class="c-titlebar__controls">
             <button class="c-titlebar__btn" @click="minimize" title="Minimize">
                 <svg width="10" height="1" viewBox="0 0 10 1" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <line y1="0.5" x2="10" y2="0.5" stroke="currentColor" stroke-width="1"/>
+                    <line y1="0.5" x2="10" y2="0.5" stroke="currentColor" stroke-width="1" />
                 </svg>
             </button>
             <button class="c-titlebar__btn" @click="toggleMaximize" title="Maximize">
                 <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <rect x="0.5" y="0.5" width="9" height="9" stroke="currentColor" stroke-width="1"/>
+                    <rect x="0.5" y="0.5" width="9" height="9" stroke="currentColor" stroke-width="1" />
                 </svg>
             </button>
             <button class="c-titlebar__btn c-titlebar__btn--close" @click="close" title="Close">
                 <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
+                    <path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1" stroke-linecap="round" />
                 </svg>
             </button>
         </div>

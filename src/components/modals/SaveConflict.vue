@@ -22,18 +22,14 @@ const emit = defineEmits(["choice"]);
                 <span class="c-save-conflict__warning-icon">!</span>
             </div>
             <p class="c-save-conflict__description">
-                Would you like to download the newer cloud save and overwrite your local progress? 
+                Would you like to download the newer cloud save and overwrite your local progress?
                 <strong>This cannot be undone.</strong>
             </p>
         </div>
 
         <div class="c-save-conflict__actions">
-            <Button color="grey" @click="emit('choice', false)">
-                Keep Local
-            </Button>
-            <Button color="blue" @click="emit('choice', true)">
-                Download Cloud
-            </Button>
+            <Button color="grey" @click="emit('choice', false)"> Keep Local </Button>
+            <Button color="blue" @click="emit('choice', true)"> Download Cloud </Button>
         </div>
     </Modal>
 </template>
@@ -67,7 +63,7 @@ const emit = defineEmits(["choice"]);
         color: var(--color-text-muted);
         line-height: 1.6;
         font-weight: 500;
-        
+
         strong {
             color: var(--color-text);
             font-weight: 800;

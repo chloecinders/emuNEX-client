@@ -1,12 +1,12 @@
 <script lang="ts" setup>
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { ChevronRight } from "lucide-vue-next";
 import { onMounted, ref, watch } from "vue";
 import { getDomainStore, getGlobalStore, getSavedDomains, normalizeDomain } from "../../lib/store";
 import Button from "../ui/Button.vue";
 import Input from "../ui/Input.vue";
 import Modal from "../ui/Modal.vue";
-import { ChevronRight } from "lucide-vue-next";
 
 const props = defineProps<{
     show: boolean;
@@ -65,7 +65,7 @@ async function handleSwitch(domain: string) {
     if (token) {
         await store.set("domain", normalized);
         await store.save();
-        
+
         const globalStore = await getGlobalStore();
         await globalStore.set("domain", normalized);
         await globalStore.save();

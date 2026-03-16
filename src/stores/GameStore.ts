@@ -3,32 +3,34 @@ import { ref } from "vue";
 import { http } from "../utils/http";
 
 export type PartialGame = {
-    id: number;
+    id: string;
     title: string;
     console: string | undefined;
     image_path: string;
 };
 
 export type LibraryGame = PartialGame & {
+    rom_id?: string;
     play_count: number;
     last_played: string | null;
 };
 
 export type Shelf = {
-    id: number;
+    id: string;
     name: string;
     sort_order: number;
     games: PartialGame[];
 };
 
 export type Game = {
-    id: number;
+    id: string;
     title: string;
     console: string;
     region: string | null;
     category: string;
     rom_path: string;
     image_path: string;
+    file_size_bytes?: number;
 };
 
 interface FetchFilters {
@@ -37,7 +39,7 @@ interface FetchFilters {
 }
 
 export const useGameStore = defineStore("gameStore", () => {
-    const currentSelectedGame = ref<number | null>(null);
+    const currentSelectedGame = ref<string | null>(null);
     const partialGames = ref<PartialGame[]>([]);
     const library = ref<LibraryGame[]>([]);
     const shelves = ref<Shelf[]>([]);
@@ -99,16 +101,22 @@ export const useGameStore = defineStore("gameStore", () => {
         }
     }
 
-    async function startGame(id: number) {
+    async function startGame(id: string) {
+        console.log(`[GameStore] Notifying server of game start for ROM: ${id}...`);
         try {
-            await http.post(`/roms/${id}/start`, {});
-            await fetchLibrary();
+            const res = await http.post(`/roms/${id}/start`, {});
+            if (res.success) {
+                console.log(`[GameStore] Successfully logged game start for: ${id}`);
+                await fetchLibrary();
+            } else {
+                console.warn(`[GameStore] Server returned success:false for game start:`, res);
+            }
         } catch (err) {
-            console.error("Failed to log game start:", err);
+            console.error(`[GameStore] Failed to log game start for ${id}:`, err);
         }
     }
 
-    async function fetchGame(id: number, force = false): Promise<Game | null> {
+    async function fetchGame(id: string, force = false): Promise<Game | null> {
         if (!force) {
             const foundGame = games.value.find((g) => g.id === id);
             if (foundGame) return foundGame;
@@ -195,7 +203,7 @@ export const useGameStore = defineStore("gameStore", () => {
         return null;
     }
 
-    async function updateShelf(id: number, data: { name?: string; sort_order?: number }) {
+    async function updateShelf(id: string, data: { name?: string; sort_order?: number }) {
         try {
             const res = await http.put(`/library/shelves/${id}`, data);
             if (res.success) await fetchShelves();
@@ -204,7 +212,7 @@ export const useGameStore = defineStore("gameStore", () => {
         }
     }
 
-    async function deleteShelf(id: number) {
+    async function deleteShelf(id: string) {
         try {
             const res = await http.delete(`/library/shelves/${id}`);
             if (res.success) await fetchShelves();
@@ -213,7 +221,7 @@ export const useGameStore = defineStore("gameStore", () => {
         }
     }
 
-    async function addRomToShelf(shelfId: number, romId: number) {
+    async function addRomToShelf(shelfId: string, romId: string) {
         try {
             const res = await http.post(`/library/shelves/${shelfId}/roms/${romId}`, {});
             if (res.success) await fetchShelves();
@@ -222,7 +230,7 @@ export const useGameStore = defineStore("gameStore", () => {
         }
     }
 
-    async function removeRomFromShelf(shelfId: number, romId: number) {
+    async function removeRomFromShelf(shelfId: string, romId: string) {
         try {
             const res = await http.delete(`/library/shelves/${shelfId}/roms/${romId}`);
             if (res.success) await fetchShelves();
@@ -231,7 +239,7 @@ export const useGameStore = defineStore("gameStore", () => {
         }
     }
 
-    async function updateRomOrder(shelfId: number, romIds: number[]) {
+    async function updateRomOrder(shelfId: string, romIds: string[]) {
         try {
             const res = await http.put(`/library/shelves/${shelfId}/roms/order`, { rom_ids: romIds });
             if (res.success) await fetchShelves();

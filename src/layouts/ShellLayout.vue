@@ -1,13 +1,16 @@
 <script setup lang="ts">
+import { ArrowLeftRight, HardDrive, Library, Menu, Search, Settings } from "lucide-vue-next";
 import { computed, onMounted, ref } from "vue";
 import Logout from "../components/Logout.vue";
+import GameInfo from "../components/games/GameInfo.vue";
 import ServerSwitcher from "../components/modals/ServerSwitcher.vue";
 import { useAuthStore } from "../stores/AuthStore";
+import { useGameStore } from "../stores/GameStore";
 import { useUserStore } from "../stores/UserStore";
-import { Menu, ArrowLeftRight, Library, Search } from "lucide-vue-next";
 
 const userStore = useUserStore();
 const authStore = useAuthStore();
+const gameStore = useGameStore();
 const isSidebarOpen = ref(false);
 const isServerSwitcherOpen = ref(false);
 const toggleSidebar = () => (isSidebarOpen.value = !isSidebarOpen.value);
@@ -17,6 +20,8 @@ const ready = ref(false);
 const menuItems = [
     { name: "Library", path: "/", icon: Library },
     { name: "Search", path: "/search", icon: Search },
+    { name: "Storage", path: "/manage/roms", icon: HardDrive },
+    { name: "Emulators", path: "/manage/emulators", icon: Settings },
 ];
 
 const displayDomain = computed(() => {
@@ -77,7 +82,12 @@ onMounted(() => {
 
             <div class="c-shell__system-meta">
                 <span class="c-shell__domain-label">
-                    {{ userStore.user?.username || "guest" }}@{{ displayDomain }}
+                    {{ userStore.user?.username || "guest" }}@<a
+                        class="c-shell__domain-link"
+                        :href="authStore.domain || ''"
+                        target="_blank"
+                        >{{ displayDomain }}</a
+                    >
                 </span>
                 <span class="c-shell__status-dot c-shell__status-dot--pulse"></span>
             </div>
@@ -88,6 +98,9 @@ onMounted(() => {
         </main>
 
         <ServerSwitcher :show="isServerSwitcherOpen" @close="isServerSwitcherOpen = false" />
+        <div class="c-shell__info-wrapper" :class="{ 'c-shell__info-wrapper--visible': gameStore.currentSelectedGame }">
+            <GameInfo v-if="gameStore.currentSelectedGame" />
+        </div>
     </div>
 </template>
 
@@ -231,6 +244,12 @@ onMounted(() => {
         letter-spacing: 0.5px;
     }
 
+    &__domain-link {
+        color: var(--color-primary);
+        text-decoration: none;
+        font-weight: 800;
+    }
+
     &__status-dot {
         height: 10px;
         width: 10px;
@@ -302,10 +321,30 @@ onMounted(() => {
     }
 
     &__content {
-        flex-grow: 1;
+        flex: 1;
         overflow-y: auto;
         display: flex;
         flex-direction: column;
+        min-height: 0;
+    }
+
+    &__info-wrapper {
+        width: 100%;
+        height: 0;
+        overflow: hidden;
+        transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        background: var(--glass-bg);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        z-index: 100;
+        position: relative;
+        flex-shrink: 0;
+
+        &--visible {
+            height: 120px;
+            border-top: 1px solid var(--color-border);
+            box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.08);
+        }
     }
 }
 

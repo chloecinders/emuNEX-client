@@ -3,13 +3,14 @@ import { Plus, Trash2 } from "lucide-vue-next";
 import { computed, nextTick, onMounted, ref } from "vue";
 import { useConsoleStore } from "../../stores/ConsoleStore";
 import { useGameStore } from "../../stores/GameStore";
-import GameInfo from "../games/GameInfo.vue";
-import GameCard from "./GameCard.vue";
 import Button from "../ui/Button.vue";
-import Modal from "../ui/Modal.vue";
-import Spinner from "../ui/Spinner.vue";
 import Heading from "../ui/Heading.vue";
+import IconButton from "../ui/IconButton.vue";
+import Modal from "../ui/Modal.vue";
+import PillButton from "../ui/PillButton.vue";
+import Spinner from "../ui/Spinner.vue";
 import Text from "../ui/Text.vue";
+import GameCard from "./GameCard.vue";
 
 const vFocus = {
     mounted: (el: HTMLElement) => nextTick(() => el.focus()),
@@ -21,9 +22,9 @@ const consoleStore = useConsoleStore();
 const searchQuery = ref("");
 const isCreatingShelf = ref(false);
 const newShelfName = ref("");
-const editingShelfId = ref<number | null>(null);
+const editingShelfId = ref<string | null>(null);
 const editingShelfName = ref("");
-const shelfToDelete = ref<number | null>(null);
+const shelfToDelete = ref<string | null>(null);
 
 onMounted(async () => {
     await Promise.all([consoleStore.fetchConsoles(), gameStore.fetchShelves(), gameStore.fetchLibrary()]);
@@ -53,6 +54,15 @@ const filteredShelves = computed(() => {
     return shelves;
 });
 
+const librarySearchResults = computed(() => {
+    const query = searchQuery.value.trim().toLowerCase();
+    if (!query) return [];
+
+    return gameStore.library.filter(
+        (game) => game.title.toLowerCase().includes(query) || game.console?.toLowerCase().includes(query),
+    );
+});
+
 async function handleCreateShelf() {
     if (!newShelfName.value.trim()) return;
     await gameStore.createShelf(newShelfName.value.trim());
@@ -60,7 +70,7 @@ async function handleCreateShelf() {
     isCreatingShelf.value = false;
 }
 
-function promptDeleteShelf(shelfId: number) {
+function promptDeleteShelf(shelfId: string) {
     shelfToDelete.value = shelfId;
 }
 
@@ -71,7 +81,7 @@ async function confirmDeleteShelf() {
     }
 }
 
-function startEditingShelf(shelfId: number, currentName: string) {
+function startEditingShelf(shelfId: string, currentName: string) {
     editingShelfId.value = shelfId;
     editingShelfName.value = currentName;
 }
@@ -86,25 +96,25 @@ async function commitShelfRename() {
     editingShelfName.value = "";
 }
 
-const draggedGameId = ref<number | null>(null);
-const sourceShelfId = ref<number | null>(null);
+const draggedGameId = ref<string | null>(null);
+const sourceShelfId = ref<string | null>(null);
 const dragGhost = ref<HTMLElement | null>(null);
 const isDragging = ref(false);
-const hoveredShelfId = ref<number | null>(null);
-const insertBeforeGameId = ref<number | null>(null);
+const hoveredShelfId = ref<string | null>(null);
+const insertBeforeGameId = ref<string | null>(null);
 
-const pendingDrag = ref<{ gameId: number; shelfId: number | null; startX: number; startY: number } | null>(null);
+const pendingDrag = ref<{ gameId: string; shelfId: string | null; startX: number; startY: number } | null>(null);
 const DRAG_THRESHOLD = 5;
 
-function getDragGhostContent(gameId: number): string {
+function getDragGhostContent(gameId: string): string {
     const game = gameStore.library.find((g) => g.id === gameId);
     if (!game) return "";
     const bg = consoleStore.getConsoleColor(game.console);
-    
+
     return `<div style="width:80px;height:120px;border-radius:8px;overflow:hidden;background:${bg};box-shadow:0 8px 24px rgba(0,0,0,0.5);transform:rotate(3deg);opacity:0.9;"><img src="http://localhost:1337/storage/${game.image_path}" style="width:100%;height:100%;object-fit:cover;" /></div>`;
 }
 
-function activateDrag(gameId: number, shelfId: number | null, x: number, y: number) {
+function activateDrag(gameId: string, shelfId: string | null, x: number, y: number) {
     draggedGameId.value = gameId;
     sourceShelfId.value = shelfId;
     isDragging.value = true;
@@ -124,7 +134,7 @@ function activateDrag(gameId: number, shelfId: number | null, x: number, y: numb
     dragGhost.value = ghost;
 }
 
-function startDrag(event: MouseEvent, gameId: number, shelfId: number | null) {
+function startDrag(event: MouseEvent, gameId: string, shelfId: string | null) {
     if (event.button !== 0) return;
     event.preventDefault();
     pendingDrag.value = { gameId, shelfId, startX: event.clientX, startY: event.clientY };
@@ -170,18 +180,17 @@ function onMouseMove(event: MouseEvent) {
     const shelfEl = el?.closest("[data-shelf-id]");
     const rawShelfId = shelfEl?.getAttribute("data-shelf-id") ?? null;
     if (rawShelfId === "recent") {
-        hoveredShelfId.value = -1;
+        hoveredShelfId.value = "recent";
     } else if (rawShelfId) {
-        const parsed = parseInt(rawShelfId);
-        hoveredShelfId.value = isNaN(parsed) ? null : parsed;
+        hoveredShelfId.value = rawShelfId;
     } else {
         hoveredShelfId.value = null;
     }
 
     const gameEl = el?.closest("[data-game-id]");
     if (gameEl) {
-        const gid = parseInt(gameEl.getAttribute("data-game-id") || "");
-        insertBeforeGameId.value = !gid || isNaN(gid) || gid === draggedGameId.value ? null : gid;
+        const gid = gameEl.getAttribute("data-game-id") || null;
+        insertBeforeGameId.value = !gid || gid === draggedGameId.value ? null : gid;
     } else {
         insertBeforeGameId.value = null;
     }
@@ -224,14 +233,14 @@ async function onMouseUp(event: MouseEvent) {
             await gameStore.removeRomFromShelf(fromShelfId, gameId);
         }
     } else {
-        const targetShelfId = parseInt(rawTargetId || "");
+        const targetShelfId = rawTargetId || "";
         const targetGameEl = el?.closest("[data-game-id]");
-        const targetGameId = targetGameEl ? parseInt(targetGameEl.getAttribute("data-game-id") || "") : undefined;
+        const targetGameId = targetGameEl ? targetGameEl.getAttribute("data-game-id") || "" : undefined;
 
-        if (!isNaN(targetShelfId)) {
+        if (targetShelfId) {
             if (fromShelfId === targetShelfId) {
                 const shelf = gameStore.shelves.find((s) => s.id === targetShelfId);
-                if (shelf && targetGameId && !isNaN(targetGameId) && targetGameId !== gameId) {
+                if (shelf && targetGameId && targetGameId !== gameId) {
                     const romIds = shelf.games.map((g) => g.id);
                     const oldIndex = romIds.indexOf(gameId);
                     const newIndex = romIds.indexOf(targetGameId);
@@ -256,140 +265,183 @@ async function onMouseUp(event: MouseEvent) {
 </script>
 
 <template>
-    <Teleport to="#header-tools">
-        <div class="c-search">
-            <input v-model="searchQuery" placeholder="Search library..." class="c-input" />
-        </div>
-    </Teleport>
-
-    <div class="c-library">
-        <Modal :show="isCreatingShelf" title="Create New Shelf" @close="isCreatingShelf = false">
-            <div class="c-modal-form">
-                <input
-                    v-model="newShelfName"
-                    placeholder="Shelf Name..."
-                    class="c-input c-input--full"
-                    @keyup.enter="handleCreateShelf"
-                    autofocus
-                />
-                <div class="c-modal-form__actions">
-                    <Button color="grey" @click="isCreatingShelf = false">Cancel</Button>
-                    <Button color="blue" @click="handleCreateShelf">Create</Button>
-                </div>
+    <div class="c-library-wrapper">
+        <Teleport to="#header-tools">
+            <div class="c-search">
+                <input v-model="searchQuery" placeholder="Search library..." class="c-input" />
             </div>
-        </Modal>
+        </Teleport>
 
-        <Modal :show="shelfToDelete !== null" title="Delete Shelf" @close="shelfToDelete = null">
-            <div class="c-modal-form">
-                <Text variant="body" size="md">Are you sure you want to delete this shelf? Games will not be removed from your library.</Text>
-                <div class="c-modal-form__actions">
-                    <Button color="grey" @click="shelfToDelete = null">Cancel</Button>
-                    <Button color="red" @click="confirmDeleteShelf">Delete</Button>
-                </div>
-            </div>
-        </Modal>
-
-        <div v-if="gameStore.loading && !gameStore.shelves.length" class="c-library__loading">
-            <Spinner size="lg" />
-        </div>
-
-        <div v-else-if="!filteredShelves.length && !recentlyPlayedGames.length" class="c-empty-state">
-            <Text v-if="searchQuery" variant="muted" size="lg">No titles found for "{{ searchQuery }}"</Text>
-            <Text v-else variant="muted" size="lg">Your library is empty.</Text>
-        </div>
-
-        <div v-else class="c-shelves">
-            <div v-if="searchQuery" class="c-shelf__header-wrap">
-                <div class="c-shelf__badge">
-                    <Heading :level="2" class="c-shelf__title">Search Results</Heading>
-                </div>
-            </div>
-
-            <div
-                v-if="recentlyPlayedGames.length && !searchQuery"
-                class="c-shelf"
-                :class="{ 'c-shelf--drop-target c-shelf--remove-target': isDragging && hoveredShelfId === -1 }"
-                data-shelf-id="recent"
-            >
-                <div class="c-shelf__header-wrap">
-                    <div class="c-shelf__badge">
-                        <Heading :level="2" class="c-shelf__title">Recently Played</Heading>
-                        <Text v-if="isDragging && sourceShelfId !== null" variant="error" size="xs" class="c-shelf__remove-hint">
-                            Drop here to remove from shelf
-                        </Text>
-                    </div>
-                    <button class="c-shelf__add-btn" @click="isCreatingShelf = true">
-                        <Plus class="c-shelf__action-icon" /> New Shelf
-                    </button>
-                </div>
-
-                <div class="c-shelf__grid">
-                    <GameCard
-                        v-for="game in recentlyPlayedGames"
-                        :key="'recent-' + game.id"
-                        :game="game"
-                        :is-dragging="isDragging && draggedGameId === game.id"
-                        @mousedown="startDrag($event, game.id, null)"
-                        @click="gameStore.currentSelectedGame = game.id"
+        <div class="c-library">
+            <Modal :show="isCreatingShelf" title="Create New Shelf" @close="isCreatingShelf = false">
+                <div class="c-modal-form">
+                    <input
+                        v-model="newShelfName"
+                        placeholder="Shelf Name..."
+                        class="c-input c-input--full"
+                        @keyup.enter="handleCreateShelf"
+                        autofocus
                     />
+                    <div class="c-modal-form__actions">
+                        <Button color="grey" @click="isCreatingShelf = false">Cancel</Button>
+                        <Button color="blue" @click="handleCreateShelf">Create</Button>
+                    </div>
                 </div>
+            </Modal>
+
+            <Modal :show="shelfToDelete !== null" title="Delete Shelf" @close="shelfToDelete = null">
+                <div class="c-modal-form">
+                    <Text variant="body" size="md"
+                        >Are you sure you want to delete this shelf? Games will not be removed from your library.</Text
+                    >
+                    <div class="c-modal-form__actions">
+                        <Button color="grey" @click="shelfToDelete = null">Cancel</Button>
+                        <Button color="red" @click="confirmDeleteShelf">Delete</Button>
+                    </div>
+                </div>
+            </Modal>
+
+            <div v-if="gameStore.loading && !gameStore.shelves.length" class="c-library__loading">
+                <Spinner size="lg" />
             </div>
 
             <div
-                v-for="shelf in filteredShelves"
-                :key="shelf.id"
-                class="c-shelf"
-                :class="{ 'c-shelf--drop-target': isDragging && hoveredShelfId === shelf.id }"
-                :data-shelf-id="shelf.id"
+                v-else-if="!filteredShelves.length && !recentlyPlayedGames.length && !librarySearchResults.length"
+                class="c-empty-state"
             >
-                <div class="c-shelf__header-wrap">
-                    <div class="c-shelf__badge">
-                        <input
-                            v-if="editingShelfId === shelf.id"
-                            v-model="editingShelfName"
-                            class="c-shelf__title-input"
-                            @blur="commitShelfRename"
-                            @keyup.enter="commitShelfRename"
-                            @keyup.escape="editingShelfId = null"
-                            v-focus
-                        />
-                        <Heading
-                            v-else
-                            :level="2"
-                            class="c-shelf__title c-shelf__title--editable"
-                            @click="startEditingShelf(shelf.id, shelf.name)"
-                            :title="'Click to rename'"
-                        >
-                            {{ shelf.name }}
-                        </Heading>
-                        <Text variant="label" size="xs">{{ shelf.games.length }} titles</Text>
-                    </div>
-                    <button class="c-shelf__delete-btn" @click.prevent="promptDeleteShelf(shelf.id)" title="Delete Shelf">
-                        <Trash2 class="c-shelf__delete-icon" />
-                    </button>
-                </div>
+                <Text v-if="searchQuery" variant="muted" size="lg">No titles found for "{{ searchQuery }}"</Text>
+                <Text v-else variant="muted" size="lg">Your library is empty.</Text>
+            </div>
 
-                <template v-if="shelf.games.length">
-                    <div class="c-shelf__grid">
+            <div v-else class="c-shelves">
+                <div v-if="searchQuery" class="c-shelf">
+                    <div class="c-shelf__header-wrap">
+                        <div class="c-shelf__badge">
+                            <Heading :level="2" class="c-shelf__title">Search Results</Heading>
+                            <Text variant="label" size="xs">
+                                {{ librarySearchResults.length }}
+                                {{ librarySearchResults.length === 1 ? "match" : "matches" }}
+                            </Text>
+                        </div>
+                    </div>
+
+                    <div v-if="librarySearchResults.length" class="c-shelf__grid">
                         <GameCard
-                            v-for="game in shelf.games"
-                            :key="game.id"
+                            v-for="game in librarySearchResults"
+                            :key="'search-' + game.id"
                             :game="game"
-                            :is-dragging="isDragging && draggedGameId === game.id"
-                            :is-insert-before="isDragging && insertBeforeGameId === game.id && hoveredShelfId === shelf.id"
-                            @mousedown="startDrag($event, game.id, shelf.id)"
                             @click="gameStore.currentSelectedGame = game.id"
                         />
                     </div>
-                </template>
-                <template v-else>
-                    <div class="c-shelf__empty-dropzone"></div>
-                </template>
+                    <div
+                        v-else
+                        class="c-shelf__empty-dropzone"
+                        style="
+                            display: block;
+                            padding: var(--spacing-xl);
+                            text-align: center;
+                            border: 2px dashed var(--color-border);
+                            border-radius: var(--radius-md);
+                            color: var(--color-text-muted);
+                        "
+                    >
+                        No matches found in your library.
+                    </div>
+                </div>
+
+                <div
+                    v-if="recentlyPlayedGames.length && !searchQuery"
+                    class="c-shelf"
+                    :class="{
+                        'c-shelf--drop-target c-shelf--remove-target': isDragging && hoveredShelfId === 'recent',
+                    }"
+                    data-shelf-id="recent"
+                >
+                    <div class="c-shelf__header-wrap">
+                        <div class="c-shelf__badge">
+                            <Heading :level="2" class="c-shelf__title">Recently Played</Heading>
+                            <Text
+                                v-if="isDragging && sourceShelfId !== null"
+                                variant="error"
+                                size="xs"
+                                class="c-shelf__remove-hint"
+                            >
+                                Drop here to remove from shelf
+                            </Text>
+                        </div>
+                        <PillButton @click="isCreatingShelf = true"> <Plus /> New Shelf </PillButton>
+                    </div>
+
+                    <div class="c-shelf__grid">
+                        <GameCard
+                            v-for="game in recentlyPlayedGames"
+                            :key="'recent-' + game.id"
+                            :game="game"
+                            :is-dragging="isDragging && draggedGameId === game.id"
+                            @mousedown="startDrag($event, game.id, null)"
+                            @click="gameStore.currentSelectedGame = game.id"
+                        />
+                    </div>
+                </div>
+
+                <div
+                    v-for="shelf in filteredShelves"
+                    :key="shelf.id"
+                    class="c-shelf"
+                    :class="{ 'c-shelf--drop-target': isDragging && hoveredShelfId === shelf.id }"
+                    :data-shelf-id="shelf.id"
+                >
+                    <div class="c-shelf__header-wrap">
+                        <div class="c-shelf__badge">
+                            <input
+                                v-if="editingShelfId === shelf.id"
+                                v-model="editingShelfName"
+                                class="c-shelf__title-input"
+                                @blur="commitShelfRename"
+                                @keyup.enter="commitShelfRename"
+                                @keyup.escape="editingShelfId = null"
+                                v-focus
+                            />
+                            <Heading
+                                v-else
+                                :level="2"
+                                class="c-shelf__title c-shelf__title--editable"
+                                @click="startEditingShelf(shelf.id, shelf.name)"
+                                :title="'Click to rename'"
+                            >
+                                {{ shelf.name }}
+                            </Heading>
+                            <Text variant="label" size="xs"
+                                >{{ shelf.games.length }} {{ shelf.games.length === 1 ? "title" : "titles" }}</Text
+                            >
+                        </div>
+                        <IconButton color="red" @click="promptDeleteShelf(shelf.id)" title="Delete Shelf">
+                            <Trash2 />
+                        </IconButton>
+                    </div>
+
+                    <template v-if="shelf.games.length">
+                        <div class="c-shelf__grid">
+                            <GameCard
+                                v-for="game in shelf.games"
+                                :key="game.id"
+                                :game="game"
+                                :is-dragging="isDragging && draggedGameId === game.id"
+                                :is-insert-before="
+                                    isDragging && insertBeforeGameId === game.id && hoveredShelfId === shelf.id
+                                "
+                                @mousedown="startDrag($event, game.id, shelf.id)"
+                                @click="gameStore.currentSelectedGame = game.id"
+                            />
+                        </div>
+                    </template>
+                    <template v-else>
+                        <div class="c-shelf__empty-dropzone"></div>
+                    </template>
+                </div>
             </div>
         </div>
     </div>
-
-    <GameInfo />
 </template>
 
 <style lang="scss" scoped>
@@ -464,12 +516,13 @@ async function onMouseUp(event: MouseEvent) {
 }
 
 .c-shelf {
-    animation: fadeIn 0.4s ease-out;
     border-radius: var(--radius-lg);
     padding: var(--spacing-md);
     margin: calc(var(--spacing-md) * -1);
     border: 2px solid transparent;
-    transition: border-color 0.15s ease, background 0.15s ease;
+    transition:
+        border-color 0.15s ease,
+        background 0.15s ease;
 
     &--drop-target {
         border-color: var(--color-primary);
@@ -538,58 +591,6 @@ async function onMouseUp(event: MouseEvent) {
         }
     }
 
-    &__add-btn {
-        background: var(--color-surface-variant);
-        border: 2px solid var(--color-border);
-        border-radius: var(--radius-full);
-        padding: 8px 16px;
-        font-weight: 800;
-        color: var(--color-primary);
-        cursor: pointer;
-        transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1);
-        display: flex;
-        align-items: center;
-        gap: 8px;
-
-        &:hover {
-            border-color: var(--color-primary);
-            background: var(--color-surface);
-            transform: translateY(-2px);
-        }
-    }
-
-    &__action-icon {
-        width: 20px;
-        height: 20px;
-        stroke: var(--color-primary);
-        stroke-width: 2.5px;
-    }
-
-    &__delete-btn {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: transparent;
-        border: none;
-        color: var(--color-text-muted);
-        cursor: pointer;
-        padding: 8px;
-        border-radius: var(--radius-sm);
-        transition: all 0.2s ease;
-
-        &:hover {
-            color: var(--color-danger);
-            background: rgba(255, 68, 68, 0.1);
-        }
-    }
-
-    &__delete-icon {
-        width: 20px;
-        height: 20px;
-        pointer-events: none;
-        stroke-width: 2.5px;
-    }
-
     &__grid {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
@@ -598,17 +599,6 @@ async function onMouseUp(event: MouseEvent) {
 
     &__empty-dropzone {
         display: none;
-    }
-}
-
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(10px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
     }
 }
 </style>
