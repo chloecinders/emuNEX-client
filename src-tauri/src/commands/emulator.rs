@@ -14,6 +14,7 @@ pub struct ApiEmulator {
     pub platform: String,
     pub run_command: String,
     pub binary_path: String,
+    pub binary_name: Option<String>,
     pub save_path: Option<String>,
     pub config_files: Vec<String>,
     pub zipped: bool,
@@ -244,7 +245,15 @@ pub async fn download_emulator<R: Runtime>(
 
         std::fs::remove_file(&local_file_path).ok();
 
-        let exec_name = emulator.run_command.split_whitespace().next().unwrap_or("");
+        let exec_name = if let Some(ref custom_name) = emulator.binary_name {
+            if custom_name.is_empty() {
+                emulator.run_command.split_whitespace().next().unwrap_or("")
+            } else {
+                custom_name
+            }
+        } else {
+            emulator.run_command.split_whitespace().next().unwrap_or("")
+        };
         final_binary_path = app_data_dir.join(exec_name);
     }
 

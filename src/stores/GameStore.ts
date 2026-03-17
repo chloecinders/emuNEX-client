@@ -48,6 +48,7 @@ export const useGameStore = defineStore("gameStore", () => {
     const isLaunching = ref(false);
     const isPlaying = ref(false);
     const isDimmed = ref(false);
+    const installedGameIds = ref<string[]>([]);
 
     import("@tauri-apps/api/event").then(({ listen }) => {
         listen("game-status", (event) => {
@@ -93,11 +94,22 @@ export const useGameStore = defineStore("gameStore", () => {
             const res = await http.get<LibraryGame[]>("/library");
             if (res.success) {
                 library.value = res.data;
+                await fetchInstalledGames();
             }
         } catch (err) {
             console.error("Failed to fetch library:", err);
         } finally {
             loading.value = false;
+        }
+    }
+
+    async function fetchInstalledGames() {
+        try {
+            const { invoke } = await import("@tauri-apps/api/core");
+            const storage = await invoke<any[]>("get_local_storage");
+            installedGameIds.value = storage.filter((s) => s.rom_size > 0).map((s) => s.game_id);
+        } catch (err) {
+            console.error("Failed to fetch installed games:", err);
         }
     }
 
@@ -271,5 +283,7 @@ export const useGameStore = defineStore("gameStore", () => {
         isLaunching,
         isPlaying,
         isDimmed,
+        installedGameIds,
+        fetchInstalledGames,
     };
 });

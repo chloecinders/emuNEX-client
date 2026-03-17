@@ -75,7 +75,65 @@ jobs:
                   draft: true
                   files: |
                       src-tauri/target/release/bundle/msi/*.msi
-                      src-tauri/target/release/bundle/setup.exe
+                      src-tauri/target/release/bundle/msi/*.msi.zip*
                       src-tauri/target/release/bundle/dmg/*.dmg
-                      src-tauri/target/release/bundle/deb/*.deb
                       src-tauri/target/release/bundle/appimage/*.AppImage
+                      src-tauri/target/release/bundle/appimage/*.AppImage.tar.gz*
+
+    updater:
+        needs: publish
+        runs-on: ubuntu-latest
+        steps:
+            - name: checkout
+              uses: actions/checkout@v4
+
+            - name: generate latest.json
+              shell: bash
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: |
+                  TAG=${{ github.ref_name }}
+                  REPO=${{ github.repository }}
+
+                  # Fetch asset URLs from the release
+                  ASSETS=$(gh release view $TAG --repo $REPO --json assets --jq '.assets')
+
+                  # Helper to find specific asset URLs
+                  get_url() { echo "$ASSETS" | jq -r ".[] | select(.name | test(\"$1\")) | .url"; }
+                  get_sig() {
+                    SIG_URL=$(get_url "$1")
+                    if [ -n "$SIG_URL" ]; then
+                      curl -sL "$SIG_URL"
+                    fi
+                  }
+
+                  cat <<EOF > latest.json
+                  {
+                    "version": "$TAG",
+                    "notes": "Release $TAG",
+                    "pub_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+                    "platforms": {
+                      "darwin-x86_64": {
+                        "signature": "$(get_sig "x64.dmg.sig")",
+                        "url": "$(get_url "x64.dmg")"
+                      },
+                      "darwin-aarch64": {
+                        "signature": "$(get_sig "aarch64.dmg.sig")",
+                        "url": "$(get_url "aarch64.dmg")"
+                      },
+                      "linux-x86_64": {
+                        "signature": "$(get_sig "AppImage.tar.gz.sig")",
+                        "url": "$(get_url "AppImage.tar.gz")"
+                      },
+                      "windows-x86_64": {
+                        "signature": "$(get_sig "x64_en-US.msi.zip.sig")",
+                        "url": "$(get_url "x64_en-US.msi.zip")"
+                      }
+                    }
+                  }
+                  EOF
+
+            - name: upload latest.json to release
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: gh release upload ${{ github.ref_name }} latest.json --clobber

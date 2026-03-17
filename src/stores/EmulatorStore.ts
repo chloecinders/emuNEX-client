@@ -22,6 +22,7 @@ export type ServerEmulator = {
     platform: string;
     run_command: string;
     binary_path: string;
+    binary_name: string | null;
     save_path: string | null;
     config_files: string[];
     zipped: boolean;

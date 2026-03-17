@@ -37,6 +37,17 @@ const recentlyPlayedGames = computed(() => {
         .slice(0, 10);
 });
 
+const downloadedGames = computed(() => {
+    const query = searchQuery.value.trim().toLowerCase();
+    const installed = gameStore.library.filter((g) => gameStore.installedGameIds.includes(g.id));
+
+    if (!query) return installed;
+
+    return installed.filter(
+        (game) => game.title.toLowerCase().includes(query) || game.console?.toLowerCase().includes(query),
+    );
+});
+
 const filteredShelves = computed(() => {
     const query = searchQuery.value.trim().toLowerCase();
 
@@ -228,7 +239,7 @@ async function onMouseUp(event: MouseEvent) {
     const gameId = draggedGameId.value;
     const fromShelfId = sourceShelfId.value;
 
-    if (rawTargetId === "recent") {
+    if (rawTargetId === "recent" || rawTargetId === "downloaded") {
         if (fromShelfId !== null) {
             await gameStore.removeRomFromShelf(fromShelfId, gameId);
         }
@@ -282,6 +293,7 @@ async function onMouseUp(event: MouseEvent) {
                         @keyup.enter="handleCreateShelf"
                         autofocus
                     />
+
                     <div class="c-modal-form__actions">
                         <Button color="grey" @click="isCreatingShelf = false">Cancel</Button>
                         <Button color="blue" @click="handleCreateShelf">Create</Button>
@@ -294,6 +306,7 @@ async function onMouseUp(event: MouseEvent) {
                     <Text variant="body" size="md"
                         >Are you sure you want to delete this shelf? Games will not be removed from your library.</Text
                     >
+
                     <div class="c-modal-form__actions">
                         <Button color="grey" @click="shelfToDelete = null">Cancel</Button>
                         <Button color="red" @click="confirmDeleteShelf">Delete</Button>
@@ -314,38 +327,50 @@ async function onMouseUp(event: MouseEvent) {
             </div>
 
             <div v-else class="c-shelves">
-                <div v-if="searchQuery" class="c-shelf">
+
+                <div
+                    v-if="searchQuery ? downloadedGames.length > 0 : true"
+                    class="c-shelf"
+                    :class="{
+                        'c-shelf--drop-target c-shelf--remove-target': isDragging && hoveredShelfId === 'downloaded',
+                    }"
+                    data-shelf-id="downloaded"
+                >
                     <div class="c-shelf__header-wrap">
                         <div class="c-shelf__badge">
-                            <Heading :level="2" class="c-shelf__title">Search Results</Heading>
+                            <Heading :level="2" class="c-shelf__title">Downloaded Games</Heading>
                             <Text variant="label" size="xs">
-                                {{ librarySearchResults.length }}
-                                {{ librarySearchResults.length === 1 ? "match" : "matches" }}
+                                {{ downloadedGames.length }}
+                                {{ downloadedGames.length === 1 ? "title" : "titles" }}
+                            </Text>
+
+                            <Text
+                                v-for="dummy in [1]"
+                                :key="dummy"
+                                v-if="isDragging && sourceShelfId !== null"
+                                variant="error"
+                                size="xs"
+                                class="c-shelf__remove-hint"
+                            >
+                                Drop here to remove from shelf
                             </Text>
                         </div>
+
+                        <PillButton @click="isCreatingShelf = true"> <Plus /> New Shelf </PillButton>
                     </div>
 
-                    <div v-if="librarySearchResults.length" class="c-shelf__grid">
+                    <div v-if="downloadedGames.length" class="c-shelf__grid">
                         <GameCard
-                            v-for="game in librarySearchResults"
-                            :key="'search-' + game.id"
+                            v-for="game in downloadedGames"
+                            :key="'downloaded-' + game.id"
                             :game="game"
+                            :is-dragging="isDragging && draggedGameId === game.id"
+                            @mousedown="startDrag($event, game.id, null)"
                             @click="gameStore.currentSelectedGame = game.id"
                         />
                     </div>
-                    <div
-                        v-else
-                        class="c-shelf__empty-dropzone"
-                        style="
-                            display: block;
-                            padding: var(--spacing-xl);
-                            text-align: center;
-                            border: 2px dashed var(--color-border);
-                            border-radius: var(--radius-md);
-                            color: var(--color-text-muted);
-                        "
-                    >
-                        No matches found in your library.
+                    <div v-else class="c-shelf__empty-dropzone" style="display: block">
+                        <Text variant="muted">No games downloaded yet.</Text>
                     </div>
                 </div>
 
@@ -360,7 +385,10 @@ async function onMouseUp(event: MouseEvent) {
                     <div class="c-shelf__header-wrap">
                         <div class="c-shelf__badge">
                             <Heading :level="2" class="c-shelf__title">Recently Played</Heading>
+
                             <Text
+                                v-for="dummy in [1]"
+                                :key="dummy"
                                 v-if="isDragging && sourceShelfId !== null"
                                 variant="error"
                                 size="xs"
@@ -369,7 +397,6 @@ async function onMouseUp(event: MouseEvent) {
                                 Drop here to remove from shelf
                             </Text>
                         </div>
-                        <PillButton @click="isCreatingShelf = true"> <Plus /> New Shelf </PillButton>
                     </div>
 
                     <div class="c-shelf__grid">
@@ -402,6 +429,7 @@ async function onMouseUp(event: MouseEvent) {
                                 @keyup.escape="editingShelfId = null"
                                 v-focus
                             />
+
                             <Heading
                                 v-else
                                 :level="2"
@@ -411,10 +439,12 @@ async function onMouseUp(event: MouseEvent) {
                             >
                                 {{ shelf.name }}
                             </Heading>
+
                             <Text variant="label" size="xs"
                                 >{{ shelf.games.length }} {{ shelf.games.length === 1 ? "title" : "titles" }}</Text
                             >
                         </div>
+
                         <IconButton color="red" @click="promptDeleteShelf(shelf.id)" title="Delete Shelf">
                             <Trash2 />
                         </IconButton>
@@ -435,9 +465,46 @@ async function onMouseUp(event: MouseEvent) {
                             />
                         </div>
                     </template>
+
                     <template v-else>
                         <div class="c-shelf__empty-dropzone"></div>
                     </template>
+                </div>
+
+                <div v-if="searchQuery" class="c-shelf">
+                    <div class="c-shelf__header-wrap">
+                        <div class="c-shelf__badge">
+                            <Heading :level="2" class="c-shelf__title">Search Results</Heading>
+                            <Text variant="label" size="xs">
+                                {{ librarySearchResults.length }}
+                                {{ librarySearchResults.length === 1 ? "match" : "matches" }}
+                            </Text>
+                        </div>
+                    </div>
+
+                    <div v-if="librarySearchResults.length" class="c-shelf__grid">
+                        <GameCard
+                            v-for="game in librarySearchResults"
+                            :key="'search-' + game.id"
+                            :game="game"
+                            @click="gameStore.currentSelectedGame = game.id"
+                        />
+                    </div>
+
+                    <div
+                        v-else
+                        class="c-shelf__empty-dropzone"
+                        style="
+                            display: block;
+                            padding: var(--spacing-xl);
+                            text-align: center;
+                            border: 2px dashed var(--color-border);
+                            border-radius: var(--radius-md);
+                            color: var(--color-text-muted);
+                        "
+                    >
+                        No matches found in your library.
+                    </div>
                 </div>
             </div>
         </div>

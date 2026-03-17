@@ -224,6 +224,7 @@ const handlePlay = async (customEmulatorId?: string) => {
                     <Tooltip :text="game.title">
                         <Heading :level="3" class="c-bottom-panel__title">{{ game.title }}</Heading>
                     </Tooltip>
+
                     <Text variant="label" size="xs" class="c-bottom-panel__subtitle"
                         >{{ game.category }} | {{ game.region }}</Text
                     >
@@ -285,6 +286,7 @@ const handlePlay = async (customEmulatorId?: string) => {
 
         <ShelfManager v-if="game" :game-id="game.id" :show="showShelfManager" @close="showShelfManager = false" />
         <SaveConflict :show="showConflictModal" :version="conflictVersion" @choice="handleConflictChoice" />
+
         <Modal v-if="game" :show="showEmulatorModal" title="Play with..." @close="showEmulatorModal = false">
             <div class="c-playwith-list">
                 <Button
@@ -384,6 +386,7 @@ const handlePlay = async (customEmulatorId?: string) => {
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+        width: fit-content;
         max-width: 100%;
         margin: 0;
     }

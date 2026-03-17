@@ -9,6 +9,35 @@ use crate::commands::emulator::StoreEmulator;
 use crate::commands::save::upload_save_files;
 use crate::{store, AppState};
 
+fn split_args(cmd: &str) -> Vec<String> {
+    let mut args = Vec::new();
+    let mut current = String::new();
+    let mut in_quotes = false;
+    let mut escaped = false;
+
+    for c in cmd.chars() {
+        if escaped {
+            current.push(c);
+            escaped = false;
+        } else if c == '\\' {
+            escaped = true;
+        } else if c == '"' {
+            in_quotes = !in_quotes;
+        } else if c.is_whitespace() && !in_quotes {
+            if !current.is_empty() {
+                args.push(current.clone());
+                current.clear();
+            }
+        } else {
+            current.push(c);
+        }
+    }
+    if !current.is_empty() {
+        args.push(current);
+    }
+    args
+}
+
 #[tauri::command]
 pub async fn install_game<R: Runtime>(
     app: AppHandle<R>,
@@ -194,38 +223,112 @@ pub async fn play_game<R: Runtime>(
         std::fs::copy(entry.path(), temp_dir.join(entry.file_name())).ok();
     }
 
-    let child = if !emulator.binary_path.is_empty() {
-        Command::new(&emulator.binary_path)
-            .current_dir(emu_dir)
-            .arg(&temp_rom_path)
-            .spawn()
-    } else if !emulator.run_command.is_empty() {
-        let rom_path_escaped = format!("'{}'", temp_rom_path.to_string_lossy().replace("'", "''"));
-        let substituted_cmd = emulator.run_command.replace("$rom", &rom_path_escaped);
+    let rom_name = persistent_rom_path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("");
 
-        #[cfg(windows)]
-        {
-            Command::new("powershell")
-                .args(&[
-                    "-NoProfile",
-                    "-ExecutionPolicy",
-                    "Bypass",
-                    "-Command",
-                    &substituted_cmd,
-                ])
-                .current_dir(&temp_dir)
-                .spawn()
-        }
-        #[cfg(not(windows))]
-        {
-            Command::new("sh")
-                .args(&["-c", &substituted_cmd])
-                .current_dir(&temp_dir)
-                .spawn()
+    let data_dir = base_path.to_string_lossy().to_string();
+    let save_dir_str = save_dir.to_string_lossy().to_string();
+    let temp_dir_str = temp_dir.to_string_lossy().to_string();
+    let emu_dir_str = emu_dir.to_string_lossy().to_string();
+    let bin_name = std::path::Path::new(&emulator.binary_path)
+        .file_name()
+        .and_then(|f| f.to_str())
+        .unwrap_or("")
+        .to_string();
+
+    let rom_path_escaped = format!("'{}'", temp_rom_path.to_string_lossy().replace("'", "''"));
+
+    let resolved_save_path = if let Some(ref template) = emulator.save_path {
+        if template.is_empty() {
+            None
+        } else {
+            let path = template
+                .replace("$rom_name", rom_name)
+                .replace("$game_id", &game_id)
+                .replace("$console", &console)
+                .replace("$data_dir", &data_dir)
+                .replace("$save_dir", &save_dir_str)
+                .replace("$temp_dir", &temp_dir_str)
+                .replace("$emu_dir", &emu_dir_str);
+            Some(path)
         }
     } else {
+        None
+    };
+
+    if let Some(ref path) = resolved_save_path {
+        let p = std::path::Path::new(path);
+        if p.is_absolute() {
+            if let Some(parent) = p.parent() {
+                std::fs::create_dir_all(parent).ok();
+            }
+
+            if let Ok(entries) = std::fs::read_dir(&save_dir) {
+                for entry in entries.filter_map(|e| e.ok()) {
+                    let fname = entry.file_name().to_string_lossy().to_string();
+                    if p.is_dir() {
+                        std::fs::copy(entry.path(), p.join(fname)).ok();
+                    } else if fname == p.file_name().and_then(|f| f.to_str()).unwrap_or("") {
+                        std::fs::copy(entry.path(), p).ok();
+                    }
+                }
+            }
+        }
+    }
+
+    let child = if !emulator.binary_path.is_empty() || !emulator.run_command.is_empty() {
+        let bin_to_use = if !emulator.binary_path.is_empty() {
+            &emulator.binary_path
+        } else {
+            &bin_name
+        };
+
+        let cmd_template = if !emulator.run_command.is_empty() {
+            let cmd = emulator.run_command.clone();
+            if !cmd.contains("$bin") && !cmd.contains("$exe") && !emulator.binary_path.is_empty() {
+                format!("$exe {}", cmd)
+            } else {
+                cmd
+            }
+        } else {
+            format!("$exe $rom")
+        };
+
+        let parts = split_args(&cmd_template);
+        let mut final_parts = Vec::new();
+
+        for part in parts {
+            let replaced = part
+                .replace("$bin", bin_to_use)
+                .replace("$exe", bin_to_use)
+                .replace("$rom", &temp_rom_path.to_string_lossy())
+                .replace("$rom_name", rom_name)
+                .replace("$game_id", &game_id)
+                .replace("$console", &console)
+                .replace("$data_dir", &data_dir)
+                .replace("$save_dir", &save_dir_str)
+                .replace("$temp_dir", &temp_dir_str)
+                .replace("$emu_dir", &emu_dir_str);
+            final_parts.push(replaced);
+        }
+
+        if final_parts.is_empty() {
+            state.is_game_running.store(false, Ordering::SeqCst);
+            return Err("Resolved command is empty".to_string());
+        }
+
+        let program = &final_parts[0];
+        let args = &final_parts[1..];
+
+        Command::new(program)
+            .args(args)
+            .current_dir(&temp_dir)
+            .spawn()
+    } else {
         state.is_game_running.store(false, Ordering::SeqCst);
-        return Err("No binary path or run command specified.".to_string());
+        return Err("No binary or run command configured".to_string());
     };
 
     let mut child = match child {
@@ -241,10 +344,25 @@ pub async fn play_game<R: Runtime>(
 
     child.wait().map_err(|e| e.to_string())?;
 
-    let rom_name = persistent_rom_path
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("");
+    if let Some(ref path) = resolved_save_path {
+        let p = std::path::Path::new(path);
+        if p.is_absolute() {
+            if p.is_dir() {
+                if let Ok(entries) = std::fs::read_dir(p) {
+                    for entry in entries.filter_map(|e| e.ok()) {
+                        let fname = entry.file_name().to_string_lossy().to_string();
+                        if !emulator.config_files.contains(&fname) && entry.path() != temp_rom_path
+                        {
+                            std::fs::copy(entry.path(), save_dir.join(fname)).ok();
+                        }
+                    }
+                }
+            } else if p.exists() {
+                let fname = p.file_name().and_then(|f| f.to_str()).unwrap_or("save.dat");
+                std::fs::copy(p, save_dir.join(fname)).ok();
+            }
+        }
+    }
 
     for entry in std::fs::read_dir(&temp_dir).map_err(|e| e.to_string())? {
         let entry = entry.map_err(|e| e.to_string())?;
@@ -255,26 +373,13 @@ pub async fn play_game<R: Runtime>(
             continue;
         }
 
-        let should_copy = if let Some(ref save_path_template) = emulator.save_path {
-            if save_path_template.is_empty() {
-                true
+        let should_copy = if let Some(ref save_path_template) = resolved_save_path {
+            let p = std::path::Path::new(save_path_template);
+            if p.is_absolute() {
+                false
             } else {
-                let substituted = save_path_template.replace("$rom_name", rom_name);
-                let target_path = std::path::Path::new(&substituted);
-
-                if target_path.is_absolute() {
-                    fname
-                        == target_path
-                            .file_name()
-                            .and_then(|f| f.to_str())
-                            .unwrap_or("")
-                } else {
-                    let relative_fname = target_path
-                        .file_name()
-                        .and_then(|f| f.to_str())
-                        .unwrap_or("");
-                    fname == relative_fname
-                }
+                let target_fname = p.file_name().and_then(|f| f.to_str()).unwrap_or("");
+                fname == target_fname || target_fname.is_empty()
             }
         } else {
             true
