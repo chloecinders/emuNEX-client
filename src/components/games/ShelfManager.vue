@@ -34,6 +34,7 @@ async function toggleShelf(shelfId: string) {
             <div v-if="!shelves.length" class="c-shelf-manager__empty">
                 No shelves found. Create one in the library!
             </div>
+
             <div v-for="shelf in shelves" :key="shelf.id" class="c-shelf-manager__item" @click="toggleShelf(shelf.id)">
                 <div
                     class="c-shelf-manager__checkbox"
@@ -50,6 +51,7 @@ async function toggleShelf(shelfId: string) {
                         />
                     </svg>
                 </div>
+
                 <span class="c-shelf-manager__name">{{ shelf.name }}</span>
             </div>
         </div>

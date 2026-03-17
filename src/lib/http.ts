@@ -74,5 +74,5 @@ export const http = new ApiClient();
 
 export function useStoragePath(route: string): string {
     const authStore = useAuthStore();
-    return `${authStore.domain}${authStore.storagePath}/${route}`;
+    return `${authStore.domain}${authStore.storagePath}${route}`;
 }

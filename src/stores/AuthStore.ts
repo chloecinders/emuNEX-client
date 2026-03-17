@@ -32,7 +32,7 @@ export const useAuthStore = defineStore("authStore", () => {
         connectionError.value = null;
 
         try {
-            const { http } = await import("../utils/http");
+            const { http } = await import("../lib/http");
             const res = await http.get("/start");
             if (res.success) {
                 return true;

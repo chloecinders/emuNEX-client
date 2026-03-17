@@ -1,12 +1,14 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
-import { http } from "../utils/http";
+import { http } from "../lib/http";
+import { DiscordRPC } from "../lib/rpc";
 
 export type PartialGame = {
     id: string;
     title: string;
     console: string | undefined;
     image_path: string;
+    region: string;
 };
 
 export type LibraryGame = PartialGame & {
@@ -31,6 +33,7 @@ export type Game = {
     rom_path: string;
     image_path: string;
     file_size_bytes?: number;
+    release_year: number;
 };
 
 interface FetchFilters {
@@ -60,6 +63,7 @@ export const useGameStore = defineStore("gameStore", () => {
                 isPlaying.value = false;
                 isLaunching.value = false;
                 isDimmed.value = false;
+                DiscordRPC.reset();
             }
         });
     });
@@ -114,11 +118,9 @@ export const useGameStore = defineStore("gameStore", () => {
     }
 
     async function startGame(id: string) {
-        console.log(`[GameStore] Notifying server of game start for ROM: ${id}...`);
         try {
             const res = await http.post(`/roms/${id}/start`, {});
             if (res.success) {
-                console.log(`[GameStore] Successfully logged game start for: ${id}`);
                 await fetchLibrary();
             } else {
                 console.warn(`[GameStore] Server returned success:false for game start:`, res);

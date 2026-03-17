@@ -1,6 +1,6 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
-import { http } from "../utils/http";
+import { http } from "../lib/http";
 
 export interface Category {
     name: string;

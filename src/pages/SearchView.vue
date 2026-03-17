@@ -133,6 +133,7 @@ watch([searchQuery, selectedCategory, selectedConsole], () => {
                 <div v-if="gameStore.loading" class="c-search-view__loading-overlay">
                     <div class="c-search-view__spinner"></div>
                 </div>
+
                 <template v-else>
                     <div v-for="group in orderedGroups" :key="group.title" class="c-search-view__group-block">
                         <h2 class="c-search-view__group-title">{{ group.title }}</h2>

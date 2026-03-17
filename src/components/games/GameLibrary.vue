@@ -327,7 +327,6 @@ async function onMouseUp(event: MouseEvent) {
             </div>
 
             <div v-else class="c-shelves">
-
                 <div
                     v-if="searchQuery ? downloadedGames.length > 0 : true"
                     class="c-shelf"
@@ -337,8 +336,8 @@ async function onMouseUp(event: MouseEvent) {
                     data-shelf-id="downloaded"
                 >
                     <div class="c-shelf__header-wrap">
-                        <div class="c-shelf__badge">
-                            <Heading :level="2" class="c-shelf__title">Downloaded Games</Heading>
+                        <Heading :level="2" color="primary" is-badge class="c-shelf__badge">
+                            Downloaded Games
                             <Text variant="label" size="xs">
                                 {{ downloadedGames.length }}
                                 {{ downloadedGames.length === 1 ? "title" : "titles" }}
@@ -354,7 +353,7 @@ async function onMouseUp(event: MouseEvent) {
                             >
                                 Drop here to remove from shelf
                             </Text>
-                        </div>
+                        </Heading>
 
                         <PillButton @click="isCreatingShelf = true"> <Plus /> New Shelf </PillButton>
                     </div>
@@ -383,8 +382,8 @@ async function onMouseUp(event: MouseEvent) {
                     data-shelf-id="recent"
                 >
                     <div class="c-shelf__header-wrap">
-                        <div class="c-shelf__badge">
-                            <Heading :level="2" class="c-shelf__title">Recently Played</Heading>
+                        <Heading level="2" is-badge>
+                            Recently Played
 
                             <Text
                                 v-for="dummy in [1]"
@@ -396,7 +395,7 @@ async function onMouseUp(event: MouseEvent) {
                             >
                                 Drop here to remove from shelf
                             </Text>
-                        </div>
+                        </Heading>
                     </div>
 
                     <div class="c-shelf__grid">
@@ -419,7 +418,7 @@ async function onMouseUp(event: MouseEvent) {
                     :data-shelf-id="shelf.id"
                 >
                     <div class="c-shelf__header-wrap">
-                        <div class="c-shelf__badge">
+                        <Heading :level="2" color="primary" is-badge class="c-shelf__badge">
                             <input
                                 v-if="editingShelfId === shelf.id"
                                 v-model="editingShelfName"
@@ -443,7 +442,7 @@ async function onMouseUp(event: MouseEvent) {
                             <Text variant="label" size="xs"
                                 >{{ shelf.games.length }} {{ shelf.games.length === 1 ? "title" : "titles" }}</Text
                             >
-                        </div>
+                        </Heading>
 
                         <IconButton color="red" @click="promptDeleteShelf(shelf.id)" title="Delete Shelf">
                             <Trash2 />
@@ -473,13 +472,13 @@ async function onMouseUp(event: MouseEvent) {
 
                 <div v-if="searchQuery" class="c-shelf">
                     <div class="c-shelf__header-wrap">
-                        <div class="c-shelf__badge">
-                            <Heading :level="2" class="c-shelf__title">Search Results</Heading>
+                        <Heading :level="2" color="primary" is-badge class="c-shelf__badge">
+                            Search Results
                             <Text variant="label" size="xs">
                                 {{ librarySearchResults.length }}
                                 {{ librarySearchResults.length === 1 ? "match" : "matches" }}
                             </Text>
-                        </div>
+                        </Heading>
                     </div>
 
                     <div v-if="librarySearchResults.length" class="c-shelf__grid">
@@ -609,19 +608,10 @@ async function onMouseUp(event: MouseEvent) {
     }
 
     &__badge {
-        display: flex;
-        align-items: center;
-        gap: var(--spacing-md);
-        background: var(--color-surface-variant);
-        padding: var(--spacing-sm) var(--spacing-md);
-        border-radius: var(--radius-full);
-        width: fit-content;
-        border: 1px solid var(--color-border);
+        margin-top: calc(var(--spacing-sm) * -1);
     }
 
     &__title {
-        color: var(--color-primary);
-
         &--editable {
             cursor: text;
             transition: color 0.15s ease;

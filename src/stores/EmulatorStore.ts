@@ -50,7 +50,6 @@ export const useEmulatorStore = defineStore("emulatorStore", () => {
             }
 
             emulators.value = validEms;
-            console.log("Fetched emulators:", emulators.value);
         } catch (err) {
             console.error("Failed to fetch emulators:", err);
         } finally {

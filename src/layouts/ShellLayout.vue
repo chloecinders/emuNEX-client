@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowLeftRight, HardDrive, Library, Menu, Search, Settings } from "lucide-vue-next";
+import { ArrowLeftRight, GamepadDirectional, HardDrive, Library, Menu, Search, Settings } from "lucide-vue-next";
 import { computed, onMounted, ref } from "vue";
 import Logout from "../components/Logout.vue";
 import GameInfo from "../components/games/GameInfo.vue";
@@ -21,7 +21,8 @@ const menuItems = [
     { name: "Library", path: "/", icon: Library },
     { name: "Search", path: "/search", icon: Search },
     { name: "Storage", path: "/manage/roms", icon: HardDrive },
-    { name: "Emulators", path: "/manage/emulators", icon: Settings },
+    { name: "Emulators", path: "/manage/emulators", icon: GamepadDirectional },
+    { name: "Settings", path: "/settings", icon: Settings },
 ];
 
 const displayDomain = computed(() => {

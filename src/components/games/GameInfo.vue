@@ -3,10 +3,11 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { Gamepad2, Library } from "lucide-vue-next";
 import { computed, onMounted, ref, type Ref, watch } from "vue";
+import { useStoragePath } from "../../lib/http";
+import { DiscordRPC } from "../../lib/rpc";
 import { useConsoleStore } from "../../stores/ConsoleStore";
 import { useEmulatorStore } from "../../stores/EmulatorStore";
 import { type Game, useGameStore } from "../../stores/GameStore";
-import { useStoragePath } from "../../utils/http";
 import InstallModal, { type InstallItem } from "../modals/InstallModal.vue";
 import SaveConflict from "../modals/SaveConflict.vue";
 import Badge from "../ui/Badge.vue";
@@ -192,6 +193,7 @@ const handlePlay = async (customEmulatorId?: string) => {
         }
 
         await gameStore.startGame(game.value.id);
+        DiscordRPC.playGame(gameIdStr);
         await invoke("install_game", { gameId: gameIdStr, console: game.value.console, romPath: game.value.rom_path });
         await invoke("play_game", {
             gameId: gameIdStr,
@@ -226,7 +228,7 @@ const handlePlay = async (customEmulatorId?: string) => {
                     </Tooltip>
 
                     <Text variant="label" size="xs" class="c-bottom-panel__subtitle"
-                        >{{ game.category }} | {{ game.region }}</Text
+                        >{{ game.category }} | {{ game.region }} | {{ game.release_year }}</Text
                     >
 
                     <transition name="fade">
@@ -280,6 +282,7 @@ const handlePlay = async (customEmulatorId?: string) => {
                 </div>
             </div>
         </div>
+
         <div v-else class="c-bottom-panel c-bottom-panel--loading">
             <Text variant="muted">Loading game data...</Text>
         </div>
