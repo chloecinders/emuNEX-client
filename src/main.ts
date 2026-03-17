@@ -10,7 +10,11 @@ import { router } from "./router";
 async function checkForUpdates() {
     try {
         const update = await check();
+        console.log("Checked for updates:", update);
+
         if (update) {
+            console.log("Found update", update.version);
+
             await update.downloadAndInstall();
             await relaunch();
         }
