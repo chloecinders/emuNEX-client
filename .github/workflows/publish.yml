@@ -1,143 +1,68 @@
-name: Publish
+name: "publish"
 
 on:
+    workflow_dispatch:
     push:
-        tags:
-            - "v*"
+        branches:
+            - release
 
 jobs:
-    publish:
+    publish-tauri:
         permissions:
             contents: write
-        runs-on: ${{ matrix.platform }}
         strategy:
             fail-fast: false
             matrix:
-                platform: [macos-latest, ubuntu-22.04, windows-latest]
+                include:
+                    - platform: "macos-latest" # for Arm based macs (M1 and above).
+                      args: "--target aarch64-apple-darwin"
+                    - platform: "macos-latest" # for Intel based macs.
+                      args: "--target x86_64-apple-darwin"
+                    - platform: "ubuntu-22.04"
+                      args: ""
+                    - platform: "ubuntu-22.04-arm" # Only available in public repos.
+                      args: ""
+                    - platform: "windows-latest"
+                      args: ""
+
+        runs-on: ${{ matrix.platform }}
         steps:
             - uses: actions/checkout@v4
 
-            - name: install pnpm
-              uses: pnpm/action-setup@v4
-              with:
-                  version: 9
+            - name: install dependencies (ubuntu only)
+              if: matrix.platform == 'ubuntu-22.04' || matrix.platform == 'ubuntu-22.04-arm' # This must match the platform value defined above.
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
             - name: setup node
               uses: actions/setup-node@v4
               with:
                   node-version: lts/*
-                  cache: "pnpm"
+                  cache: "pnpm" # Set this to npm, yarn or pnpm.
 
-            - name: install rust stable
-              uses: dtolnay/rust-toolchain@stable
-
-            - name: cargo cache
-              uses: actions/cache@v4
+            - name: install Rust stable
+              uses: dtolnay/rust-toolchain@stable # Set this to dtolnay/rust-toolchain@nightly
               with:
-                  path: |
-                      ~/.cargo/bin/
-                      ~/.cargo/registry/index/
-                      ~/.cargo/registry/cache/
-                      ~/.cargo/git/db/
-                      src-tauri/target/
-                  key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-                  restore-keys: |
-                      ${{ runner.os }}-cargo-
+                  # Those targets are only used on macos runners so it's in an `if` to slightly speed up windows and linux builds.
+                  targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
-            - name: install dependencies (ubuntu only)
-              if: matrix.platform == 'ubuntu-22.04'
-              run: |
-                  sudo apt-get update
-                  sudo apt-get install -y \
-                    libgtk-3-dev \
-                    libwebkit2gtk-4.1-dev \
-                    libsoup-3.0-dev \
-                    libjavascriptcoregtk-4.1-dev \
-                    libappindicator3-dev \
-                    librsvg2-dev \
-                    patchelf
+            - name: Rust cache
+              uses: swatinem/rust-cache@v2
+              with:
+                  workspaces: "./src-tauri -> target"
 
             - name: install frontend dependencies
-              run: pnpm install
+              # If you don't have `beforeBuildCommand` configured you may want to build your frontend here too.
+              run: yarn install # change this to npm or pnpm depending on which one you use.
 
-            - name: build tauri
-              run: pnpm tauri build
+            - uses: tauri-apps/tauri-action@v0
               env:
-                  TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-                  TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-
-            - name: release
-              uses: softprops/action-gh-release@v2
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               with:
-                  tag_name: ${{ github.ref_name }}
-                  name: "emuNex Client ${{ github.ref_name }}"
-                  body: "See the assets below for the latest installers."
-                  draft: true
-                  files: |
-                      src-tauri/target/release/bundle/msi/*.msi
-                      src-tauri/target/release/bundle/msi/*.msi.zip*
-                      src-tauri/target/release/bundle/dmg/*.dmg
-                      src-tauri/target/release/bundle/appimage/*.AppImage
-                      src-tauri/target/release/bundle/appimage/*.AppImage.tar.gz*
-
-    updater:
-        needs: publish
-        runs-on: ubuntu-latest
-        steps:
-            - name: checkout
-              uses: actions/checkout@v4
-
-            - name: generate latest.json
-              shell: bash
-              env:
-                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-              run: |
-                  TAG=${{ github.ref_name }}
-                  REPO=${{ github.repository }}
-
-                  RELEASE_DATA=$(gh api repos/$REPO/releases)
-                  ASSETS=$(echo "$RELEASE_DATA" | jq -r ".[] | select(.tag_name==\"$TAG\") | .assets")
-
-                  if [ -z "$ASSETS" ] || [ "$ASSETS" == "null" ]; then
-                    echo "Could not find assets for tag $TAG"
-                    exit 1
-                  fi
-
-                  get_url() { echo "$ASSETS" | jq -r ".[] | select(.name | test(\"$1\")) | .url"; }
-                  get_sig() {
-                    SIG_URL=$(get_url "$1")
-                    if [ -n "$SIG_URL" ]; then
-                      curl -sL -H "Authorization: Bearer $GH_TOKEN" "$SIG_URL"
-                    fi
-                  }
-
-                  cat <<EOF > latest.json
-                  {
-                    "version": "$TAG",
-                    "notes": "Release $TAG",
-                    "pub_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-                    "platforms": {
-                      "darwin-x86_64": {
-                        "signature": "$(get_sig "x64.dmg.sig")",
-                        "url": "$(get_url "x64.dmg")"
-                      },
-                      "darwin-aarch64": {
-                        "signature": "$(get_sig "aarch64.dmg.sig")",
-                        "url": "$(get_url "aarch64.dmg")"
-                      },
-                      "linux-x86_64": {
-                        "signature": "$(get_sig "AppImage.tar.gz.sig")",
-                        "url": "$(get_url "AppImage.tar.gz")"
-                      },
-                      "windows-x86_64": {
-                        "signature": "$(get_sig "x64_en-US.msi.zip.sig")",
-                        "url": "$(get_url "x64_en-US.msi.zip")"
-                      }
-                    }
-                  }
-                  EOF
-
-            - name: upload latest.json to release
-              env:
-                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-              run: gh release upload ${{ github.ref_name }} latest.json --clobber
+                  tagName: app-v__VERSION__ # the action automatically replaces \_\_VERSION\_\_ with the app version.
+                  releaseName: "App v__VERSION__"
+                  releaseBody: "See the assets to download this version and install."
+                  releaseDraft: true
+                  prerelease: false
+                  args: ${{ matrix.args }}
