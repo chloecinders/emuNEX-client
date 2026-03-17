@@ -5,6 +5,7 @@ import EmulatorView from "./pages/EmulatorView.vue";
 import IndexView from "./pages/IndexView.vue";
 import LoginView from "./pages/LoginView.vue";
 import SearchView from "./pages/SearchView.vue";
+import SettingsView from "./pages/SettingsView.vue";
 import StorageView from "./pages/StorageView.vue";
 import SystemStorageView from "./pages/SystemStorageView.vue";
 import { useAuthStore } from "./stores/AuthStore";
@@ -45,6 +46,12 @@ const routes = [
         path: "/manage/roms/:console",
         name: "manage_roms_console",
         component: SystemStorageView,
+        meta: { layout: markRaw(ShellLayout) },
+    },
+    {
+        path: "/settings",
+        name: "settings",
+        component: SettingsView,
         meta: { layout: markRaw(ShellLayout) },
     }
 ];

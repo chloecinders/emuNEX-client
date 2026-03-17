@@ -25,6 +25,14 @@ const consoleStore = useConsoleStore();
         @mousedown="emit('mousedown', $event, game.id)"
         @click="emit('click', game.id)"
     >
+        <div
+            v-if="game.region"
+            class="c-game-card__region"
+            :style="{ background: consoleStore.getConsoleColor(game.console) }"
+        >
+            {{ game.region }}
+        </div>
+
         <img :src="useStoragePath(game.image_path)" :alt="game.title" class="c-game-card__cover" />
     </div>
 </template>
@@ -74,6 +82,17 @@ const consoleStore = useConsoleStore();
             box-shadow: 0 0 8px var(--color-primary);
             z-index: 10;
         }
+    }
+
+    &__region {
+        position: absolute;
+        top: 0;
+        right: 0;
+        font-weight: 800;
+        font-size: 0.65rem;
+        padding: var(--spacing-xxs) var(--spacing-xs);
+        border-bottom-left-radius: var(--radius-md);
+        color: #fff;
     }
 
     &__cover {

@@ -60,7 +60,6 @@ const handleSetDefault = async (consoleName: string, id: string) => {
 };
 
 const addCustomEmulator = (consoleName: string) => {
-    console.log(`Adding custom emulator for ${consoleName}`);
     const id = `custom-${Date.now()}`;
     newlyAddedIds.value.add(id);
     const newEmulator: Emulator = {
@@ -155,9 +154,9 @@ const installItems = computed<InstallItem[]>(() => {
 <template>
     <div class="c-emulator-management">
         <div class="c-emulator-management__header-wrap">
-            <div class="c-emulator-management__badge">
-                <Heading :level="1" class="c-emulator-management__title">Manage Emulators</Heading>
-            </div>
+            <Heading :level="2" color="primary" is-badge class="c-emulator-management__badge">
+                Manage Emulators
+            </Heading>
         </div>
 
         <div
@@ -171,15 +170,12 @@ const installItems = computed<InstallItem[]>(() => {
         <div v-else class="c-emulator-management__content">
             <div v-for="consoleName in consoles" :key="consoleName" class="c-console-section">
                 <div class="c-console-section__header">
-                    <div class="c-console-section__title-row">
-                        <Heading :level="2" class="c-console-section__title">
-                            {{ consoleName.toUpperCase() }}
-                        </Heading>
-
+                    <Heading :level="2" color="primary" is-badge class="c-console-section__title">
+                        {{ consoleName.toUpperCase() }}
                         <span class="c-console-section__count"
                             >{{ (emulatorStore.emulators[consoleName] || []).length }} configured</span
                         >
-                    </div>
+                    </Heading>
 
                     <div class="c-console-section__actions">
                         <PillButton @click="addCustomEmulator(consoleName)"> <Plus /> Add Custom </PillButton>
@@ -359,20 +355,7 @@ const installItems = computed<InstallItem[]>(() => {
     }
 
     &__badge {
-        display: inline-flex;
-        align-items: center;
-        gap: var(--spacing-md);
-        background: var(--color-surface-variant);
-        padding: var(--spacing-sm) var(--spacing-md);
-        border-radius: var(--radius-full);
-        border: 1px solid var(--color-border);
-    }
-
-    &__title {
-        color: var(--color-primary);
-        font-size: 1.1rem;
-        font-weight: 800;
-        margin: 0;
+        margin-top: calc(var(--spacing-sm) * -1);
     }
 
     &__loading {
@@ -394,21 +377,9 @@ const installItems = computed<InstallItem[]>(() => {
         margin-bottom: var(--spacing-lg);
     }
 
-    &__title-row {
+    &__title {
         display: inline-flex;
         align-items: center;
-        gap: var(--spacing-md);
-        background: var(--color-surface-variant);
-        padding: var(--spacing-sm) var(--spacing-md);
-        border-radius: var(--radius-full);
-        border: 1px solid var(--color-border);
-    }
-
-    &__title {
-        color: var(--color-primary);
-        font-size: 1.1rem;
-        font-weight: 800;
-        margin: 0;
     }
 
     &__count {
@@ -442,7 +413,7 @@ const installItems = computed<InstallItem[]>(() => {
 }
 
 .c-emulator-card {
-    background: #ffffff;
+    background: var(--color-surface-variant);
     border: 2px solid var(--color-border);
     border-radius: var(--radius-lg);
     padding: var(--spacing-lg);
@@ -474,7 +445,7 @@ const installItems = computed<InstallItem[]>(() => {
     }
 
     &--default {
-        background: #ffffff;
+        background: var(--color-surface-variant);
     }
 
     &__header {

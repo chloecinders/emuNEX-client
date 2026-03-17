@@ -10,10 +10,12 @@ import DefaultLayout from "./layouts/DefaultLayout.vue";
 import { router } from "./router";
 import { useAuthStore } from "./stores/AuthStore";
 import { useGameStore } from "./stores/GameStore";
+import { useThemeStore } from "./stores/ThemeStore";
 
 const route = useRoute();
 const gameStore = useGameStore();
 const authStore = useAuthStore();
+useThemeStore();
 
 const layout = computed(() => {
     return route.meta.layout || DefaultLayout;
@@ -44,6 +46,7 @@ watch(
             <div v-else-if="authStore.connectionError && route.name && route.name !== 'login'" class="c-app-dimmer">
                 <div class="c-dimmer-content">
                     <Heading :level="3">Connection Error</Heading>
+
                     <Text variant="error" style="display: block; margin: var(--spacing-md) 0 var(--spacing-lg)">
                         {{ authStore.connectionError }}
                     </Text>
@@ -54,6 +57,7 @@ watch(
                     </div>
                 </div>
             </div>
+
             <div v-else-if="gameStore.isDimmed" class="c-app-dimmer">
                 <div class="c-dimmer-content">
                     <p>A game is currently active</p>

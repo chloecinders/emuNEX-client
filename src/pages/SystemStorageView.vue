@@ -90,10 +90,10 @@ const executeDeleteSave = async () => {
 <template>
     <div class="c-system-detail">
         <div class="c-system-detail__header-wrap">
-            <div class="c-system-detail__badge">
-                <Heading :level="2" class="c-system-detail__title">{{ consoleName.toUpperCase() }} Storage</Heading>
+            <Heading :level="2" color="primary" is-badge class="c-system-detail__badge">
+                {{ consoleName.toUpperCase() }} Storage
                 <span class="c-system-detail__count">{{ systemRoms.length }} Installed</span>
-            </div>
+            </Heading>
 
             <PillButton @click="router.push('/manage/roms')"> <ArrowLeft /> Back </PillButton>
         </div>
@@ -180,20 +180,7 @@ const executeDeleteSave = async () => {
     }
 
     &__badge {
-        display: inline-flex;
-        align-items: center;
-        gap: var(--spacing-md);
-        background: var(--color-surface-variant);
-        padding: var(--spacing-sm) var(--spacing-md);
-        border-radius: var(--radius-full);
-        border: 1px solid var(--color-border);
-    }
-
-    &__title {
-        color: var(--color-primary);
-        font-size: 1.1rem;
-        font-weight: 800;
-        margin: 0;
+        margin-top: calc(var(--spacing-sm) * -1);
     }
 
     &__count {

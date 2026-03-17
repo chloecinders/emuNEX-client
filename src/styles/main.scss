@@ -3,6 +3,25 @@
 
 * {
   box-sizing: border-box;
+
+  &::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: var(--color-scrollbar-track);
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: var(--color-scrollbar-thumb);
+    border-radius: var(--radius-full);
+    border: 3px solid var(--color-background);
+
+    &:hover {
+      background: var(--color-border-hover);
+    }
+  }
 }
 
 body {
@@ -11,7 +30,7 @@ body {
   font-family: 'Inter', sans-serif;
   color: var(--color-text);
   background-color: var(--color-background);
-  background-image: radial-gradient(#dcdcdc var(--spacing-xxs), transparent var(--spacing-xxs));
+  background-image: radial-gradient(var(--color-dot-pattern) var(--spacing-xxs), transparent var(--spacing-xxs));
   background-size: 20px 20px;
   background-attachment: fixed;
   overflow: hidden;
@@ -79,6 +98,7 @@ h4 {
     opacity: 0;
     transform: translateY(10px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);

@@ -35,6 +35,9 @@ importers:
       pinia:
         specifier: ^3.0.4
         version: 3.0.4(typescript@5.6.3)(vue@3.5.30(typescript@5.6.3))
+      tauri-plugin-drpc:
+        specifier: ^1.0.3
+        version: 1.0.3(typescript@5.6.3)
       vue:
         specifier: ^3.5.13
         version: 3.5.30(typescript@5.6.3)
@@ -902,6 +905,11 @@ packages:
     resolution: {integrity: sha512-gAQ9qrUN/UCypHtGFbbe7Rc/f9bzO88IwrG8TDo/aMKAApKyD6E3W4Cm0EfhfBb6Z6SKt59tTCTfD+n1xmAvMg==}
     engines: {node: '>=16.0.0'}
 
+  tauri-plugin-drpc@1.0.3:
+    resolution: {integrity: sha512-vl5dXhjKbl7+Nf9veW12usdmIUtZXwEf91SzxQPZlbRRJ/sjizbbQlnkUTtx6baJuGzz0KXXgP9xUhF39BdiXQ==}
+    peerDependencies:
+      typescript: ^5.0.0
+
   tinyglobby@0.2.15:
     resolution: {integrity: sha512-j2Zq4NyQYG5XMST4cbs02Ak8iJUdxRM0XI5QyxXuZOzKOINmWurp3smXu3y5wDcJrptwpSjgXHzIQxR0omXljQ==}
     engines: {node: '>=12.0.0'}
@@ -1677,6 +1685,10 @@ snapshots:
       sync-message-port: 1.2.0
 
   sync-message-port@1.2.0: {}
+
+  tauri-plugin-drpc@1.0.3(typescript@5.6.3):
+    dependencies:
+      typescript: 5.6.3
 
   tinyglobby@0.2.15:
     dependencies:

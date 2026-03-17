@@ -29,6 +29,7 @@ const app = createApp(App);
 const pinia = createPinia();
 app.use(pinia);
 
+import { DiscordRPC } from "./lib/rpc";
 import { useAuthStore } from "./stores/AuthStore";
 
 const authStore = useAuthStore(pinia);
@@ -87,3 +88,5 @@ if (domain) {
         });
     }
 }
+
+await DiscordRPC.start("1483456544556449842");

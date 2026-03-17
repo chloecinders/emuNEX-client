@@ -64,9 +64,9 @@ const navigateToConsole = (consoleName: string) => {
 <template>
     <div class="c-rom-management">
         <div class="c-rom-management__header-wrap">
-            <div class="c-rom-management__badge">
-                <Heading :level="1" class="c-rom-management__title">Storage</Heading>
-            </div>
+            <Heading :level="2" color="primary" is-badge class="c-rom-management__badge">
+                Storage
+            </Heading>
         </div>
 
         <div v-if="romStore.loading" class="c-rom-management__loading">
@@ -98,14 +98,12 @@ const navigateToConsole = (consoleName: string) => {
                     <div class="c-console-card__content">
                         <div class="c-console-card__info">
                             <div class="c-console-card__badge-wrapper">
-                                <div class="c-console-card__badge">
-                                    <Heading :level="2" class="c-console-card__title">
-                                        {{ consoleName.toUpperCase() }}
-                                    </Heading>
+                                <Heading :level="2" color="primary" class="c-console-card__badge">
+                                    {{ consoleName.toUpperCase() }}
                                     <span class="c-console-card__count"
                                         >{{ groupedRoms[consoleName].length }} Installed</span
                                     >
-                                </div>
+                                </Heading>
                             </div>
                             <Text variant="muted" size="sm"
                                 >Total space used: {{ getConsoleTotalSize(consoleName) }}</Text
@@ -131,20 +129,7 @@ const navigateToConsole = (consoleName: string) => {
     }
 
     &__badge {
-        display: inline-flex;
-        align-items: center;
-        gap: var(--spacing-md);
-        background: var(--color-surface-variant);
-        padding: var(--spacing-sm) var(--spacing-md);
-        border-radius: var(--radius-full);
-        border: 1px solid var(--color-border);
-    }
-
-    &__title {
-        color: var(--color-primary);
-        font-size: 1.1rem;
-        font-weight: 800;
-        margin: 0;
+        margin-top: calc(var(--spacing-sm) * -1);
     }
 
     &__loading,
@@ -210,12 +195,6 @@ const navigateToConsole = (consoleName: string) => {
         margin-bottom: var(--spacing-sm);
     }
 
-    &__title {
-        color: var(--color-primary);
-        font-size: 1.1rem;
-        font-weight: 800;
-        margin: 0;
-    }
 
     &__count {
         font-size: 0.75rem;
