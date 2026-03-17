@@ -95,15 +95,19 @@ jobs:
                   TAG=${{ github.ref_name }}
                   REPO=${{ github.repository }}
 
-                  # Fetch asset URLs from the release
-                  ASSETS=$(gh release view $TAG --repo $REPO --json assets --jq '.assets')
+                  RELEASE_DATA=$(gh api repos/$REPO/releases)
+                  ASSETS=$(echo "$RELEASE_DATA" | jq -r ".[] | select(.tag_name==\"$TAG\") | .assets")
 
-                  # Helper to find specific asset URLs
+                  if [ -z "$ASSETS" ] || [ "$ASSETS" == "null" ]; then
+                    echo "Could not find assets for tag $TAG"
+                    exit 1
+                  fi
+
                   get_url() { echo "$ASSETS" | jq -r ".[] | select(.name | test(\"$1\")) | .url"; }
                   get_sig() {
                     SIG_URL=$(get_url "$1")
                     if [ -n "$SIG_URL" ]; then
-                      curl -sL "$SIG_URL"
+                      curl -sL -H "Authorization: Bearer $GH_TOKEN" "$SIG_URL"
                     fi
                   }
 
