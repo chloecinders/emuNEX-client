@@ -35,6 +35,14 @@ const libraryStats = computed(() => {
     return gameStore.library.find((i) => i.id === game.value?.id);
 });
 
+const languageList = computed(() => {
+    if (!game.value || !game.value.languages) return "";
+    if (Array.isArray(game.value.languages)) {
+        return game.value.languages.join(", ");
+    }
+    return String(game.value.languages);
+});
+
 const formatDate = (dateString: string | null) => {
     if (!dateString) return "Never";
     return new Date(dateString).toLocaleDateString();
@@ -44,6 +52,18 @@ onMounted(async () => {
     consoleStore.fetchConsoles();
     await listen("close-prevented", (event) => {
         alert(event.payload);
+    });
+
+    window.addEventListener("request-play-game", (event: Event) => {
+        const customEvent = event as CustomEvent<{ gameId: string }>;
+        if (!customEvent.detail?.gameId || !game.value || customEvent.detail.gameId !== game.value.id) return;
+        handlePlay();
+    });
+
+    window.addEventListener("request-install-game", (event: Event) => {
+        const customEvent = event as CustomEvent<{ gameId: string }>;
+        if (!customEvent.detail?.gameId || !game.value || customEvent.detail.gameId !== game.value.id) return;
+        handleInstall();
     });
 });
 
@@ -231,6 +251,15 @@ const handlePlay = async (customEmulatorId?: string) => {
                         >{{ game.category }} | {{ game.region }} | {{ game.release_year }}</Text
                     >
 
+                    <Text
+                        v-if="languageList"
+                        variant="muted"
+                        size="xs"
+                        class="c-bottom-panel__languages"
+                    >
+                        Languages: {{ languageList }}
+                    </Text>
+
                     <transition name="fade">
                         <div v-if="libraryStats" class="c-bottom-panel__meta">
                             <span class="c-bottom-panel__stat">
@@ -266,7 +295,7 @@ const handlePlay = async (customEmulatorId?: string) => {
 
                     <Button
                         v-if="isReadyToPlay"
-                        color="blue"
+                        color="primary"
                         full
                         @click="handlePlay()"
                         :disabled="gameStore.isLaunching || gameStore.isPlaying"
@@ -399,6 +428,10 @@ const handlePlay = async (customEmulatorId?: string) => {
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+    }
+
+    &__languages {
+        margin-top: 2px;
     }
 
     &__meta {

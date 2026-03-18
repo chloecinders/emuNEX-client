@@ -1,33 +1,31 @@
 import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
-import { relaunch } from "@tauri-apps/plugin-process";
 import { check } from "@tauri-apps/plugin-updater";
 import { createPinia } from "pinia";
 import { createApp } from "vue";
 import App from "./App.vue";
 import { addSavedDomain, getDomainStore, getGlobalStore, normalizeDomain } from "./lib/store";
 import { router } from "./router";
+import { useUpdateStore } from "./stores/UpdateStore";
 
-async function checkForUpdates() {
+const app = createApp(App);
+const pinia = createPinia();
+app.use(pinia);
+
+async function checkForUpdatesOnStartup() {
     try {
         const update = await check();
         console.log("Checked for updates:", update);
 
         if (update) {
-            console.log("Found update", update.version);
-
-            await update.downloadAndInstall();
-            await relaunch();
+            const updateStore = useUpdateStore(pinia);
+            updateStore.setAvailableUpdate(update.version);
         }
     } catch (e) {
-        console.warn("Couldn't check/download updates:", e);
+        console.warn("Couldn't check for updates:", e);
     }
 }
 
-await checkForUpdates();
-
-const app = createApp(App);
-const pinia = createPinia();
-app.use(pinia);
+await checkForUpdatesOnStartup();
 
 import { DiscordRPC } from "./lib/rpc";
 import { useAuthStore } from "./stores/AuthStore";

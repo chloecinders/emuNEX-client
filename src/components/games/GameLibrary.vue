@@ -11,6 +11,7 @@ import PillButton from "../ui/PillButton.vue";
 import Spinner from "../ui/Spinner.vue";
 import Text from "../ui/Text.vue";
 import GameCard from "./GameCard.vue";
+import ReportGameIssue from "../modals/ReportGameIssue.vue";
 
 const vFocus = {
     mounted: (el: HTMLElement) => nextTick(() => el.focus()),
@@ -19,7 +20,7 @@ const vFocus = {
 const gameStore = useGameStore();
 const consoleStore = useConsoleStore();
 
-const searchQuery = ref("");
+const searchQuery = defineModel<string>("searchQuery", { default: "" });
 const isCreatingShelf = ref(false);
 const newShelfName = ref("");
 const editingShelfId = ref<string | null>(null);
@@ -273,16 +274,68 @@ async function onMouseUp(event: MouseEvent) {
     draggedGameId.value = null;
     sourceShelfId.value = null;
 }
+
+const contextMenu = ref({ show: false, x: 0, y: 0, gameId: null as string | null });
+
+const closeContextMenu = () => {
+    contextMenu.value.show = false;
+};
+
+const onContextMenu = (event: MouseEvent, gameId: string) => {
+    window.dispatchEvent(new CustomEvent("close-all-context-menus"));
+
+    contextMenu.value = {
+        show: true,
+        x: event.clientX,
+        y: event.clientY,
+        gameId,
+    };
+    document.addEventListener("click", closeContextMenu, { once: true });
+};
+
+window.addEventListener("close-all-context-menus", () => {
+    closeContextMenu();
+});
+
+window.addEventListener(
+    "scroll",
+    () => {
+        closeContextMenu();
+    },
+    true,
+);
+
+const playFromContextMenu = () => {
+    if (!contextMenu.value.gameId) return;
+    const gameId = contextMenu.value.gameId;
+    const installed = gameStore.installedGameIds.includes(gameId);
+
+    gameStore.currentSelectedGame = gameId;
+
+    if (!installed) {
+        window.dispatchEvent(new CustomEvent("request-install-game", { detail: { gameId } }));
+    } else {
+        window.dispatchEvent(new CustomEvent("request-play-game", { detail: { gameId } }));
+    }
+
+    contextMenu.value.show = false;
+};
+
+const onDoubleClickGame = (gameId: string) => {
+    gameStore.currentSelectedGame = gameId;
+    window.dispatchEvent(new CustomEvent('request-play-game', { detail: { gameId } }));
+};
+
+const reportGameModel = ref({ gameId: "", showModal: false });
+
+const openReportModal = () => {
+    reportGameModel.value.showModal = true;
+    reportGameModel.value.gameId = contextMenu.value.gameId || "";
+};
 </script>
 
 <template>
-    <div class="c-library-wrapper">
-        <Teleport to="#header-tools">
-            <div class="c-search">
-                <input v-model="searchQuery" placeholder="Search library..." class="c-input" />
-            </div>
-        </Teleport>
-
+    <div class="c-library-wrapper" @contextmenu="closeContextMenu">
         <div class="c-library">
             <Modal :show="isCreatingShelf" title="Create New Shelf" @close="isCreatingShelf = false">
                 <div class="c-modal-form">
@@ -296,7 +349,7 @@ async function onMouseUp(event: MouseEvent) {
 
                     <div class="c-modal-form__actions">
                         <Button color="grey" @click="isCreatingShelf = false">Cancel</Button>
-                        <Button color="blue" @click="handleCreateShelf">Create</Button>
+                        <Button color="primary" @click="handleCreateShelf">Create</Button>
                     </div>
                 </div>
             </Modal>
@@ -313,6 +366,11 @@ async function onMouseUp(event: MouseEvent) {
                     </div>
                 </div>
             </Modal>
+
+            <ReportGameIssue
+                :game-id="reportGameModel.gameId"
+                v-model:show-modal="reportGameModel.showModal"
+            />
 
             <div v-if="gameStore.loading && !gameStore.shelves.length" class="c-library__loading">
                 <Spinner size="lg" />
@@ -366,6 +424,8 @@ async function onMouseUp(event: MouseEvent) {
                             :is-dragging="isDragging && draggedGameId === game.id"
                             @mousedown="startDrag($event, game.id, null)"
                             @click="gameStore.currentSelectedGame = game.id"
+                            @dblclick="onDoubleClickGame(game.id)"
+                            @contextmenu.stop.prevent="onContextMenu($event, game.id)"
                         />
                     </div>
                     <div v-else class="c-shelf__empty-dropzone" style="display: block">
@@ -406,6 +466,8 @@ async function onMouseUp(event: MouseEvent) {
                             :is-dragging="isDragging && draggedGameId === game.id"
                             @mousedown="startDrag($event, game.id, null)"
                             @click="gameStore.currentSelectedGame = game.id"
+                            @dblclick="onDoubleClickGame(game.id)"
+                            @contextmenu.stop.prevent="onContextMenu($event, game.id)"
                         />
                     </div>
                 </div>
@@ -461,6 +523,8 @@ async function onMouseUp(event: MouseEvent) {
                                 "
                                 @mousedown="startDrag($event, game.id, shelf.id)"
                                 @click="gameStore.currentSelectedGame = game.id"
+                                @dblclick="onDoubleClickGame(game.id)"
+                                @contextmenu.stop.prevent="onContextMenu($event, game.id)"
                             />
                         </div>
                     </template>
@@ -487,6 +551,8 @@ async function onMouseUp(event: MouseEvent) {
                             :key="'search-' + game.id"
                             :game="game"
                             @click="gameStore.currentSelectedGame = game.id"
+                            @dblclick="onDoubleClickGame(game.id)"
+                            @contextmenu.stop.prevent="onContextMenu($event, game.id)"
                         />
                     </div>
 
@@ -507,6 +573,19 @@ async function onMouseUp(event: MouseEvent) {
                 </div>
             </div>
         </div>
+
+        <div
+            v-if="contextMenu.show"
+            class="c-context-menu"
+            :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }"
+        >
+            <div class="c-context-menu__primary">
+                <Button color="primary" size="sm" full @click="playFromContextMenu">
+                    {{ contextMenu.gameId && gameStore.installedGameIds.includes(contextMenu.gameId) ? "Play" : "Install" }}
+                </Button>
+            </div>
+            <button class="c-context-menu__item" @click="openReportModal">Report Issue...</button>
+        </div>
     </div>
 </template>
 
@@ -518,36 +597,6 @@ async function onMouseUp(event: MouseEvent) {
         display: flex;
         justify-content: center;
         padding: var(--spacing-xxl);
-    }
-}
-
-.c-search {
-    flex: 1;
-    max-width: 480px;
-    display: flex;
-    align-items: center;
-}
-
-.c-input {
-    width: 100%;
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-full);
-    padding: var(--spacing-sm) var(--spacing-lg);
-    font-size: 0.85rem;
-    font-weight: 800;
-    outline: none;
-    transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1);
-    color: var(--color-text);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-
-    &:focus {
-        border-color: var(--color-primary);
-        box-shadow: 0 0 0 4px rgba(107, 92, 177, 0.1);
-    }
-
-    &--full {
-        width: 100%;
     }
 }
 
@@ -656,6 +705,58 @@ async function onMouseUp(event: MouseEvent) {
 
     &__empty-dropzone {
         display: none;
+    }
+}
+
+.c-context-menu {
+    position: fixed;
+    z-index: 999999;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-lg);
+    padding: var(--spacing-xs) 0 var(--spacing-xxs) 0;
+    min-width: 140px;
+
+    &__primary {
+        padding: var(--spacing-xxs) var(--spacing-xxs) 0 var(--spacing-xxs);
+
+        :deep(.c-button) {
+            width: 100%;
+        }
+    }
+
+    &__item {
+        display: block;
+        width: 100%;
+        text-align: left;
+        background: transparent;
+        border: none;
+        padding: var(--spacing-sm) var(--spacing-md);
+        color: var(--color-text);
+        cursor: pointer;
+        font-family: inherit;
+        font-size: 0.9rem;
+
+        &:hover {
+            background: var(--color-surface-variant);
+        }
+    }
+}
+
+.c-report-notice {
+    padding: var(--spacing-sm) var(--spacing-md);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border);
+
+    &--success {
+        border-color: color-mix(in srgb, var(--color-success, #22c55e) 45%, var(--color-border));
+        background: color-mix(in srgb, var(--color-success, #22c55e) 12%, transparent);
+    }
+
+    &--error {
+        border-color: color-mix(in srgb, var(--color-danger) 45%, var(--color-border));
+        background: color-mix(in srgb, var(--color-danger) 12%, transparent);
     }
 }
 </style>

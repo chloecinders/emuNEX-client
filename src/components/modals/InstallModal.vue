@@ -61,7 +61,7 @@ const formatBytes = (bytes: number, decimals = 2) => {
 
             <div class="c-install-modal__actions">
                 <Button color="grey" @click="emit('close')">Cancel</Button>
-                <Button color="blue" @click="emit('confirm')" :loading="loading">
+                <Button color="primary" @click="emit('confirm')" :loading="loading">
                     <Download :size="16" /> Install
                 </Button>
             </div>

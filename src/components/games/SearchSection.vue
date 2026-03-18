@@ -1,14 +1,17 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
-import GameList from "../components/games/GameList.vue";
-import Select from "../components/ui/Select.vue";
-import { useGameStore, type PartialGame } from "../stores/GameStore";
-import { useMetadataStore } from "../stores/MetadataStore";
+import GameList from "./GameList.vue";
+import Select from "../ui/Select.vue";
+import { useGameStore, type PartialGame } from "../../stores/GameStore";
+import { useMetadataStore } from "../../stores/MetadataStore";
+
+const props = defineProps<{
+    searchQuery: string;
+}>();
 
 const gameStore = useGameStore();
 const metaStore = useMetadataStore();
 
-const searchQuery = ref("");
 const searchResults = ref<PartialGame[]>([]);
 const isSearching = ref(false);
 
@@ -62,7 +65,7 @@ onMounted(async () => {
 
 async function performSearch() {
     try {
-        searchResults.value = await gameStore.searchGames(searchQuery.value, {
+        searchResults.value = await gameStore.searchGames(props.searchQuery, {
             category: selectedCategory.value || null,
             console: selectedConsole.value || null,
         });
@@ -71,10 +74,10 @@ async function performSearch() {
     }
 }
 
-watch([searchQuery, selectedCategory, selectedConsole], () => {
+watch([() => props.searchQuery, selectedCategory, selectedConsole], () => {
     clearTimeout(timeout);
 
-    if (!searchQuery.value.trim() && !selectedCategory.value && !selectedConsole.value) {
+    if (!props.searchQuery.trim() && !selectedCategory.value && !selectedConsole.value) {
         searchResults.value = [];
         isSearching.value = false;
         return;
@@ -87,66 +90,58 @@ watch([searchQuery, selectedCategory, selectedConsole], () => {
 </script>
 
 <template>
-    <div class="c-search-wrapper">
-        <Teleport to="#header-tools">
-            <div class="c-search-view__bar-container">
-                <input v-model="searchQuery" placeholder="Search library..." class="c-search-view__input" autofocus />
-            </div>
-        </Teleport>
-
-        <div class="c-search-view">
-            <div class="c-search-view__filter-bar">
-                <div class="c-search-view__filter-item">
-                    <Select
-                        v-model="selectedCategory"
-                        :options="categoryOptions"
-                        label="Category"
-                        placeholder="All Categories"
-                    />
-                </div>
-
-                <div class="c-search-view__filter-item">
-                    <Select
-                        v-model="selectedConsole"
-                        :options="consoleOptions"
-                        label="Console"
-                        placeholder="All Consoles"
-                    />
-                </div>
+    <div class="c-search-section">
+        <div class="c-search-section__filter-bar">
+            <div class="c-search-section__filter-item">
+                <Select
+                    v-model="selectedCategory"
+                    :options="categoryOptions"
+                    label="Category"
+                    placeholder="All Categories"
+                />
             </div>
 
-            <div v-if="searchQuery || selectedCategory || selectedConsole" class="c-search-view__results-section">
-                <h2 class="c-search-view__group-title">Search Results</h2>
+            <div class="c-search-section__filter-item">
+                <Select
+                    v-model="selectedConsole"
+                    :options="consoleOptions"
+                    label="Console"
+                    placeholder="All Consoles"
+                />
+            </div>
+        </div>
 
-                <div v-if="isSearching" class="c-search-view__loading-overlay">
-                    <div class="c-search-view__spinner"></div>
-                </div>
+        <div v-if="searchQuery || selectedCategory || selectedConsole" class="c-search-section__results-section">
+            <h2 class="c-search-section__group-title">Server Results</h2>
 
-                <div v-else-if="!searchResults.length" class="c-search-view__prompt">
-                    <p>No titles found for your filters</p>
-                </div>
-
-                <GameList v-else :games="searchResults" />
+            <div v-if="isSearching" class="c-search-section__loading-overlay">
+                <div class="c-search-section__spinner"></div>
             </div>
 
-            <div v-else class="c-search-view__overview-section">
-                <div v-if="gameStore.loading" class="c-search-view__loading-overlay">
-                    <div class="c-search-view__spinner"></div>
-                </div>
-
-                <template v-else>
-                    <div v-for="group in orderedGroups" :key="group.title" class="c-search-view__group-block">
-                        <h2 class="c-search-view__group-title">{{ group.title }}</h2>
-                        <GameList :games="group.games" />
-                    </div>
-                </template>
+            <div v-else-if="!searchResults.length" class="c-search-section__prompt">
+                <p>No titles found on the server for your filters</p>
             </div>
+
+            <GameList v-else :games="searchResults" />
+        </div>
+
+        <div v-else class="c-search-section__overview-section">
+            <div v-if="gameStore.loading" class="c-search-section__loading-overlay">
+                <div class="c-search-section__spinner"></div>
+            </div>
+
+            <template v-else>
+                <div v-for="group in orderedGroups" :key="group.title" class="c-search-section__group-block">
+                    <h2 class="c-search-section__group-title">{{ group.title }}</h2>
+                    <GameList :games="group.games" />
+                </div>
+            </template>
         </div>
     </div>
 </template>
 
 <style lang="scss" scoped>
-.c-search-view {
+.c-search-section {
     padding: var(--spacing-md) var(--spacing-lg) var(--spacing-xl) var(--spacing-lg);
 
     &__filter-bar {
@@ -179,33 +174,6 @@ watch([searchQuery, selectedCategory, selectedConsole], () => {
         border-radius: var(--radius-full);
         width: fit-content;
         border: 1px solid var(--color-border);
-    }
-
-    &__bar-container {
-        flex: 1;
-        max-width: 480px;
-        display: flex;
-        align-items: center;
-    }
-
-    &__input {
-        width: 100%;
-        background: var(--color-surface);
-        border: 1px solid var(--color-border);
-        border-radius: var(--radius-full);
-        padding: var(--spacing-sm) var(--spacing-lg);
-        font-size: 0.85rem;
-        font-weight: 800;
-        outline: none;
-        transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1);
-        color: var(--color-text);
-        box-shadow: var(--shadow-subtle);
-
-        &:focus {
-            border-color: var(--color-primary);
-            box-shadow: 0 0 0 4px rgba(107, 92, 177, 0.1);
-            transform: translateY(-1px);
-        }
     }
 
     &__loading-overlay {

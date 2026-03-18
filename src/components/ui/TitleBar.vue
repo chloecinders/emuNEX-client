@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { Window } from "@tauri-apps/api/window";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { CircleHelp } from "lucide-vue-next";
+import { ref } from "vue";
 const appWindow = new Window("main");
 
 const minimize = () => appWindow.minimize();
@@ -12,6 +15,22 @@ const toggleMaximize = async () => {
     }
 };
 const close = () => appWindow.close();
+
+const helpMenu = ref({ show: false, x: 0, y: 0 });
+const closeHelpMenu = () => (helpMenu.value.show = false);
+const onHelpClick = (event: MouseEvent) => {
+    event.stopPropagation();
+    helpMenu.value = { show: true, x: event.clientX, y: event.clientY };
+    document.addEventListener("click", closeHelpMenu, { once: true });
+};
+
+const bugReportUrl = "https://github.com/chloecinders/emuNEX-client/issues/new?template=bug_report.md";
+const featureRequestUrl = "https://github.com/chloecinders/emuNEX-client/issues/new?template=feature_request.md";
+
+const openIssueLink = async (url: string) => {
+    helpMenu.value.show = false;
+    await openUrl(url);
+};
 </script>
 
 <template>
@@ -21,21 +40,34 @@ const close = () => appWindow.close();
             <span class="c-titlebar__title">client</span>
         </div>
         <div class="c-titlebar__controls">
+            <button class="c-titlebar__btn" @click="onHelpClick" title="Help">
+                <CircleHelp class="c-titlebar__lucide-icon" :size="16" />
+            </button>
             <button class="c-titlebar__btn" @click="minimize" title="Minimize">
-                <svg width="10" height="1" viewBox="0 0 10 1" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <svg class="c-titlebar__control-svg" width="10" height="1" viewBox="0 0 10 1" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <line y1="0.5" x2="10" y2="0.5" stroke="currentColor" stroke-width="1" />
                 </svg>
             </button>
             <button class="c-titlebar__btn" @click="toggleMaximize" title="Maximize">
-                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <svg class="c-titlebar__control-svg" width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <rect x="0.5" y="0.5" width="9" height="9" stroke="currentColor" stroke-width="1" />
                 </svg>
             </button>
             <button class="c-titlebar__btn c-titlebar__btn--close" @click="close" title="Close">
-                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <svg class="c-titlebar__control-svg" width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1" stroke-linecap="round" />
                 </svg>
             </button>
+        </div>
+
+        <div
+            v-if="helpMenu.show"
+            class="c-titlebar__help-menu"
+            :style="{ left: helpMenu.x + 'px', top: helpMenu.y + 'px' }"
+            @click.stop
+        >
+            <button class="c-titlebar__help-item" @click="openIssueLink(bugReportUrl)">Report a bug…</button>
+            <button class="c-titlebar__help-item" @click="openIssueLink(featureRequestUrl)">Suggest a feature…</button>
         </div>
     </div>
 </template>
@@ -61,6 +93,7 @@ const close = () => appWindow.close();
         padding-left: var(--radius-md);
         flex-grow: 1;
         height: 100%;
+        pointer-events: none;
     }
 
     &__logo {
@@ -109,7 +142,44 @@ const close = () => appWindow.close();
 
         svg {
             display: block;
-            shape-rendering: crispEdges;
+        }
+    }
+
+    &__control-svg {
+        shape-rendering: crispEdges;
+    }
+
+    &__lucide-icon {
+        display: block;
+        shape-rendering: geometricPrecision;
+    }
+
+    &__help-menu {
+        position: fixed;
+        z-index: 10001;
+        background: var(--color-surface);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-sm);
+        box-shadow: var(--shadow-lg);
+        padding: var(--spacing-xxs) 0;
+        min-width: 220px;
+        transform: translate(-100%, 10px);
+    }
+
+    &__help-item {
+        display: block;
+        width: 100%;
+        text-align: left;
+        background: transparent;
+        border: none;
+        padding: var(--spacing-sm) var(--spacing-md);
+        color: var(--color-text);
+        cursor: pointer;
+        font-family: inherit;
+        font-size: 0.9rem;
+
+        &:hover {
+            background: var(--color-surface-variant);
         }
     }
 }

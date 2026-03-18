@@ -34,6 +34,7 @@ export type Game = {
     image_path: string;
     file_size_bytes?: number;
     release_year: number;
+    languages?: string[] | null;
 };
 
 interface FetchFilters {

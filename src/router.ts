@@ -4,7 +4,7 @@ import ShellLayout from "./layouts/ShellLayout.vue";
 import EmulatorView from "./pages/EmulatorView.vue";
 import IndexView from "./pages/IndexView.vue";
 import LoginView from "./pages/LoginView.vue";
-import SearchView from "./pages/SearchView.vue";
+
 import SettingsView from "./pages/SettingsView.vue";
 import StorageView from "./pages/StorageView.vue";
 import SystemStorageView from "./pages/SystemStorageView.vue";
@@ -24,12 +24,7 @@ const routes = [
         component: IndexView,
         meta: { layout: markRaw(ShellLayout) },
     },
-    {
-        path: "/search",
-        name: "search",
-        component: SearchView,
-        meta: { layout: markRaw(ShellLayout) },
-    },
+
     {
         path: "/manage/emulators",
         name: "manage_emulators",

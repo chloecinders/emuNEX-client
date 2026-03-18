@@ -106,7 +106,7 @@ const handleConnect = async () => {
                     <Input v-model="serverUrl" label="Server Address" placeholder="https://emunex.example.com" />
 
                     <div class="c-login__actions">
-                        <Button type="submit" color="blue" :disabled="isConnecting || !serverUrl">
+                        <Button type="submit" color="primary" :disabled="isConnecting || !serverUrl">
                             {{ isConnecting ? "CONNECTING..." : "CONNECT" }}
                         </Button>
                     </div>

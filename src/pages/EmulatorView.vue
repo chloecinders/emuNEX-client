@@ -222,7 +222,7 @@ const installItems = computed<InstallItem[]>(() => {
                                         >Cancel</Button
                                     >
                                     <Button
-                                        color="blue"
+                                        color="primary"
                                         size="sm"
                                         @click="saveEmulatorChanges(consoleName, emulator.id)"
                                     >
@@ -313,7 +313,7 @@ const installItems = computed<InstallItem[]>(() => {
                             </div>
                             <Text variant="muted" size="sm">Platform: {{ se.platform }}</Text>
                         </div>
-                        <Button @click="promptDownload(se)" :disabled="emulatorStore.loading" color="blue">
+                        <Button @click="promptDownload(se)" :disabled="emulatorStore.loading" color="primary">
                             <template v-if="emulatorStore.loading">Downloading...</template>
                             <template v-else>Download</template>
                         </Button>

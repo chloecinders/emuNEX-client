@@ -1,16 +1,20 @@
 <script setup lang="ts">
-import { ArrowLeftRight, GamepadDirectional, HardDrive, Library, Menu, Search, Settings } from "lucide-vue-next";
+import { ArrowLeftRight, GamepadDirectional, HardDrive, Library, Menu, Settings } from "lucide-vue-next";
 import { computed, onMounted, ref } from "vue";
+import { useRouter } from "vue-router";
 import Logout from "../components/Logout.vue";
 import GameInfo from "../components/games/GameInfo.vue";
 import ServerSwitcher from "../components/modals/ServerSwitcher.vue";
 import { useAuthStore } from "../stores/AuthStore";
 import { useGameStore } from "../stores/GameStore";
 import { useUserStore } from "../stores/UserStore";
+import { useUpdateStore } from "../stores/UpdateStore";
 
 const userStore = useUserStore();
 const authStore = useAuthStore();
 const gameStore = useGameStore();
+const updateStore = useUpdateStore();
+const router = useRouter();
 const isSidebarOpen = ref(false);
 const isServerSwitcherOpen = ref(false);
 const toggleSidebar = () => (isSidebarOpen.value = !isSidebarOpen.value);
@@ -19,7 +23,6 @@ const ready = ref(false);
 
 const menuItems = [
     { name: "Library", path: "/", icon: Library },
-    { name: "Search", path: "/search", icon: Search },
     { name: "Storage", path: "/manage/roms", icon: HardDrive },
     { name: "Emulators", path: "/manage/emulators", icon: GamepadDirectional },
     { name: "Settings", path: "/settings", icon: Settings },
@@ -28,6 +31,11 @@ const menuItems = [
 const displayDomain = computed(() => {
     return (authStore?.domain || "").replace(/(^\w+:|^)\/\//, "").replace(/\/$/, "");
 });
+
+const goToSettingsForUpdate = () => {
+    updateStore.dismissBanner();
+    router.push({ name: "settings" });
+};
 
 onMounted(() => {
     ready.value = true;
@@ -42,6 +50,20 @@ onMounted(() => {
 
         <Transition name="slide-side">
             <aside v-if="isSidebarOpen" class="c-shell__sidebar">
+                <div class="c-shell__sidebar-header">
+                    <div class="c-shell__system-meta">
+                        <div class="c-shell__avatar-placeholder">
+                            {{ (userStore.user?.username || "G").charAt(0).toUpperCase() }}
+                        </div>
+                        <div class="c-shell__user-info">
+                            <span class="c-shell__username">{{ userStore.user?.username || "guest" }}</span>
+                            <a class="c-shell__domain-link" :href="authStore.domain || ''" target="_blank">
+                                @{{ displayDomain }}
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
                 <nav class="c-shell__nav">
                     <router-link
                         v-for="item in menuItems"
@@ -75,24 +97,29 @@ onMounted(() => {
         </Transition>
 
         <header class="c-shell__status-bar">
+            <div id="header-tools" class="c-shell__header-tools"></div>
+
             <button class="c-shell__menu-button" @click="toggleSidebar">
                 <Menu class="c-shell__menu-icon" />
             </button>
-
-            <div id="header-tools" class="c-shell__header-tools"></div>
-
-            <div class="c-shell__system-meta">
-                <span class="c-shell__domain-label">
-                    {{ userStore.user?.username || "guest" }}@<a
-                        class="c-shell__domain-link"
-                        :href="authStore.domain || ''"
-                        target="_blank"
-                        >{{ displayDomain }}</a
-                    >
-                </span>
-                <span class="c-shell__status-dot c-shell__status-dot--pulse"></span>
-            </div>
         </header>
+
+        <Transition name="fade">
+            <div
+                v-if="updateStore.hasUpdate && !updateStore.bannerDismissed"
+                class="c-shell__update-banner"
+            >
+                <span class="c-shell__update-text">
+                    Update available<span v-if="updateStore.availableVersion"> — v{{ updateStore.availableVersion }}</span>
+                </span>
+                <button class="c-shell__update-button" @click="goToSettingsForUpdate">
+                    Open Settings
+                </button>
+                <button class="c-shell__update-dismiss" @click="updateStore.dismissBanner">
+                    Dismiss
+                </button>
+            </div>
+        </Transition>
 
         <main class="c-shell__content">
             <slot v-if="ready" />
@@ -126,6 +153,51 @@ onMounted(() => {
         z-index: 50;
         height: 56px;
         flex-shrink: 0;
+    }
+
+    &__update-banner {
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        gap: var(--spacing-sm);
+        padding: var(--spacing-xs) var(--spacing-lg);
+        background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+        border-bottom: 1px solid var(--color-primary);
+        font-size: 0.85rem;
+    }
+
+    &__update-text {
+        font-weight: 700;
+    }
+
+    &__update-button,
+    &__update-dismiss {
+        border-radius: var(--radius-full);
+        border: 1px solid var(--color-border);
+        background: var(--color-surface);
+        padding: 4px 10px;
+        font-size: 0.75rem;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all 0.15s ease;
+    }
+
+    &__update-button {
+        border-color: var(--color-primary);
+        color: var(--color-primary);
+
+        &:hover {
+            background: var(--color-primary);
+            color: #fff;
+        }
+    }
+
+    &__update-dismiss {
+        color: var(--color-text-muted);
+
+        &:hover {
+            background: var(--color-surface-variant);
+        }
     }
 
     &__menu-button {
@@ -209,13 +281,13 @@ onMounted(() => {
 
     &__nav-indicator {
         position: absolute;
-        left: 0;
+        right: 0;
         top: 12px;
         bottom: 12px;
         width: 4px;
         background: var(--color-primary);
-        border-radius: 0 4px 4px 0;
-        transform: translateX(-4px);
+        border-radius: 4px 0 0 4px;
+        transform: translateX(4px);
         transition: transform 0.2s ease;
     }
 
@@ -235,42 +307,76 @@ onMounted(() => {
     &__system-meta {
         display: flex;
         align-items: center;
-        gap: var(--spacing-sm);
+        gap: var(--spacing-md);
+        width: 100%;
     }
 
-    &__domain-label {
-        font-size: 0.8rem;
+    &__avatar-placeholder {
+        width: 40px;
+        height: 40px;
+        border-radius: var(--radius-full);
+        background: var(--color-primary);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 900;
+        font-size: 1.2rem;
+        flex-shrink: 0;
+        box-shadow: 0 4px 10px rgba(107, 92, 177, 0.3);
+    }
+
+    &__user-info {
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    &__username {
+        font-size: 1.1rem;
         font-weight: 800;
-        color: var(--color-text-muted);
-        letter-spacing: 0.5px;
+        color: var(--color-text);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
 
     &__domain-link {
-        color: var(--color-primary);
+        font-size: 0.8rem;
+        color: var(--color-text-muted);
         text-decoration: none;
-        font-weight: 800;
-    }
+        font-weight: 700;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        transition: color 0.15s;
 
-    &__status-dot {
-        height: 10px;
-        width: 10px;
-        background-color: #4caf50;
-        border-radius: var(--radius-full);
-        box-shadow: 0 0 10px rgba(76, 175, 80, 0.4);
+        &:hover {
+            color: var(--color-primary);
+        }
     }
 
     &__sidebar {
         position: fixed;
         top: var(--titlebar-height, 0);
-        left: 0;
+        right: 0;
         bottom: 0;
         width: 280px;
         background: var(--color-surface);
         z-index: 1000;
         display: flex;
         flex-direction: column;
-        box-shadow: 4px 0 20px rgba(0, 0, 0, 0.05);
-        border-right: 1px solid var(--color-border);
+        box-shadow: -4px 0 20px rgba(0, 0, 0, 0.05);
+        border-left: 1px solid var(--color-border);
+    }
+
+    &__sidebar-header {
+        padding: var(--spacing-lg) var(--spacing-md);
+        border-bottom: 1px solid var(--color-border);
+        background: var(--color-surface-variant);
+        display: flex;
+        align-items: center;
+        justify-content: center;
     }
 
     &__sidebar-footer {
@@ -356,7 +462,7 @@ onMounted(() => {
 
 .slide-side-enter-from,
 .slide-side-leave-to {
-    transform: translateX(-100%);
+    transform: translateX(100%);
 }
 
 .fade-enter-active,

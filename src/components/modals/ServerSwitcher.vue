@@ -123,7 +123,7 @@ onMounted(loadDomains);
                 <Input v-model="newDomain" placeholder="https://emunex.example.com" />
 
                 <div class="c-server-switcher__actions">
-                    <Button @click="handleAdd" color="blue" :disabled="isConnecting">
+                    <Button @click="handleAdd" color="primary" :disabled="isConnecting">
                         {{ isConnecting ? "..." : "Connect" }}
                     </Button>
                 </div>

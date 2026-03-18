@@ -29,7 +29,7 @@ const emit = defineEmits(["choice"]);
 
         <div class="c-save-conflict__actions">
             <Button color="grey" @click="emit('choice', false)"> Keep Local </Button>
-            <Button color="blue" @click="emit('choice', true)"> Download Cloud </Button>
+            <Button color="primary" @click="emit('choice', true)"> Download Cloud </Button>
         </div>
     </Modal>
 </template>

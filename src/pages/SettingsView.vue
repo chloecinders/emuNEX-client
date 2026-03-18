@@ -93,7 +93,7 @@ onMounted(async () => {
                             <span>Check for Updates</span>
                         </Button>
 
-                        <Button v-if="foundUpdate" color="blue" size="sm" :disabled="isUpdating" @click="installUpdate">
+                        <Button v-if="foundUpdate" color="primary" size="sm" :disabled="isUpdating" @click="installUpdate">
                             <Download :size="16" />
                             <span>Install Updates</span>
                         </Button>

@@ -116,7 +116,7 @@ const executeDeleteSave = async () => {
                     <div class="c-rom-card__meta">
                         <Badge v-if="rom.rom_size > 0" color="grey">ROM: {{ formatBytes(rom.rom_size) }}</Badge>
                         <Badge v-else color="red">ROM Missing</Badge>
-                        <Badge v-if="rom.save_size > 0" color="blue"
+                        <Badge v-if="rom.save_size > 0" color="primary"
                             >Local Save: {{ formatBytes(rom.save_size) }}</Badge
                         >
                     </div>

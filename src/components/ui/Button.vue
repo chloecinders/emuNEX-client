@@ -1,13 +1,13 @@
 <script setup lang="ts">
 interface Props {
-    color?: "blue" | "green" | "red" | "grey";
+    color?: "primary" | "green" | "red" | "grey";
     size?: "sm" | "md";
     disabled?: boolean;
     full?: boolean;
 }
 
 withDefaults(defineProps<Props>(), {
-    color: "blue",
+    color: "primary",
     size: "md",
     disabled: false,
     full: false,
@@ -82,7 +82,7 @@ const emit = defineEmits(["click"]);
         border-radius: var(--radius-md);
     }
 
-    &--blue {
+    &--primary {
         .c-button__front {
             background: var(--color-primary);
         }
