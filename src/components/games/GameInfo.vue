@@ -35,14 +35,6 @@ const libraryStats = computed(() => {
     return gameStore.library.find((i) => i.id === game.value?.id);
 });
 
-const languageList = computed(() => {
-    if (!game.value || !game.value.languages) return "";
-    if (Array.isArray(game.value.languages)) {
-        return game.value.languages.join(", ");
-    }
-    return String(game.value.languages);
-});
-
 const formatDate = (dateString: string | null) => {
     if (!dateString) return "Never";
     return new Date(dateString).toLocaleDateString();
@@ -243,22 +235,13 @@ const handlePlay = async (customEmulatorId?: string) => {
                 </div>
 
                 <div class="c-bottom-panel__titles">
-                    <Tooltip :text="game.title">
+                    <Tooltip :text="game.realname || game.title">
                         <Heading :level="3" class="c-bottom-panel__title">{{ game.title }}</Heading>
                     </Tooltip>
 
                     <Text variant="label" size="xs" class="c-bottom-panel__subtitle"
-                        >{{ game.category }} | {{ game.region }} | {{ game.release_year }}</Text
+                        >{{ game.category }} | {{ game.region }} | {{ game.release_year }} | {{ game.languages }}</Text
                     >
-
-                    <Text
-                        v-if="languageList"
-                        variant="muted"
-                        size="xs"
-                        class="c-bottom-panel__languages"
-                    >
-                        Languages: {{ languageList }}
-                    </Text>
 
                     <transition name="fade">
                         <div v-if="libraryStats" class="c-bottom-panel__meta">

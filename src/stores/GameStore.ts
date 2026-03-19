@@ -27,6 +27,7 @@ export type Shelf = {
 export type Game = {
     id: string;
     title: string;
+    realname: string;
     console: string;
     region: string | null;
     category: string;

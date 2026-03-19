@@ -51,7 +51,9 @@ const installUpdate = async () => {
     updateStatus.value = { message: "Downloading and installing update...", type: "info" };
 
     try {
-        await foundUpdate.value.downloadAndInstall();
+        // we have to fetch the update again due to a typescript error
+        const update = await check();
+        await update?.downloadAndInstall();
         updateStatus.value = { message: "Update installed! Relaunching...", type: "success" };
         setTimeout(async () => {
             await relaunch();
@@ -93,7 +95,13 @@ onMounted(async () => {
                             <span>Check for Updates</span>
                         </Button>
 
-                        <Button v-if="foundUpdate" color="primary" size="sm" :disabled="isUpdating" @click="installUpdate">
+                        <Button
+                            v-if="foundUpdate"
+                            color="primary"
+                            size="sm"
+                            :disabled="isUpdating"
+                            @click="installUpdate"
+                        >
                             <Download :size="16" />
                             <span>Install Updates</span>
                         </Button>
