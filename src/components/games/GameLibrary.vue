@@ -11,7 +11,7 @@ import PillButton from "../ui/PillButton.vue";
 import Spinner from "../ui/Spinner.vue";
 import Text from "../ui/Text.vue";
 import GameCard from "./GameCard.vue";
-import ReportGameIssue from "../modals/ReportGameIssue.vue";
+import GameContextMenu from "./GameContextMenu.vue";
 
 const vFocus = {
     mounted: (el: HTMLElement) => nextTick(() => el.focus()),
@@ -275,67 +275,20 @@ async function onMouseUp(event: MouseEvent) {
     sourceShelfId.value = null;
 }
 
-const contextMenu = ref({ show: false, x: 0, y: 0, gameId: null as string | null });
-
-const closeContextMenu = () => {
-    contextMenu.value.show = false;
-};
+const contextMenu = ref<InstanceType<typeof GameContextMenu> | null>(null);
 
 const onContextMenu = (event: MouseEvent, gameId: string) => {
-    window.dispatchEvent(new CustomEvent("close-all-context-menus"));
-
-    contextMenu.value = {
-        show: true,
-        x: event.clientX,
-        y: event.clientY,
-        gameId,
-    };
-    document.addEventListener("click", closeContextMenu, { once: true });
-};
-
-window.addEventListener("close-all-context-menus", () => {
-    closeContextMenu();
-});
-
-window.addEventListener(
-    "scroll",
-    () => {
-        closeContextMenu();
-    },
-    true,
-);
-
-const playFromContextMenu = () => {
-    if (!contextMenu.value.gameId) return;
-    const gameId = contextMenu.value.gameId;
-    const installed = gameStore.installedGameIds.includes(gameId);
-
-    gameStore.currentSelectedGame = gameId;
-
-    if (!installed) {
-        window.dispatchEvent(new CustomEvent("request-install-game", { detail: { gameId } }));
-    } else {
-        window.dispatchEvent(new CustomEvent("request-play-game", { detail: { gameId } }));
-    }
-
-    contextMenu.value.show = false;
+    contextMenu.value?.open(event, gameId);
 };
 
 const onDoubleClickGame = (gameId: string) => {
     gameStore.currentSelectedGame = gameId;
     window.dispatchEvent(new CustomEvent('request-play-game', { detail: { gameId } }));
 };
-
-const reportGameModel = ref({ gameId: "", showModal: false });
-
-const openReportModal = () => {
-    reportGameModel.value.showModal = true;
-    reportGameModel.value.gameId = contextMenu.value.gameId || "";
-};
 </script>
 
 <template>
-    <div class="c-library-wrapper" @contextmenu="closeContextMenu">
+    <div class="c-library-wrapper">
         <div class="c-library">
             <Modal :show="isCreatingShelf" title="Create New Shelf" @close="isCreatingShelf = false">
                 <div class="c-modal-form">
@@ -366,11 +319,6 @@ const openReportModal = () => {
                     </div>
                 </div>
             </Modal>
-
-            <ReportGameIssue
-                :game-id="reportGameModel.gameId"
-                v-model:show-modal="reportGameModel.showModal"
-            />
 
             <div v-if="gameStore.loading && !gameStore.shelves.length" class="c-library__loading">
                 <Spinner size="lg" />
@@ -573,20 +521,9 @@ const openReportModal = () => {
                 </div>
             </div>
         </div>
-
-        <div
-            v-if="contextMenu.show"
-            class="c-context-menu"
-            :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }"
-        >
-            <div class="c-context-menu__primary">
-                <Button color="primary" size="sm" full @click="playFromContextMenu">
-                    {{ contextMenu.gameId && gameStore.installedGameIds.includes(contextMenu.gameId) ? "Play" : "Install" }}
-                </Button>
-            </div>
-            <button class="c-context-menu__item" @click="openReportModal">Report Issue...</button>
-        </div>
     </div>
+
+    <GameContextMenu ref="contextMenu" />
 </template>
 
 <style lang="scss" scoped>

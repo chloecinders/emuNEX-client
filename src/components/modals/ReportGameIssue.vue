@@ -3,6 +3,8 @@ import { ref } from 'vue';
 import { http } from '../../utils/http';
 import Modal from '../ui/Modal.vue';
 import Button from '../ui/Button.vue';
+import Select from '../ui/Select.vue';
+import Text from '../ui/Text.vue';
 
 const showModal = defineModel<boolean>("showModal");
 const props = defineProps<{
@@ -13,6 +15,13 @@ const reportDescription = ref("");
 const reportType = ref("incorrect_metadata");
 const isSubmittingReport = ref(false);
 const reportNotice = ref<{ type: "success" | "error"; message: string } | null>(null);
+
+const reportOptions = [
+    { name: "Incorrect Metadata", value: "incorrect_metadata" },
+    { name: "Bad ROM Dump", value: "bad_dump" },
+    { name: "Wrong Cover Image", value: "wrong_cover" },
+    { name: "Other", value: "other" },
+];
 
 const submitReport = async () => {
     if (!reportDescription.value.trim()) return;
@@ -46,32 +55,34 @@ const submitReport = async () => {
 
 <template>
     <Modal :show="showModal || false" title="Report Game Issue" @close="showModal = false">
-        <div style="display: flex; flex-direction: column; gap: 1rem; padding: 0.5rem 0;">
+        <div class="c-report-form">
             <div v-if="reportNotice" class="c-report-notice" :class="`c-report-notice--${reportNotice.type}`">
                 <Text variant="body" size="sm">{{ reportNotice.message }}</Text>
             </div>
-            <div>
-                <label
-                    style="display: block; font-size: 0.85rem; font-weight: 700; color: var(--color-text-muted); margin-bottom: 0.5rem;">Issue
-                    Type</label>
-                <select v-model="reportType"
-                    style="width: 100%; padding: 0.75rem; border-radius: var(--radius-sm); border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text);">
-                    <option value="incorrect_metadata">Incorrect Metadata</option>
-                    <option value="bad_dump">Bad ROM Dump</option>
-                    <option value="wrong_cover">Wrong Cover Image</option>
-                    <option value="other">Other</option>
-                </select>
+
+            <Select
+                v-model="reportType"
+                label="Issue Type"
+                :options="reportOptions"
+            />
+
+            <div class="c-report-form__field">
+                <label class="c-report-form__label">Description</label>
+                <textarea
+                    v-model="reportDescription"
+                    rows="4"
+                    class="c-report-form__textarea"
+                    placeholder="Please describe the issue in detail..."
+                ></textarea>
             </div>
-            <div>
-                <label
-                    style="display: block; font-size: 0.85rem; font-weight: 700; color: var(--color-text-muted); margin-bottom: 0.5rem;">Description</label>
-                <textarea v-model="reportDescription" rows="4"
-                    style="width: 100%; padding: 0.75rem; border-radius: var(--radius-sm); border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text); font-family: inherit; resize: vertical;"
-                    placeholder="Please describe the issue in detail..."></textarea>
-            </div>
-            <div class="c-modal-form__actions" style="margin-top: 0.5rem;">
-                <Button class="c-button" color="primary" @click="submitReport"
-                    :disabled="isSubmittingReport || !reportDescription.trim()">
+
+            <div class="c-report-form__actions">
+                <Button
+                    class="c-button"
+                    color="primary"
+                    @click="submitReport"
+                    :disabled="isSubmittingReport || !reportDescription.trim()"
+                >
                     {{ isSubmittingReport ? "Submitting..." : "Submit" }}
                 </Button>
             </div>
@@ -80,25 +91,73 @@ const submitReport = async () => {
 </template>
 
 <style lang="scss" scoped>
+.c-report-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-lg);
+    padding: var(--spacing-xs) 0;
+
+    &__field {
+        display: flex;
+        flex-direction: column;
+        gap: var(--spacing-xs);
+    }
+
+    &__label {
+        display: block;
+        font-size: 0.8rem;
+        font-weight: 800;
+        color: var(--color-text-muted);
+        margin-left: var(--spacing-xs);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    &__textarea {
+        width: 100%;
+        padding: var(--spacing-md);
+        border-radius: var(--radius-md);
+        border: 2px solid var(--color-border);
+        background: var(--color-surface);
+        color: var(--color-text);
+        font-family: inherit;
+        font-size: 1rem;
+        font-weight: 600;
+        resize: vertical;
+        transition: border-color 0.2s ease;
+
+        &:focus {
+            outline: none;
+            border-color: var(--color-primary);
+        }
+
+        &::placeholder {
+            opacity: 0.5;
+        }
+    }
+
+    &__actions {
+        margin-top: var(--spacing-sm);
+
+        .c-button {
+            width: 100%;
+        }
+    }
+}
+
 .c-report-notice {
-    padding: 0.5rem;
+    padding: var(--spacing-sm) var(--spacing-md);
     border-radius: var(--radius-sm);
-    background: var(--color-surface);
     border: 1px solid var(--color-border);
-    box-shadow: var(--shadow-subtle);
-}
 
-.c-report-notice--success {
-    background: var(--color-success);
-    color: var(--color-text-on-success);
-}
+    &--success {
+        border-color: color-mix(in srgb, var(--color-success, #22c55e) 45%, var(--color-border));
+        background: color-mix(in srgb, var(--color-success, #22c55e) 12%, transparent);
+    }
 
-.c-report-notice--error {
-    background: var(--color-error);
-    color: var(--color-text-on-error);
-}
-
-.c-button {
-    width: 100%;
+    &--error {
+        border-color: color-mix(in srgb, var(--color-danger) 45%, var(--color-border));
+        background: color-mix(in srgb, var(--color-danger) 12%, transparent);
+    }
 }
 </style>
