@@ -25,7 +25,7 @@ onMounted(async () => {
 
 const consoles = computed(() => {
     const serverConsoles = Object.keys(consoleStore.consoles).map((c) => c.toLowerCase());
-    const localConsoles = Object.keys(emulatorStore.emulators);
+    const localConsoles = Object.values(emulatorStore.emulators).flatMap((e) => e.consoles);
     const allConsoles = new Set([...serverConsoles, ...localConsoles]);
     return Array.from(allConsoles).sort();
 });
@@ -33,38 +33,50 @@ const consoles = computed(() => {
 const editState = ref<any>({});
 const newlyAddedIds = ref<Set<string>>(new Set());
 
-const initEdit = (emulator: Emulator) => {
-    editState.value[emulator.id] = { ...emulator };
+const newConsoleInputs = ref<Record<string, string>>({});
+
+const addConsoleToEmulator = (id: string) => {
+    const val = (newConsoleInputs.value[id] || "").trim().toLowerCase();
+    if (val && !editState.value[id].consoles.includes(val)) {
+        editState.value[id].consoles.push(val);
+    }
+    newConsoleInputs.value[id] = "";
 };
 
-const saveEmulatorChanges = async (consoleName: string, id: string) => {
+const initEdit = (emulator: Emulator) => {
+    editState.value[emulator.id] = JSON.parse(JSON.stringify(emulator));
+    newConsoleInputs.value[emulator.id] = "";
+};
+
+const saveEmulatorChanges = async (id: string) => {
     const data = editState.value[id];
     if (data && data.name) {
-        await emulatorStore.saveEmulator(consoleName, data as Emulator);
+        await emulatorStore.saveEmulator(data as Emulator);
         newlyAddedIds.value.delete(id);
         delete editState.value[id];
     }
 };
 
-const cancelEdit = (consoleName: string, id: string) => {
+const cancelEdit = (id: string) => {
     delete editState.value[id];
 
     if (newlyAddedIds.value.has(id)) {
-        emulatorStore.emulators[consoleName] = emulatorStore.emulators[consoleName].filter((e) => e.id !== id);
+        delete emulatorStore.emulators[id];
         newlyAddedIds.value.delete(id);
     }
 };
 
-const handleSetDefault = async (consoleName: string, id: string) => {
-    await emulatorStore.setDefaultEmulator(consoleName, id);
+const handleSetDefault = async (id: string) => {
+    await emulatorStore.setDefaultEmulator(id);
 };
 
-const addCustomEmulator = (consoleName: string) => {
+const addCustomEmulator = () => {
     const id = `custom-${Date.now()}`;
     newlyAddedIds.value.add(id);
     const newEmulator: Emulator = {
         id,
         name: "New Custom Emulator",
+        consoles: [],
         is_default: false,
         is_installed: true,
         binary_path: "",
@@ -74,21 +86,15 @@ const addCustomEmulator = (consoleName: string) => {
         zipped: false,
     };
 
-    if (!emulatorStore.emulators[consoleName]) {
-        emulatorStore.emulators[consoleName] = [];
-    }
-
-    emulatorStore.emulators[consoleName].push(newEmulator);
+    emulatorStore.emulators[id] = newEmulator;
     editState.value[id] = { ...newEmulator };
 };
 
 const showDownloadModal = ref(false);
-const activeConsoleForDownload = ref("");
 const serverEmulators = ref<ServerEmulator[]>([]);
 const isFetchingServer = ref(false);
 
-const openDownloadModal = async (consoleName: string) => {
-    activeConsoleForDownload.value = consoleName;
+const openDownloadModal = async () => {
     showDownloadModal.value = true;
     isFetchingServer.value = true;
     serverEmulators.value = await emulatorStore.fetchAllServerEmulators();
@@ -97,7 +103,8 @@ const openDownloadModal = async (consoleName: string) => {
 
 const downloadFromServer = async (serverEmulator: ServerEmulator) => {
     try {
-        await emulatorStore.downloadEmulator(serverEmulator.console, serverEmulator.id);
+        const targetConsole = (serverEmulator.consoles && serverEmulator.consoles[0]) || "unknown";
+        await emulatorStore.downloadEmulator(targetConsole, serverEmulator.id);
         showDownloadModal.value = false;
         showConfirmDownloadModal.value = false;
         pendingDownloadEmulator.value = null;
@@ -122,19 +129,16 @@ const cancelConfirmDownload = () => {
 };
 
 const showDeleteModal = ref(false);
-const pendingDeleteConsole = ref("");
 const pendingDeleteId = ref("");
 
-const promptDelete = (consoleName: string, id: string) => {
-    pendingDeleteConsole.value = consoleName;
+const promptDelete = (id: string) => {
     pendingDeleteId.value = id;
     showDeleteModal.value = true;
 };
 
 const confirmDelete = async () => {
-    await emulatorStore.removeEmulator(pendingDeleteConsole.value, pendingDeleteId.value);
+    await emulatorStore.removeEmulator(pendingDeleteId.value);
     showDeleteModal.value = false;
-    pendingDeleteConsole.value = "";
     pendingDeleteId.value = "";
 };
 
@@ -143,7 +147,7 @@ const installItems = computed<InstallItem[]>(() => {
     return [
         {
             name: pendingDownloadEmulator.value.name,
-            description: `Emulator for ${pendingDownloadEmulator.value.console.toUpperCase()}`,
+            description: `Emulator for ${pendingDownloadEmulator.value.consoles.map(c=>c.toUpperCase()).join(', ')}`,
             size: pendingDownloadEmulator.value.file_size,
             type: "emulator",
         },
@@ -157,6 +161,11 @@ const installItems = computed<InstallItem[]>(() => {
             <Heading :level="2" color="primary" is-badge class="c-emulator-management__badge">
                 Manage Emulators
             </Heading>
+            
+            <div style="display: flex; gap: 8px;">
+                <PillButton @click="addCustomEmulator()"> <Plus /> Add Custom </PillButton>
+                <PillButton @click="openDownloadModal()"> <Download /> Download More </PillButton>
+            </div>
         </div>
 
         <div
@@ -168,42 +177,24 @@ const installItems = computed<InstallItem[]>(() => {
         </div>
 
         <div v-else class="c-emulator-management__content">
-            <div v-for="consoleName in consoles" :key="consoleName" class="c-console-section">
-                <div class="c-console-section__header">
-                    <Heading :level="2" color="primary" is-badge class="c-console-section__title">
-                        {{ consoleName.toUpperCase() }}
-                        <span class="c-console-section__count"
-                            >{{ (emulatorStore.emulators[consoleName] || []).length }} configured</span
-                        >
-                    </Heading>
-
-                    <div class="c-console-section__actions">
-                        <PillButton @click="addCustomEmulator(consoleName)"> <Plus /> Add Custom </PillButton>
-
-                        <PillButton @click="openDownloadModal(consoleName)"> <Download /> Download More </PillButton>
-                    </div>
+            <div class="c-emulator-list">
+                <div
+                    v-if="Object.keys(emulatorStore.emulators).length === 0"
+                    class="c-emulator-empty"
+                >
+                    <Text variant="muted">No emulators configured.</Text>
                 </div>
 
-                <div class="c-emulator-list">
-                    <div
-                        v-if="
-                            !emulatorStore.emulators[consoleName] || emulatorStore.emulators[consoleName].length === 0
-                        "
-                        class="c-emulator-empty"
-                    >
-                        <Text variant="muted">No emulators configured for this console.</Text>
-                    </div>
-
-                    <div
-                        v-for="emulator in emulatorStore.emulators[consoleName]"
-                        :key="emulator.id"
-                        class="c-emulator-card"
-                        :class="{
-                            'c-emulator-card--default': emulator.is_default,
-                            'c-emulator-card--editing': editState[emulator.id],
-                        }"
-                    >
-                        <div class="c-emulator-card__header">
+                <div
+                    v-for="emulator in Object.values(emulatorStore.emulators)"
+                    :key="emulator.id"
+                    class="c-emulator-card"
+                    :class="{
+                        'c-emulator-card--default': emulator.is_default,
+                        'c-emulator-card--editing': editState[emulator.id],
+                    }"
+                >
+                    <div class="c-emulator-card__header">
                             <div class="c-emulator-card__title-area">
                                 <Input
                                     v-if="editState[emulator.id]"
@@ -218,13 +209,13 @@ const installItems = computed<InstallItem[]>(() => {
 
                             <div class="c-emulator-card__actions">
                                 <template v-if="editState[emulator.id]">
-                                    <Button color="grey" size="sm" @click="cancelEdit(consoleName, emulator.id)"
+                                    <Button color="grey" size="sm" @click="cancelEdit(emulator.id)"
                                         >Cancel</Button
                                     >
                                     <Button
                                         color="primary"
                                         size="sm"
-                                        @click="saveEmulatorChanges(consoleName, emulator.id)"
+                                        @click="saveEmulatorChanges(emulator.id)"
                                     >
                                         <Save :size="16" /> Save
                                     </Button>
@@ -233,7 +224,7 @@ const installItems = computed<InstallItem[]>(() => {
                                 <Tooltip v-if="!editState[emulator.id]" text="Make Default">
                                     <IconButton
                                         v-if="!emulator.is_default"
-                                        @click="handleSetDefault(consoleName, emulator.id)"
+                                        @click="handleSetDefault(emulator.id)"
                                     >
                                         <CheckCircle />
                                     </IconButton>
@@ -246,7 +237,7 @@ const installItems = computed<InstallItem[]>(() => {
                                 </Tooltip>
 
                                 <Tooltip v-if="!editState[emulator.id]" text="Delete">
-                                    <IconButton color="red" @click="promptDelete(consoleName, emulator.id)">
+                                    <IconButton color="red" @click="promptDelete(emulator.id)">
                                         <Trash2 />
                                     </IconButton>
                                 </Tooltip>
@@ -254,6 +245,33 @@ const installItems = computed<InstallItem[]>(() => {
                         </div>
 
                         <div class="c-emulator-card__body">
+                            <div class="c-emulator-field">
+                                <Text variant="label" size="sm">Assigned Consoles</Text>
+                                <div v-if="editState[emulator.id]" style="display: flex; flex-direction: column; gap: 8px;">
+                                    <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-top: 4px;">
+                                        <label v-for="c in consoles" :key="c" style="display: flex; align-items: center; gap: 4px; font-size: 0.85rem;">
+                                            <input 
+                                                type="checkbox" 
+                                                :value="c" 
+                                                v-model="editState[emulator.id].consoles"
+                                            />
+                                            {{ c.toUpperCase() }}
+                                        </label>
+                                    </div>
+                                    <div style="display: flex; gap: 8px; align-items: center;">
+                                        <Input 
+                                            v-model="newConsoleInputs[emulator.id]" 
+                                            placeholder="Add custom console..." 
+                                            style="flex: 1;"
+                                        />
+                                        <Button size="sm" @click="addConsoleToEmulator(emulator.id)">Add</Button>
+                                    </div>
+                                </div>
+                                <div v-else style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px;">
+                                    <Badge v-for="c in emulator.consoles" :key="c" color="grey" size="sm">{{ c.toUpperCase() }}</Badge>
+                                </div>
+                            </div>
+
                             <div class="c-emulator-field">
                                 <Text variant="label" size="sm">Binary Path</Text>
                                 <Input
@@ -293,7 +311,6 @@ const installItems = computed<InstallItem[]>(() => {
                     </div>
                 </div>
             </div>
-        </div>
 
         <Modal :show="showDownloadModal" title="Download Emulators" @close="showDownloadModal = false">
             <div class="c-download-modal">
@@ -307,9 +324,9 @@ const installItems = computed<InstallItem[]>(() => {
                 <div v-else class="c-download-list">
                     <div v-for="se in serverEmulators" :key="se.id" class="c-download-item">
                         <div class="c-download-item__info">
-                            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px">
+                            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px; flex-wrap: wrap;">
                                 <Heading :level="4" class="c-download-item__title">{{ se.name }}</Heading>
-                                <Badge color="blue" size="sm">{{ se.console.toUpperCase() }}</Badge>
+                                <Badge v-for="c in se.consoles" :key="c" color="blue" size="sm">{{ c.toUpperCase() }}</Badge>
                             </div>
                             <Text variant="muted" size="sm">Platform: {{ se.platform }}</Text>
                         </div>

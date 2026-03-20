@@ -10,7 +10,7 @@ use crate::{store, ApiResponse};
 pub struct ApiEmulator {
     pub id: String,
     pub name: String,
-    pub console: String,
+    pub consoles: Vec<String>,
     pub platform: String,
     pub run_command: String,
     pub binary_path: String,
@@ -26,6 +26,8 @@ pub struct ApiEmulator {
 pub struct StoreEmulator {
     pub id: String,
     pub name: String,
+    #[serde(default)]
+    pub consoles: Vec<String>,
     pub is_default: bool,
     pub is_installed: bool,
     pub binary_path: String,
@@ -257,29 +259,31 @@ pub async fn download_emulator<R: Runtime>(
         final_binary_path = app_data_dir.join(exec_name);
     }
 
-    let mut stored_emulators: HashMap<String, Vec<StoreEmulator>> = store
+    let mut stored_emulators: HashMap<String, StoreEmulator> = store
         .get("emulators")
         .and_then(|v| serde_json::from_value(v.clone()).ok())
         .unwrap_or_default();
 
-    let console_lowercased = console.to_lowercase();
-    let console_emulators = stored_emulators
-        .entry(console_lowercased)
-        .or_insert_with(Vec::new);
-    let is_first = console_emulators.is_empty();
     let server_id = format!("server-{}", emulator.id);
+    let is_first = stored_emulators.is_empty();
 
-    if let Some(existing) = console_emulators.iter_mut().find(|e| e.id == server_id) {
+    if let Some(existing) = stored_emulators.get_mut(&server_id) {
         existing.binary_path = final_binary_path.to_string_lossy().to_string();
         existing.run_command = emulator.run_command.clone();
         existing.save_path = emulator.save_path.clone();
         existing.config_files = emulator.config_files.clone();
         existing.zipped = emulator.zipped;
         existing.is_installed = true;
+        for c in &emulator.consoles {
+            if !existing.consoles.contains(c) {
+                existing.consoles.push(c.clone());
+            }
+        }
     } else {
-        console_emulators.push(StoreEmulator {
+        stored_emulators.insert(server_id.clone(), StoreEmulator {
             id: server_id,
             name: emulator.name.clone(),
+            consoles: emulator.consoles.clone(),
             is_default: is_first,
             is_installed: true,
             binary_path: final_binary_path.to_string_lossy().to_string(),

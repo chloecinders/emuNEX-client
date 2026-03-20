@@ -128,7 +128,7 @@ pub async fn play_game<R: Runtime>(
 
     state.is_game_running.store(true, Ordering::SeqCst);
 
-    let stored_emulators: HashMap<String, Vec<StoreEmulator>> = store
+    let stored_emulators: HashMap<String, StoreEmulator> = store
         .get("emulators")
         .and_then(|v| {
             serde_json::from_value(v.clone())
@@ -147,24 +147,22 @@ pub async fn play_game<R: Runtime>(
         );
     }
 
-    let console_emulators = stored_emulators
-        .get(&console)
-        .or_else(|| {
-            let lower = console.to_lowercase();
-            stored_emulators
-                .iter()
-                .find(|(k, _)| k.to_lowercase() == lower)
-                .map(|(_, v)| v)
-        })
-        .ok_or_else(|| {
-            state.is_game_running.store(false, Ordering::SeqCst);
-            "Emulator not found for this console".to_string()
-        })?;
+    let console_lowercased = console.to_lowercase();
+    let console_emulators: Vec<&StoreEmulator> = stored_emulators
+        .values()
+        .filter(|e| e.consoles.iter().any(|c| c.to_lowercase() == console_lowercased))
+        .collect();
+
+    if console_emulators.is_empty() {
+        state.is_game_running.store(false, Ordering::SeqCst);
+        return Err("Emulator not found for this console".to_string());
+    }
 
     let emulator = if let Some(id) = emulator_id {
         console_emulators
-            .iter()
+            .into_iter()
             .find(|e| e.id == id)
+            .cloned()
             .ok_or_else(|| {
                 state.is_game_running.store(false, Ordering::SeqCst);
                 "Requested emulator not found".to_string()
@@ -173,7 +171,9 @@ pub async fn play_game<R: Runtime>(
         console_emulators
             .iter()
             .find(|e| e.is_default)
-            .or_else(|| console_emulators.first())
+            .copied()
+            .or_else(|| console_emulators.first().copied())
+            .cloned()
             .ok_or_else(|| {
                 state.is_game_running.store(false, Ordering::SeqCst);
                 "No default emulator found".to_string()

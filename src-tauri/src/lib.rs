@@ -105,7 +105,7 @@ pub fn run() {
                                                 serde_json::from_value::<
                                                     std::collections::HashMap<
                                                         String,
-                                                        Vec<StoreEmulator>,
+                                                        StoreEmulator,
                                                     >,
                                                 >(
                                                     v.clone()
@@ -114,7 +114,6 @@ pub fn run() {
                                             })
                                             .map(|ems| {
                                                 ems.values()
-                                                    .flatten()
                                                     .any(|e| e.config_files.contains(&fname))
                                             })
                                             .unwrap_or(false)

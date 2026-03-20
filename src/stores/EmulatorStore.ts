@@ -6,6 +6,7 @@ import { getStore } from "../lib/store";
 export type Emulator = {
     id: string;
     name: string;
+    consoles: string[];
     is_default: boolean;
     is_installed: boolean;
     binary_path: string;
@@ -18,7 +19,7 @@ export type Emulator = {
 export type ServerEmulator = {
     id: string;
     name: string;
-    console: string;
+    consoles: string[];
     platform: string;
     run_command: string;
     binary_path: string;
@@ -32,7 +33,7 @@ export type ServerEmulator = {
 
 export const useEmulatorStore = defineStore("emulatorStore", () => {
     const loading = ref(false);
-    const emulators = ref<Record<string, Emulator[]>>({});
+    const emulators = ref<Record<string, Emulator>>({});
 
     async function fetchEmulators() {
         loading.value = true;
@@ -40,11 +41,22 @@ export const useEmulatorStore = defineStore("emulatorStore", () => {
             const store = await getStore();
             const ems = await store.get<Record<string, any>>("emulators");
 
-            const validEms: Record<string, Emulator[]> = {};
+            const validEms: Record<string, Emulator> = {};
             if (ems && typeof ems === 'object') {
                 for (const [key, value] of Object.entries(ems)) {
                     if (Array.isArray(value)) {
-                        validEms[key.toLowerCase()] = value as Emulator[];
+                        for (const emu of value) {
+                            if (!validEms[emu.id]) {
+                                validEms[emu.id] = { ...emu, consoles: [(emu as any).console || key] };
+                            } else {
+                                const c = (emu as any).console || key;
+                                if (!validEms[emu.id].consoles.includes(c)) {
+                                    validEms[emu.id].consoles.push(c);
+                                }
+                            }
+                        }
+                    } else {
+                        validEms[key] = value as Emulator;
                     }
                 }
             }
@@ -60,38 +72,25 @@ export const useEmulatorStore = defineStore("emulatorStore", () => {
     async function isEmulatorInstalled(cs: string): Promise<boolean> {
         const normalized = cs.toLowerCase();
         if (Object.keys(emulators.value).length === 0) await fetchEmulators();
-        const list = emulators.value[normalized];
-        if (!Array.isArray(list)) return false;
-        return list.some(e => e.is_installed);
+        return Object.values(emulators.value).some(e => 
+            e.is_installed && e.consoles.some(c => c.toLowerCase() === normalized)
+        );
     }
 
-    async function saveEmulator(consoleName: string, data: Emulator) {
-        const normalized = consoleName.toLowerCase();
+    async function saveEmulator(data: Emulator) {
         const store = await getStore();
-        if (!emulators.value[normalized]) {
-            emulators.value[normalized] = [];
-        }
+        
+        const isFirst = Object.keys(emulators.value).length === 0;
+        if (isFirst && !data.id.startsWith("custom-")) data.is_default = true;
 
-        const list = emulators.value[normalized];
-        const existingIndex = list.findIndex((e) => e.id === data.id);
-
-        if (existingIndex > -1) {
-            list[existingIndex] = { ...data };
-        } else {
-            if (list.length === 0) data.is_default = true;
-            list.push(data);
-        }
+        emulators.value[data.id] = data;
 
         await store.set("emulators", emulators.value);
         await store.save();
     }
 
-    async function setDefaultEmulator(consoleName: string, emulatorId: string) {
-        const normalized = consoleName.toLowerCase();
-        const list = emulators.value[normalized];
-        if (!list) return;
-
-        list.forEach(e => {
+    async function setDefaultEmulator(emulatorId: string) {
+        Object.values(emulators.value).forEach(e => {
             e.is_default = e.id === emulatorId;
         });
 
@@ -100,18 +99,13 @@ export const useEmulatorStore = defineStore("emulatorStore", () => {
         await store.save();
     }
 
-    async function removeEmulator(consoleName: string, emulatorId: string) {
-        const normalized = consoleName.toLowerCase();
-        const list = emulators.value[normalized];
-        if (!list) return;
+    async function removeEmulator(emulatorId: string) {
+        delete emulators.value[emulatorId];
 
-        const filtered = list.filter((e) => e.id !== emulatorId);
-
-        if (filtered.length > 0 && !filtered.some(e => e.is_default)) {
-            filtered[0].is_default = true;
+        const remaining = Object.values(emulators.value);
+        if (remaining.length > 0 && !remaining.some(e => e.is_default)) {
+            remaining[0].is_default = true;
         }
-
-        emulators.value[normalized] = filtered;
 
         const store = await getStore();
         await store.set("emulators", emulators.value);

@@ -305,7 +305,7 @@ const handlePlay = async (customEmulatorId?: string) => {
         <Modal v-if="game" :show="showEmulatorModal" title="Play with..." @close="showEmulatorModal = false">
             <div class="c-playwith-list">
                 <Button
-                    v-for="emu in emulatorStore.emulators[game.console.toLowerCase()] || []"
+                    v-for="emu in Object.values(emulatorStore.emulators).filter(e => e.consoles.includes(game!.console.toLowerCase()))"
                     :key="emu.id"
                     variant="secondary"
                     full
