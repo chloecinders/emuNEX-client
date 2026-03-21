@@ -42,6 +42,8 @@ const formatBytes = (bytes: number, decimals = 2) => {
                 <div class="c-install-modal__info">
                     <Text variant="muted"> Are you sure you want to download the following files? </Text>
 
+                    <slot name="header"></slot>
+
                     <div class="c-install-modal__breakdown">
                         <div v-for="item in items" :key="item.name" class="c-install-modal__item">
                             <div class="c-install-modal__item-label">

@@ -95,7 +95,6 @@ const addCustomEmulator = () => {
         name: "New Custom Emulator",
         consoles: [],
         is_default: false,
-        is_installed: true,
         binary_path: "",
         run_command: "",
         save_path: "",

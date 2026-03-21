@@ -53,6 +53,8 @@ pub fn run() {
             commands::auth::get_client_start,
             commands::http::http,
             commands::emulator::download_emulator,
+            commands::emulator::remove_emulator,
+            commands::emulator::migrate_emulator_files,
             commands::emulator::fetch_server_emulators,
             commands::emulator::fetch_all_server_emulators,
             commands::play::play_game,

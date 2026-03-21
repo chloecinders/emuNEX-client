@@ -228,7 +228,8 @@ pub async fn play_game<R: Runtime>(
 
     state.is_game_running.store(true, Ordering::SeqCst);
 
-    let stored_emulators: HashMap<String, StoreEmulator> = store
+    let global_store = store::get_global_store(&app)?;
+    let stored_emulators: HashMap<String, StoreEmulator> = global_store
         .get("emulators")
         .and_then(|v| {
             serde_json::from_value(v.clone())
@@ -247,19 +248,17 @@ pub async fn play_game<R: Runtime>(
         );
     }
 
-    let console_lowercased = console.to_lowercase();
-    let console_emulators: Vec<&StoreEmulator> = stored_emulators
+    let all_emulators: Vec<&StoreEmulator> = stored_emulators
         .values()
-        .filter(|e| e.consoles.iter().any(|c| c.to_lowercase() == console_lowercased))
         .collect();
 
-    if console_emulators.is_empty() {
+    if all_emulators.is_empty() {
         state.is_game_running.store(false, Ordering::SeqCst);
         return Err("Emulator not found for this console".to_string());
     }
 
     let emulator = if let Some(id) = emulator_id {
-        console_emulators
+        all_emulators
             .into_iter()
             .find(|e| e.id == id)
             .cloned()
@@ -268,11 +267,11 @@ pub async fn play_game<R: Runtime>(
                 "Requested emulator not found".to_string()
             })?
     } else {
-        console_emulators
+        all_emulators
             .iter()
             .find(|e| e.is_default)
             .copied()
-            .or_else(|| console_emulators.first().copied())
+            .or_else(|| all_emulators.first().copied())
             .cloned()
             .ok_or_else(|| {
                 state.is_game_running.store(false, Ordering::SeqCst);

@@ -1,14 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import { defineStore } from "pinia";
 import { ref } from "vue";
-import { getStore } from "../lib/store";
+import { getGlobalStore, getSavedDomains, getDomainStore } from "../lib/store";
 
 export type Emulator = {
     id: string;
     name: string;
     consoles: string[];
     is_default: boolean;
-    is_installed: boolean;
     binary_path: string;
     run_command: string;
     save_path?: string;
@@ -40,9 +39,60 @@ export const useEmulatorStore = defineStore("emulatorStore", () => {
     async function fetchEmulators() {
         loading.value = true;
         try {
-            const store = await getStore();
-            const ems = await store.get<Record<string, any>>("emulators");
+            const globalStore = await getGlobalStore();
 
+            const migrated = await globalStore.get<boolean>("emulators_migrated_v2");
+            if (!migrated) {
+                const domains = await getSavedDomains();
+                let anyMigrated = false;
+                const currentGlobal = await globalStore.get<Record<string, any>>("emulators") || {};
+
+                for (const domain of domains) {
+                    const domainStore = await getDomainStore(domain);
+                    const domainEms = await domainStore.get<Record<string, any>>("emulators");
+                    const safeDomain = domain.replace(/[^a-z0-9]/gi, "_").toLowerCase();
+
+                    if (domainEms && typeof domainEms === 'object') {
+                        for (const [key, value] of Object.entries(domainEms)) {
+                            if (Array.isArray(value)) {
+                                for (const emu of value) {
+                                    const newId = `server-${safeDomain}-${emu.id}`;
+                                    if (!currentGlobal[newId]) {
+                                        currentGlobal[newId] = { ...emu, id: newId, consoles: [(emu as any).console || key] };
+                                        anyMigrated = true;
+                                    } else {
+                                        const c = (emu as any).console || key;
+                                        if (!currentGlobal[newId].consoles.includes(c)) {
+                                            currentGlobal[newId].consoles.push(c);
+                                            anyMigrated = true;
+                                        }
+                                    }
+                                }
+                            } else {
+                                const newId = key.startsWith("server-") ? `server-${safeDomain}-${key.slice(7)}` : key;
+                                if (!currentGlobal[newId]) {
+                                    currentGlobal[newId] = { ...(value as any), id: newId };
+                                    anyMigrated = true;
+                                }
+                            }
+                        }
+
+                        await domainStore.delete("emulators");
+                        await domainStore.save();
+                    }
+                }
+
+                if (anyMigrated) {
+                    await globalStore.set("emulators", currentGlobal);
+                }
+
+                await invoke("migrate_emulator_files");
+
+                await globalStore.set("emulators_migrated_v2", true);
+                await globalStore.save();
+            }
+
+            const ems = await globalStore.get<Record<string, any>>("emulators");
             const validEms: Record<string, Emulator> = {};
             if (ems && typeof ems === 'object') {
                 for (const [key, value] of Object.entries(ems)) {
@@ -74,14 +124,14 @@ export const useEmulatorStore = defineStore("emulatorStore", () => {
     async function isEmulatorInstalled(cs: string): Promise<boolean> {
         const normalized = cs.toLowerCase();
         if (Object.keys(emulators.value).length === 0) await fetchEmulators();
-        return Object.values(emulators.value).some(e => 
-            e.is_installed && e.consoles.some(c => c.toLowerCase() === normalized)
+        return Object.values(emulators.value).some(e =>
+            e.consoles.some(c => c.toLowerCase() === normalized)
         );
     }
 
     async function saveEmulator(data: Emulator) {
-        const store = await getStore();
-        
+        const store = await getGlobalStore();
+
         const isFirst = Object.keys(emulators.value).length === 0;
         if (isFirst && !data.id.startsWith("custom-")) data.is_default = true;
 
@@ -96,30 +146,29 @@ export const useEmulatorStore = defineStore("emulatorStore", () => {
             e.is_default = e.id === emulatorId;
         });
 
-        const store = await getStore();
+        const store = await getGlobalStore();
         await store.set("emulators", emulators.value);
         await store.save();
     }
 
     async function removeEmulator(emulatorId: string) {
-        delete emulators.value[emulatorId];
-
-        const remaining = Object.values(emulators.value);
-        if (remaining.length > 0 && !remaining.some(e => e.is_default)) {
-            remaining[0].is_default = true;
+        loading.value = true;
+        try {
+            await invoke("remove_emulator", { emulatorId });
+            await fetchEmulators();
+        } catch (e) {
+            console.error("Failed to remove emulator:", e);
+        } finally {
+            loading.value = false;
         }
-
-        const store = await getStore();
-        await store.set("emulators", emulators.value);
-        await store.save();
     }
 
     async function fetchServerEmulators(consoleName: string): Promise<ServerEmulator[]> {
         loading.value = true;
         try {
-            return await invoke<ServerEmulator[]>("fetch_server_emulators", { console: consoleName });
+            const results = await invoke<ServerEmulator[]>("fetch_server_emulators", { console: consoleName });
+            return results;
         } catch (e) {
-            console.error("Failed to fetch server emulators:", e);
             return [];
         } finally {
             loading.value = false;
@@ -127,16 +176,15 @@ export const useEmulatorStore = defineStore("emulatorStore", () => {
     }
 
     async function downloadEmulator(consoleName: string, serverEmulatorId: string) {
-        const normalized = consoleName.toLowerCase();
         loading.value = true;
         try {
             await invoke("download_emulator", {
-                console: normalized,
+                console: consoleName,
                 emulatorId: serverEmulatorId,
             });
+
             await fetchEmulators();
         } catch (e) {
-            console.error("Failed to download emulator:", e);
             throw e;
         } finally {
             loading.value = false;

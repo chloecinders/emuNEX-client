@@ -2,7 +2,7 @@ use std::{collections::HashMap, fs::File, io::Write};
 
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Runtime};
+use tauri::{AppHandle, Manager, Runtime};
 
 use crate::{store, ApiResponse};
 
@@ -30,7 +30,6 @@ pub struct StoreEmulator {
     #[serde(default)]
     pub consoles: Vec<String>,
     pub is_default: bool,
-    pub is_installed: bool,
     pub binary_path: String,
     pub run_command: String,
     #[serde(default)]
@@ -59,29 +58,37 @@ pub async fn fetch_server_emulators<R: Runtime>(
         .and_then(|v| v.as_str().map(|s| s.to_string()))
         .ok_or("Token not found")?;
 
-    let platform = std::env::consts::OS;
+    let platform = std::env::consts::OS.to_lowercase();
+    let console_upper = console.to_uppercase();
     let api_url = format!(
         "{}/api/v1/emulators/{}/{}",
         domain.trim_end_matches('/'),
-        console,
+        console_upper,
         platform
     );
 
     let client = reqwest::Client::new();
-    let response_text = client
+    let response = client
         .get(&api_url)
         .header("Authorization", &token)
         .send()
         .await
-        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())?;
+
+    let response_text = response
         .text()
         .await
         .map_err(|e| e.to_string())?;
 
     let api_res: ApiResponse<Vec<ApiEmulator>> =
-        serde_json::from_str(&response_text).map_err(|e| e.to_string())?;
+        serde_json::from_str(&response_text).map_err(|e| {
+            e.to_string()
+        })?;
 
-    Ok(api_res.data.unwrap_or_default())
+    let filtered = api_res.data.unwrap_or_default();
+    println!("[Rust] Found {} matching emulators for console: {}", filtered.len(), console_upper);
+
+    Ok(filtered)
 }
 
 #[tauri::command]
@@ -99,7 +106,7 @@ pub async fn fetch_all_server_emulators<R: Runtime>(
         .and_then(|v| v.as_str().map(|s| s.to_string()))
         .ok_or("Token not found")?;
 
-    let platform = std::env::consts::OS;
+    let platform = std::env::consts::OS.to_lowercase();
     let api_url = format!("{}/api/v1/emulators/all", domain.trim_end_matches('/'));
 
     let client = reqwest::Client::new();
@@ -120,7 +127,7 @@ pub async fn fetch_all_server_emulators<R: Runtime>(
 
     let filtered: Vec<ApiEmulator> = emulators
         .into_iter()
-        .filter(|e| e.platform == platform)
+        .filter(|e| e.platform.to_lowercase() == platform)
         .collect();
 
     Ok(filtered)
@@ -132,26 +139,31 @@ pub async fn download_emulator<R: Runtime>(
     console: String,
     emulator_id: Option<String>,
 ) -> Result<(), String> {
-    let store = store::get_current_store(&app)?;
+    println!("[Rust] download_emulator called for console: {}, emulator_id: {:?}", console, emulator_id);
+    // Use current store for connection details
+    let current_store = store::get_current_store(&app)?;
+    // Use global store for emulator list
+    let global_store = store::get_global_store(&app)?;
 
-    let domain = store
+    let domain = current_store
         .get("domain")
         .and_then(|v| v.as_str().map(|s| s.to_string()))
         .ok_or("Domain not found")?;
-    let token = store
+    let token = current_store
         .get("token")
         .and_then(|v| v.as_str().map(|s| s.to_string()))
         .ok_or("Token not found")?;
-    let storage_path = store
+    let storage_path = current_store
         .get("storage_path")
         .and_then(|v| v.as_str().map(|s| s.to_string()))
         .ok_or("Storage path not found")?;
 
-    let platform = std::env::consts::OS;
+    let platform = std::env::consts::OS.to_lowercase();
+    let console_upper = console.to_uppercase();
     let api_url = format!(
         "{}/api/v1/emulators/{}/{}",
         domain.trim_end_matches('/'),
-        console,
+        console_upper,
         platform
     );
 
@@ -165,24 +177,43 @@ pub async fn download_emulator<R: Runtime>(
         .text()
         .await
         .map_err(|e| e.to_string())?;
+    
+    println!("Server response received (length: {})", response_text.len());
 
     let api_res: ApiResponse<Vec<ApiEmulator>> =
-        serde_json::from_str(&response_text).map_err(|e| e.to_string())?;
-    let emulators = api_res.data.ok_or("No data")?;
+        serde_json::from_str(&response_text).map_err(|e| {
+            println!("[Rust] Failed to parse JSON in download_emulator: {} | Raw JSON: {}", e, response_text);
+            e.to_string()
+        })?;
+    let emulators = api_res.data.ok_or_else(|| {
+        println!("[Rust] No 'data' field in server response");
+        "No data".to_string()
+    })?;
+
+    println!("[Rust] Found {} candidate(s) in list", emulators.len());
 
     let emulator = if let Some(id) = emulator_id {
         emulators
             .into_iter()
             .find(|e| e.id == id)
-            .ok_or("Emulator not found")?
+            .ok_or_else(|| {
+                println!("[Rust] Specified emulator ID '{}' not found in candidate list", id);
+                "Emulator not found".to_string()
+            })?
     } else {
-        emulators.into_iter().next().ok_or("No emulator found")?
+        emulators.into_iter().next().ok_or_else(|| {
+            println!("[Rust] Empty emulator candidate list for console: {}", console);
+            "No emulator found".to_string()
+        })?
     };
 
-    let mut app_data_dir = store::get_data_dir(&app)?;
+    println!("Selected emulator: '{}' (ID: {})", emulator.name, emulator.id);
+
+    let mut app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     app_data_dir.push("emulators");
-    let console_lowercased = console.to_lowercase();
-    app_data_dir.push(&console_lowercased);
+    app_data_dir.push(console.to_lowercase());
+    let emu_name_safe = emulator.name.replace(" ", "_").to_lowercase();
+    app_data_dir.push(&emu_name_safe);
     std::fs::create_dir_all(&app_data_dir).map_err(|e| e.to_string())?;
 
     let file_name = emulator
@@ -262,12 +293,13 @@ pub async fn download_emulator<R: Runtime>(
         final_binary_path = app_data_dir.join(exec_name);
     }
 
-    let mut stored_emulators: HashMap<String, StoreEmulator> = store
+    let mut stored_emulators: HashMap<String, StoreEmulator> = global_store
         .get("emulators")
         .and_then(|v| serde_json::from_value(v.clone()).ok())
         .unwrap_or_default();
 
-    let server_id = format!("server-{}", emulator.id);
+    let safe_domain = domain.replace(|c: char| !c.is_alphanumeric(), "_").to_lowercase();
+    let server_id = format!("server-{}-{}", safe_domain, emulator.id);
     let is_first = stored_emulators.is_empty();
 
     if let Some(existing) = stored_emulators.get_mut(&server_id) {
@@ -277,33 +309,144 @@ pub async fn download_emulator<R: Runtime>(
         existing.save_extensions = emulator.save_extensions.clone();
         existing.config_files = emulator.config_files.clone();
         existing.zipped = emulator.zipped;
-        existing.is_installed = true;
+        
         for c in &emulator.consoles {
             if !existing.consoles.contains(c) {
                 existing.consoles.push(c.clone());
             }
         }
     } else {
-        stored_emulators.insert(server_id.clone(), StoreEmulator {
-            id: server_id,
-            name: emulator.name.clone(),
-            consoles: emulator.consoles.clone(),
-            is_default: is_first,
-            is_installed: true,
-            binary_path: final_binary_path.to_string_lossy().to_string(),
-            run_command: emulator.run_command,
-            save_path: emulator.save_path,
-            save_extensions: emulator.save_extensions,
-            config_files: emulator.config_files,
-            zipped: emulator.zipped,
-        });
+        stored_emulators.insert(
+            server_id.clone(),
+            StoreEmulator {
+                id: server_id,
+                name: emulator.name.clone(),
+                consoles: emulator.consoles.clone(),
+                is_default: is_first,
+                binary_path: final_binary_path.to_string_lossy().to_string(),
+                run_command: emulator.run_command,
+                save_path: emulator.save_path,
+                save_extensions: emulator.save_extensions,
+                config_files: emulator.config_files,
+                zipped: emulator.zipped,
+            },
+        );
     }
 
-    store.set(
+    global_store.set(
         "emulators",
         serde_json::to_value(stored_emulators).map_err(|e| e.to_string())?,
     );
-    store.save().map_err(|e| e.to_string())?;
+    global_store.save().map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn remove_emulator<R: Runtime>(
+    app: AppHandle<R>,
+    emulator_id: String,
+) -> Result<(), String> {
+    let store = store::get_global_store(&app)?;
+    let mut stored_emulators: HashMap<String, StoreEmulator> = store
+        .get("emulators")
+        .and_then(|v| serde_json::from_value(v.clone()).ok())
+        .unwrap_or_default();
+
+    if let Some(emulator) = stored_emulators.remove(&emulator_id) {
+        // 1. Delete local files
+        let bin_path = std::path::Path::new(&emulator.binary_path);
+        if let Some(emu_dir) = bin_path.parent() {
+            if emu_dir.exists() && emu_dir.is_dir() {
+                // Sanity check: ensure we are in the emulators folder
+                if emu_dir.to_string_lossy().contains("emulators") {
+                    let _ = std::fs::remove_dir_all(emu_dir);
+                }
+            }
+        }
+
+        // 3. Update store
+        store.set(
+            "emulators",
+            serde_json::to_value(stored_emulators).map_err(|e| e.to_string())?,
+        );
+        store.save().map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn migrate_emulator_files<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
+    let store = store::get_global_store(&app)?;
+    let mut stored_emulators: HashMap<String, StoreEmulator> = store
+        .get("emulators")
+        .and_then(|v| serde_json::from_value(v.clone()).ok())
+        .unwrap_or_default();
+
+    let base_app_data = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let mut changed = false;
+
+    for emulator in stored_emulators.values_mut() {
+        if emulator.id.starts_with("custom-") {
+            continue;
+        }
+
+        let old_bin_path = std::path::PathBuf::from(&emulator.binary_path);
+        let emu_name_safe = emulator.name.replace(" ", "_").to_lowercase();
+        let mut new_dir = base_app_data.clone();
+        new_dir.push("emulators");
+        let console_folder = emulator.consoles.first().map(|c| c.to_lowercase()).unwrap_or_else(|| "system".to_string());
+        new_dir.push(&console_folder);
+        new_dir.push(&emu_name_safe);
+
+        // If the emulator is already in the right place, skip
+        if old_bin_path.starts_with(&new_dir) {
+            continue;
+        }
+
+        if !old_bin_path.exists() {
+            continue;
+        }
+
+        // 1. Create new dir
+        let _ = std::fs::create_dir_all(&new_dir);
+
+        // 2. Find old dir (usually parent of the binary)
+        if let Some(old_dir) = old_bin_path.parent() {
+            if old_dir.exists() && old_dir.is_dir() {
+                // Sanity check: ensure we are indeed in an emulator folder
+                let old_str = old_dir.to_string_lossy();
+                if old_str.contains("emulators") || old_str.contains("domains") {
+                    // Move contents of old_dir to new_dir
+                    if let Ok(entries) = std::fs::read_dir(old_dir) {
+                        for entry in entries.flatten() {
+                            let fname = entry.file_name();
+                            let dest = new_dir.join(fname);
+                            let _ = std::fs::rename(entry.path(), dest);
+                        }
+                    }
+
+                    // 3. Update binary path
+                    let bin_name = old_bin_path.file_name().unwrap_or_default();
+                    let new_bin_path = new_dir.join(bin_name);
+                    emulator.binary_path = new_bin_path.to_string_lossy().to_string();
+                    changed = true;
+
+                    // 4. Try to remove the old directory if it's empty
+                    let _ = std::fs::remove_dir_all(old_dir);
+                }
+            }
+        }
+    }
+
+    if changed {
+        store.set(
+            "emulators",
+            serde_json::to_value(stored_emulators).map_err(|e| e.to_string())?,
+        );
+        store.save().map_err(|e| e.to_string())?;
+    }
 
     Ok(())
 }

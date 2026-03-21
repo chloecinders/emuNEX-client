@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useGameStore } from "../../stores/GameStore";
 import Button from "../ui/Button.vue";
 import ReportGameIssue from "../modals/ReportGameIssue.vue";
@@ -20,7 +20,6 @@ const open = (event: MouseEvent, id: string) => {
     gameId.value = id;
     show.value = true;
 
-    // Close on next click anywhere
     setTimeout(() => {
         document.addEventListener("click", close, { once: true });
     }, 0);
@@ -51,7 +50,6 @@ const openReport = () => {
     close();
 };
 
-// Expose open method to parent
 defineExpose({
     open,
 });
@@ -73,6 +71,8 @@ onUnmounted(() => {
     window.removeEventListener("close-all-context-menus", handleCloseAll);
     window.removeEventListener("scroll", handleScroll, true);
 });
+
+const isInstalled = computed(() => gameStore.installedGameIds.includes(gameId.value || ""))
 </script>
 
 <template>
@@ -83,8 +83,8 @@ onUnmounted(() => {
         @contextmenu.prevent
     >
         <div class="c-context-menu__primary">
-            <Button color="primary" size="sm" full @click="playOrInstall">
-                {{ gameId && gameStore.installedGameIds.includes(gameId) ? "Play" : "Install" }}
+            <Button :color="isInstalled ? 'primary' : 'green'" size="sm" full @click="playOrInstall">
+                {{ gameId && isInstalled ? "Play" : "Install" }}
             </Button>
         </div>
         <button class="c-context-menu__item" @click="openReport">Report Issue...</button>

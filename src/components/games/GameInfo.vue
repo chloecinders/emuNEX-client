@@ -15,6 +15,7 @@ import Button from "../ui/Button.vue";
 import Heading from "../ui/Heading.vue";
 import IconButton from "../ui/IconButton.vue";
 import Modal from "../ui/Modal.vue";
+import Select from "../ui/Select.vue";
 import Text from "../ui/Text.vue";
 import Tooltip from "../ui/Tooltip.vue";
 import ShelfManager from "./ShelfManager.vue";
@@ -28,9 +29,9 @@ const isReadyToPlay = ref(false);
 const isDownloading = ref(false);
 const showShelfManager = ref(false);
 const showConfirmInstallModal = ref(false);
+const availableEmulators = ref<any[]>([]);
 const pendingEmulatorInfo = ref<any>(null);
 
-// Version picker state
 const showVersionPicker = ref(false);
 const loadingVersions = ref(false);
 const versions = ref<any[]>([]);
@@ -48,9 +49,9 @@ const toggleVersionPicker = async () => {
         }
         if (versions.value.length === 0 && game.value) {
             loadingVersions.value = true;
+
             try {
                 versions.value = await gameStore.fetchVersions(game.value.id);
-                console.log("[GameInfo] fetchVersions returned:", versions.value);
             } catch (err) {
                 console.error("[GameInfo] fetchVersions Error:", err);
             } finally {
@@ -65,7 +66,6 @@ const selectVersion = (v: any) => {
     showVersionPicker.value = false;
 };
 
-// Close picker when clicking outside
 onMounted(() => {
     window.addEventListener("click", (e) => {
         const target = e.target as HTMLElement;
@@ -129,7 +129,6 @@ watch(
     { immediate: true },
 );
 
-// Clear versions when game changes
 watch(
     () => game.value?.id,
     () => {
@@ -150,6 +149,7 @@ const handleInstall = async () => {
     if (!showConfirmInstallModal.value && (!emulatorInstalled || !romInstalled)) {
         if (!emulatorInstalled) {
             const serverEms = await emulatorStore.fetchServerEmulators(game.value.console);
+            availableEmulators.value = serverEms;
             pendingEmulatorInfo.value = serverEms[0] || null;
 
             if (!pendingEmulatorInfo.value) {
@@ -189,6 +189,7 @@ const handleInstall = async () => {
     } finally {
         isDownloading.value = false;
         pendingEmulatorInfo.value = null;
+        availableEmulators.value = [];
     }
 };
 
@@ -213,6 +214,13 @@ const installItems = computed<InstallItem[]>(() => {
     }
 
     return items;
+});
+
+const emulatorOptions = computed(() => {
+    return availableEmulators.value.map(emu => ({
+        name: emu.name,
+        value: emu.id
+    }));
 });
 
 const showConflictModal = ref(false);
@@ -471,7 +479,18 @@ const handlePlay = async (customEmulatorId?: string) => {
             :loading="isDownloading"
             @close="showConfirmInstallModal = false"
             @confirm="handleInstall"
-        />
+        >
+            <template #header v-if="availableEmulators.length > 1">
+                <div style="margin-top: 12px; margin-bottom: 8px;">
+                    <Select
+                        label="Choose Emulator to Install"
+                        :modelValue="pendingEmulatorInfo?.id || ''"
+                        @update:modelValue="val => { pendingEmulatorInfo = availableEmulators.find(em => em.id === val) }"
+                        :options="emulatorOptions"
+                    />
+                </div>
+            </template>
+        </InstallModal>
     </div>
 </template>
 
