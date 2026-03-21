@@ -38,6 +38,106 @@ fn split_args(cmd: &str) -> Vec<String> {
     args
 }
 
+/// Metadata used for snapshot diffing.
+struct FileMeta {
+    size: u64,
+    modified: Option<std::time::SystemTime>,
+}
+
+/// Recursively snapshot all files under `dir`, mapping relative paths to their metadata.
+fn recursive_snapshot(dir: &std::path::Path) -> HashMap<std::path::PathBuf, FileMeta> {
+    let mut map = HashMap::new();
+    if !dir.exists() {
+        return map;
+    }
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(current) = stack.pop() {
+        if let Ok(entries) = std::fs::read_dir(&current) {
+            for entry in entries.filter_map(|e| e.ok()) {
+                let path = entry.path();
+                if path.is_dir() {
+                    stack.push(path);
+                } else if path.is_file() {
+                    let meta = entry.metadata().ok();
+                    let file_meta = FileMeta {
+                        size: meta.as_ref().map(|m| m.len()).unwrap_or(0),
+                        modified: meta.as_ref().and_then(|m| m.modified().ok()),
+                    };
+                    let rel = path.strip_prefix(dir).unwrap_or(&path).to_path_buf();
+                    map.insert(rel, file_meta);
+                }
+            }
+        }
+    }
+    map
+}
+
+/// Recursively copy all files from `src_dir` into `dst_dir`, preserving sub-folder structure.
+fn recursive_copy_dir(src_dir: &std::path::Path, dst_dir: &std::path::Path) {
+    if !src_dir.exists() {
+        return;
+    }
+    let mut stack = vec![src_dir.to_path_buf()];
+    while let Some(current) = stack.pop() {
+        if let Ok(entries) = std::fs::read_dir(&current) {
+            for entry in entries.filter_map(|e| e.ok()) {
+                let path = entry.path();
+                let rel = match path.strip_prefix(src_dir) {
+                    Ok(r) => r.to_path_buf(),
+                    Err(_) => continue,
+                };
+                let dest = dst_dir.join(&rel);
+                if path.is_dir() {
+                    std::fs::create_dir_all(&dest).ok();
+                    stack.push(path);
+                } else if path.is_file() {
+                    if let Some(parent) = dest.parent() {
+                        std::fs::create_dir_all(parent).ok();
+                    }
+                    std::fs::copy(&path, &dest).ok();
+                }
+            }
+        }
+    }
+}
+
+/// Collect files matching `extensions` under `dir`, returning (relative, absolute) pairs.
+fn collect_by_extension(
+    dir: &std::path::Path,
+    extensions: &[String],
+) -> Vec<(std::path::PathBuf, std::path::PathBuf)> {
+    let mut results = Vec::new();
+    if !dir.exists() || extensions.is_empty() {
+        return results;
+    }
+    let exts_lower: Vec<String> = extensions
+        .iter()
+        .map(|e| e.trim_start_matches('.').to_lowercase())
+        .collect();
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(current) = stack.pop() {
+        if let Ok(entries) = std::fs::read_dir(&current) {
+            for entry in entries.filter_map(|e| e.ok()) {
+                let path = entry.path();
+                if path.is_dir() {
+                    stack.push(path);
+                } else if path.is_file() {
+                    let file_ext = path
+                        .extension()
+                        .and_then(|e| e.to_str())
+                        .map(|e| e.to_lowercase())
+                        .unwrap_or_default();
+                    if exts_lower.contains(&file_ext) {
+                        let rel = path.strip_prefix(dir).unwrap_or(&path).to_path_buf();
+                        results.push((rel, path));
+                    }
+                }
+            }
+        }
+    }
+    results
+}
+
 #[tauri::command]
 pub async fn install_game<R: Runtime>(
     app: AppHandle<R>,
@@ -258,25 +358,48 @@ pub async fn play_game<R: Runtime>(
         None
     };
 
+    // --- Restore saves into sandbox (preserving sub-folder structure) ---
+    // If there's an absolute external save_path, restore there; otherwise restore into temp_dir.
     if let Some(ref path) = resolved_save_path {
         let p = std::path::Path::new(path);
         if p.is_absolute() {
-            if let Some(parent) = p.parent() {
-                std::fs::create_dir_all(parent).ok();
-            }
-
-            if let Ok(entries) = std::fs::read_dir(&save_dir) {
-                for entry in entries.filter_map(|e| e.ok()) {
-                    let fname = entry.file_name().to_string_lossy().to_string();
-                    if p.is_dir() {
-                        std::fs::copy(entry.path(), p.join(fname)).ok();
-                    } else if fname == p.file_name().and_then(|f| f.to_str()).unwrap_or("") {
-                        std::fs::copy(entry.path(), p).ok();
+            if p.is_file() || p.extension().is_some() {
+                // save_path points to a single save file: find a matching file in save_dir
+                if let Some(parent) = p.parent() {
+                    std::fs::create_dir_all(parent).ok();
+                }
+                let target_name = p.file_name().and_then(|f| f.to_str()).unwrap_or("");
+                if !target_name.is_empty() {
+                    let src = save_dir.join(target_name);
+                    if src.exists() {
+                        std::fs::copy(&src, p).ok();
                     }
                 }
+            } else {
+                // save_path points to a directory: recursively restore everything there
+                std::fs::create_dir_all(p).ok();
+                recursive_copy_dir(&save_dir, p);
             }
         }
+    } else {
+        // No external save_path: restore into the sandbox temp_dir
+        recursive_copy_dir(&save_dir, &temp_dir);
     }
+
+
+
+    // --- Pre-launch snapshot (used as diff fallback if no save_extensions configured) ---
+    let scan_dir_for_snapshot = if let Some(ref path) = resolved_save_path {
+        let p = std::path::Path::new(path);
+        if p.is_absolute() && p.is_dir() {
+            p.to_path_buf()
+        } else {
+            temp_dir.clone()
+        }
+    } else {
+        temp_dir.clone()
+    };
+    let pre_snapshot = recursive_snapshot(&scan_dir_for_snapshot);
 
     let child = if !emulator.binary_path.is_empty() || !emulator.run_command.is_empty() {
         let bin_to_use = if !emulator.binary_path.is_empty() {
@@ -344,52 +467,68 @@ pub async fn play_game<R: Runtime>(
 
     child.wait().map_err(|e| e.to_string())?;
 
-    if let Some(ref path) = resolved_save_path {
+    // --- Post-launch save detection ---
+    // Determine which directory to scan for save files.
+    let scan_dir = if let Some(ref path) = resolved_save_path {
         let p = std::path::Path::new(path);
-        if p.is_absolute() {
-            if p.is_dir() {
-                if let Ok(entries) = std::fs::read_dir(p) {
-                    for entry in entries.filter_map(|e| e.ok()) {
-                        let fname = entry.file_name().to_string_lossy().to_string();
-                        if !emulator.config_files.contains(&fname) && entry.path() != temp_rom_path
-                        {
-                            std::fs::copy(entry.path(), save_dir.join(fname)).ok();
-                        }
-                    }
-                }
-            } else if p.exists() {
-                let fname = p.file_name().and_then(|f| f.to_str()).unwrap_or("save.dat");
-                std::fs::copy(p, save_dir.join(fname)).ok();
-            }
-        }
-    }
-
-    for entry in std::fs::read_dir(&temp_dir).map_err(|e| e.to_string())? {
-        let entry = entry.map_err(|e| e.to_string())?;
-        let path = entry.path();
-        let fname = entry.file_name().to_string_lossy().to_string();
-
-        if path == temp_rom_path || emulator.config_files.contains(&fname) {
-            continue;
-        }
-
-        let should_copy = if let Some(ref save_path_template) = resolved_save_path {
-            let p = std::path::Path::new(save_path_template);
-            if p.is_absolute() {
-                false
-            } else {
-                let target_fname = p.file_name().and_then(|f| f.to_str()).unwrap_or("");
-                fname == target_fname || target_fname.is_empty()
-            }
+        if p.is_absolute() && (p.is_dir() || (!p.exists() && p.extension().is_none())) {
+            p.to_path_buf()
         } else {
-            true
-        };
+            temp_dir.clone()
+        }
+    } else {
+        temp_dir.clone()
+    };
 
-        if should_copy {
-            std::fs::copy(&path, save_dir.join(entry.file_name())).map_err(|e| e.to_string())?;
+    // ROM filename to exclude
+    let rom_abs = temp_rom_path.clone();
+
+    if !emulator.save_extensions.is_empty() {
+        // PRIMARY: extension matching — collect all files with matching extensions
+        let matched = collect_by_extension(&scan_dir, &emulator.save_extensions);
+        for (rel, abs_path) in matched {
+            let dest = save_dir.join(&rel);
+            if let Some(parent) = dest.parent() {
+                std::fs::create_dir_all(parent).ok();
+            }
+            std::fs::copy(&abs_path, &dest).ok();
+        }
+    } else {
+        // FALLBACK: snapshot diffing — copy new or modified files (excl. ROM and config files)
+        let post_snapshot = recursive_snapshot(&scan_dir);
+        for (rel, post_meta) in &post_snapshot {
+            let abs_path = scan_dir.join(rel);
+            // Skip the ROM itself
+            if abs_path == rom_abs {
+                continue;
+            }
+            // Skip known config files
+            let fname = rel
+                .file_name()
+                .and_then(|f| f.to_str())
+                .unwrap_or(""
+            );
+            if emulator.config_files.iter().any(|c| c == fname) {
+                continue;
+            }
+            let is_new_or_changed = match pre_snapshot.get(rel) {
+                None => true, // new file
+                Some(pre_meta) => {
+                    pre_meta.size != post_meta.size
+                        || pre_meta.modified != post_meta.modified
+                }
+            };
+            if is_new_or_changed {
+                let dest = save_dir.join(rel);
+                if let Some(parent) = dest.parent() {
+                    std::fs::create_dir_all(parent).ok();
+                }
+                std::fs::copy(&abs_path, &dest).ok();
+            }
         }
     }
 
+    // --- Upload to cloud ---
     let mut sync_versions = store
         .get("sync_versions")
         .and_then(|v| v.as_object().cloned())

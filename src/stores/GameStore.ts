@@ -1,14 +1,16 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
 import { DiscordRPC } from "../lib/rpc";
-import { http } from "../utils/http";
+import { http } from "../lib/http";
 
 export type PartialGame = {
     id: string;
     title: string;
+    realname: string | null;
     console: string | undefined;
     image_path: string;
     region: string;
+    versions_count: number;
 };
 
 export type LibraryGame = PartialGame & {
@@ -36,6 +38,7 @@ export type Game = {
     file_size_bytes?: number;
     release_year: number;
     languages?: string[] | null;
+    versions_count: number;
 };
 
 interface FetchFilters {
@@ -174,6 +177,19 @@ export const useGameStore = defineStore("gameStore", () => {
         return [];
     }
 
+    async function fetchVersions(id: string): Promise<PartialGame[]> {
+        loading.value = true;
+        try {
+            const res = await http.get<PartialGame[]>(`/roms/${id}/versions`);
+            if (res.success) return res.data;
+        } catch (err) {
+            console.error("Failed to fetch versions:", err);
+        } finally {
+            loading.value = false;
+        }
+        return [];
+    }
+
     const cachedSearchOverview = ref<Record<string, PartialGame[]> | null>(null);
 
     async function fetchSearchOverview(force = false): Promise<Record<string, PartialGame[]>> {
@@ -276,6 +292,7 @@ export const useGameStore = defineStore("gameStore", () => {
         startGame,
         fetchGame,
         searchGames,
+        fetchVersions,
         fetchSearchOverview,
         fetchShelves,
         createShelf,

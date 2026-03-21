@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useConsoleStore } from "../../stores/ConsoleStore";
 import { type PartialGame } from "../../stores/GameStore";
-import { useStoragePath } from "../../utils/http";
+import { useStoragePath } from "../../lib/http";
 
 defineProps<{
     game: PartialGame;
@@ -26,11 +26,15 @@ const consoleStore = useConsoleStore();
         @click="emit('click', game.id)"
     >
         <div
-            v-if="game.region"
+            v-if="game.region && (!game.versions_count || game.versions_count <= 1)"
             class="c-game-card__region"
             :style="{ background: consoleStore.getConsoleColor(game.console) }"
         >
             {{ game.region }}
+        </div>
+
+        <div v-if="game.versions_count > 1" class="c-game-card__version-badge">
+            {{ game.versions_count }}
         </div>
 
         <img :src="useStoragePath(game.image_path)" :alt="game.title" class="c-game-card__cover" />
@@ -93,6 +97,25 @@ const consoleStore = useConsoleStore();
         padding: var(--spacing-xxs) var(--spacing-xs);
         border-bottom-left-radius: var(--radius-md);
         color: #fff;
+    }
+
+    &__version-badge {
+        position: absolute;
+        bottom: 8px;
+        left: 8px;
+        width: 20px;
+        height: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        background: #505050;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+        color: #fff;
+        font-weight: 800;
+        font-size: 0.65rem;
+        z-index: 10;
+        border: 1.5px solid rgba(255, 255, 255, 0.2);
     }
 
     &__cover {

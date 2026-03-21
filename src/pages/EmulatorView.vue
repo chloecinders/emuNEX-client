@@ -34,6 +34,7 @@ const editState = ref<any>({});
 const newlyAddedIds = ref<Set<string>>(new Set());
 
 const newConsoleInputs = ref<Record<string, string>>({});
+const newSaveExtInputs = ref<Record<string, string>>({});
 
 const addConsoleToEmulator = (id: string) => {
     const val = (newConsoleInputs.value[id] || "").trim().toLowerCase();
@@ -43,9 +44,25 @@ const addConsoleToEmulator = (id: string) => {
     newConsoleInputs.value[id] = "";
 };
 
+const addSaveExtToEmulator = (id: string) => {
+    const val = (newSaveExtInputs.value[id] || "").trim().toLowerCase().replace(/^\./, '');
+    if (val && !editState.value[id].save_extensions.includes(val)) {
+        editState.value[id].save_extensions.push(val);
+    }
+    newSaveExtInputs.value[id] = "";
+};
+
+const removeSaveExtFromEmulator = (emulatorId: string, ext: string) => {
+    editState.value[emulatorId].save_extensions = editState.value[emulatorId].save_extensions.filter((e: string) => e !== ext);
+};
+
 const initEdit = (emulator: Emulator) => {
-    editState.value[emulator.id] = JSON.parse(JSON.stringify(emulator));
+    editState.value[emulator.id] = JSON.parse(JSON.stringify({
+        ...emulator,
+        save_extensions: emulator.save_extensions ?? [],
+    }));
     newConsoleInputs.value[emulator.id] = "";
+    newSaveExtInputs.value[emulator.id] = "";
 };
 
 const saveEmulatorChanges = async (id: string) => {
@@ -82,6 +99,7 @@ const addCustomEmulator = () => {
         binary_path: "",
         run_command: "",
         save_path: "",
+        save_extensions: [],
         config_files: [],
         zipped: false,
     };
@@ -306,6 +324,36 @@ const installItems = computed<InstallItem[]>(() => {
                                 <Text v-else variant="muted" class="c-emulator-field__value">{{
                                     emulator.save_path || "No custom save path"
                                 }}</Text>
+                            </div>
+
+                            <div class="c-emulator-field">
+                                <Text variant="label" size="sm">Save File Extensions</Text>
+                                <div v-if="editState[emulator.id]" style="display: flex; flex-direction: column; gap: 8px;">
+                                    <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px;">
+                                        <Badge
+                                            v-for="ext in editState[emulator.id].save_extensions"
+                                            :key="ext"
+                                            color="grey"
+                                            size="sm"
+                                            style="cursor: pointer;"
+                                            @click="removeSaveExtFromEmulator(emulator.id, ext)"
+                                        >{{ ext }} ×</Badge>
+                                        <Text v-if="editState[emulator.id].save_extensions.length === 0" variant="muted" size="sm">No extensions — will use snapshot diffing</Text>
+                                    </div>
+                                    <div style="display: flex; gap: 8px; align-items: center;">
+                                        <Input
+                                            v-model="newSaveExtInputs[emulator.id]"
+                                            placeholder="e.g. sra, srm, eep"
+                                            style="flex: 1;"
+                                            @keydown.enter.prevent="addSaveExtToEmulator(emulator.id)"
+                                        />
+                                        <Button size="sm" @click="addSaveExtToEmulator(emulator.id)">Add</Button>
+                                    </div>
+                                </div>
+                                <div v-else style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px;">
+                                    <Badge v-for="ext in (emulator.save_extensions ?? [])" :key="ext" color="blue" size="sm">.{{ ext }}</Badge>
+                                    <Text v-if="!emulator.save_extensions?.length" variant="muted" size="sm">Snapshot diffing (auto)</Text>
+                                </div>
                             </div>
                         </div>
                     </div>

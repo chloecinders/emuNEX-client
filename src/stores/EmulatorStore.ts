@@ -12,6 +12,7 @@ export type Emulator = {
     binary_path: string;
     run_command: string;
     save_path?: string;
+    save_extensions: string[];
     config_files: string[];
     zipped: boolean;
 };
@@ -25,6 +26,7 @@ export type ServerEmulator = {
     binary_path: string;
     binary_name: string | null;
     save_path: string | null;
+    save_extensions: string[];
     config_files: string[];
     zipped: boolean;
     file_size: number;

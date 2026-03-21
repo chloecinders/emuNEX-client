@@ -1,7 +1,7 @@
 import { setActivity, start } from "tauri-plugin-drpc";
 import { Activity, Assets, Timestamps } from "tauri-plugin-drpc/activity";
 import { useGameStore } from "../stores/GameStore";
-import { useStoragePath } from "../utils/http";
+import { useStoragePath } from "./http";
 
 export { Activity } from "tauri-plugin-drpc/activity";
 
@@ -51,7 +51,7 @@ export class DiscordRPC {
             const gameImage = useStoragePath(game.image_path);
             const activity = new Activity()
                 .setDetails(`Playing ${game.title}`)
-                .setTimestamps(new Timestamps(this.startTimestamp))
+                .setTimestamps(new Timestamps(Date.now()))
                 .setAssets(new Assets().setLargeImage(gameImage).setSmallImage("emunex_icon"));
 
             await setActivity(activity);

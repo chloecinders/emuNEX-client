@@ -1,6 +1,6 @@
 <script lang="ts" setup>
 import { ref } from 'vue';
-import { http } from '../../utils/http';
+import { http } from '../../lib/http';
 import Modal from '../ui/Modal.vue';
 import Button from '../ui/Button.vue';
 import Select from '../ui/Select.vue';

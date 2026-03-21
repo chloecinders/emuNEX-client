@@ -1,13 +1,13 @@
 <script lang="ts" setup>
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { Gamepad2, Library } from "lucide-vue-next";
+import { ChevronDown, Gamepad2, Library } from "lucide-vue-next";
 import { computed, onMounted, ref, type Ref, watch } from "vue";
 import { DiscordRPC } from "../../lib/rpc";
 import { useConsoleStore } from "../../stores/ConsoleStore";
 import { useEmulatorStore } from "../../stores/EmulatorStore";
 import { type Game, useGameStore } from "../../stores/GameStore";
-import { useStoragePath } from "../../utils/http";
+import { useStoragePath } from "../../lib/http";
 import InstallModal, { type InstallItem } from "../modals/InstallModal.vue";
 import SaveConflict from "../modals/SaveConflict.vue";
 import Badge from "../ui/Badge.vue";
@@ -29,6 +29,51 @@ const isDownloading = ref(false);
 const showShelfManager = ref(false);
 const showConfirmInstallModal = ref(false);
 const pendingEmulatorInfo = ref<any>(null);
+
+// Version picker state
+const showVersionPicker = ref(false);
+const loadingVersions = ref(false);
+const versions = ref<any[]>([]);
+const versionPickerX = ref(0);
+const versionPickerY = ref(0);
+const splitButtonRef = ref<HTMLElement | null>(null);
+
+const toggleVersionPicker = async () => {
+    showVersionPicker.value = !showVersionPicker.value;
+    if (showVersionPicker.value) {
+        if (splitButtonRef.value) {
+            const rect = splitButtonRef.value.getBoundingClientRect();
+            versionPickerX.value = rect.right;
+            versionPickerY.value = rect.top;
+        }
+        if (versions.value.length === 0 && game.value) {
+            loadingVersions.value = true;
+            try {
+                versions.value = await gameStore.fetchVersions(game.value.id);
+                console.log("[GameInfo] fetchVersions returned:", versions.value);
+            } catch (err) {
+                console.error("[GameInfo] fetchVersions Error:", err);
+            } finally {
+                loadingVersions.value = false;
+            }
+        }
+    }
+};
+
+const selectVersion = (v: any) => {
+    gameStore.currentSelectedGame = v.id;
+    showVersionPicker.value = false;
+};
+
+// Close picker when clicking outside
+onMounted(() => {
+    window.addEventListener("click", (e) => {
+        const target = e.target as HTMLElement;
+        if (!target.closest(".c-bottom-panel__split-container") && !target.closest(".c-bottom-panel__versions")) {
+            showVersionPicker.value = false;
+        }
+    });
+});
 
 const libraryStats = computed(() => {
     if (!game.value) return null;
@@ -82,6 +127,15 @@ watch(
         }
     },
     { immediate: true },
+);
+
+// Clear versions when game changes
+watch(
+    () => game.value?.id,
+    () => {
+        versions.value = [];
+        showVersionPicker.value = false;
+    },
 );
 
 const handleInstall = async () => {
@@ -276,21 +330,111 @@ const handlePlay = async (customEmulatorId?: string) => {
                         <Gamepad2 />
                     </IconButton>
 
-                    <Button
-                        v-if="isReadyToPlay"
-                        color="primary"
-                        full
-                        @click="handlePlay()"
-                        :disabled="gameStore.isLaunching || gameStore.isPlaying"
+                    <div
+                        v-if="!game.versions_count || game.versions_count <= 1"
+                        class="c-bottom-panel__split-container"
                     >
-                        <template v-if="gameStore.isLaunching">LAUNCHING</template>
-                        <template v-else-if="gameStore.isPlaying">PLAYING</template>
-                        <template v-else>PLAY</template>
-                    </Button>
+                        <Button
+                            v-if="isReadyToPlay"
+                            color="primary"
+                            full
+                            @click="handlePlay()"
+                            :disabled="gameStore.isLaunching || gameStore.isPlaying"
+                        >
+                            <template v-if="gameStore.isLaunching">LAUNCHING</template>
+                            <template v-else-if="gameStore.isPlaying">PLAYING</template>
+                            <template v-else>PLAY</template>
+                        </Button>
+                        <Button v-else color="green" full @click="handleInstall" :disabled="isDownloading">
+                            {{ isDownloading ? "DOWNLOADING" : "INSTALL" }}
+                        </Button>
+                    </div>
 
-                    <Button v-else color="green" full @click="handleInstall" :disabled="isDownloading">
-                        {{ isDownloading ? "DOWNLOADING" : "INSTALL" }}
-                    </Button>
+                    <div v-else class="c-bottom-panel__split-container">
+                        <div class="c-bottom-panel__split" ref="splitButtonRef">
+                            <Button
+                                v-if="isReadyToPlay"
+                                color="primary"
+                                class="c-bottom-panel__split-main"
+                                @click="handlePlay()"
+                                :disabled="gameStore.isLaunching || gameStore.isPlaying"
+                            >
+                                <template v-if="gameStore.isLaunching">LAUNCHING</template>
+                                <template v-else-if="gameStore.isPlaying">PLAYING</template>
+                                <template v-else>PLAY</template>
+                            </Button>
+                            <Button
+                                v-else
+                                color="green"
+                                class="c-bottom-panel__split-main"
+                                @click="handleInstall"
+                                :disabled="isDownloading"
+                            >
+                                {{ isDownloading ? "DOWNLOADING" : "INSTALL" }}
+                            </Button>
+
+                            <Button
+                                class="c-bottom-panel__split-arrow"
+                                :color="isReadyToPlay ? 'primary' : 'green'"
+                                :class="{
+                                    'c-bottom-panel__split-arrow--open': showVersionPicker,
+                                    'is-ready': isReadyToPlay,
+                                }"
+                                @click="toggleVersionPicker"
+                                title="Choose version"
+                            >
+                                <ChevronDown :size="18" />
+                            </Button>
+                        </div>
+
+                        <Teleport to="body">
+                            <div
+                                v-if="showVersionPicker"
+                                class="c-bottom-panel__versions"
+                                :style="{
+                                    position: 'fixed',
+                                    right: `calc(100vw - ${versionPickerX}px)`,
+                                    bottom: `calc(100vh - ${versionPickerY}px + 8px)`,
+                                }"
+                            >
+                                <div class="c-bottom-panel__versions-header"> {{ game.versions_count }} VERSIONS </div>
+                                <div v-if="loadingVersions" class="c-bottom-panel__versions-loading">
+                                    Loading versions…
+                                </div>
+                                <template v-else>
+                                    <button
+                                        v-for="v in versions"
+                                        :key="v?.id || Math.random()"
+                                        v-show="v"
+                                        class="c-bottom-panel__version-item"
+                                        @click="selectVersion(v)"
+                                        :class="{ 'is-active': v?.id === game.id }"
+                                    >
+                                        <img
+                                            v-if="v?.image_path"
+                                            :src="useStoragePath(v.image_path)"
+                                            class="c-bottom-panel__version-thumb"
+                                            :alt="v.title"
+                                        />
+                                        <div class="c-bottom-panel__version-info" v-if="v">
+                                            <span class="c-bottom-panel__version-name">
+                                                {{ v.realname || v.region || v.title }}
+                                            </span>
+                                            <span v-if="v.region" class="c-bottom-panel__version-region">{{
+                                                v.region
+                                            }}</span>
+                                        </div>
+                                        <div
+                                            v-if="v && gameStore.installedGameIds.includes(v.id)"
+                                            class="c-bottom-panel__version-installed"
+                                        >
+                                            installed
+                                        </div>
+                                    </button>
+                                </template>
+                            </div>
+                        </Teleport>
+                    </div>
                 </div>
             </div>
         </div>
@@ -305,7 +449,9 @@ const handlePlay = async (customEmulatorId?: string) => {
         <Modal v-if="game" :show="showEmulatorModal" title="Play with..." @close="showEmulatorModal = false">
             <div class="c-playwith-list">
                 <Button
-                    v-for="emu in Object.values(emulatorStore.emulators).filter(e => e.consoles.includes(game!.console.toLowerCase()))"
+                    v-for="emu in Object.values(emulatorStore.emulators).filter((e) =>
+                        e.consoles.includes(game!.console.toLowerCase()),
+                    )"
                     :key="emu.id"
                     variant="secondary"
                     full
@@ -444,10 +590,172 @@ const handlePlay = async (customEmulatorId?: string) => {
     &__btn-group {
         position: relative;
         height: 60px;
-        width: 320px;
+        width: 340px;
         flex-shrink: 0;
         display: flex;
         gap: var(--spacing-lg);
+    }
+
+    &__split-container {
+        position: relative;
+        flex: 1;
+        min-width: 0;
+    }
+
+    &__split {
+        display: flex;
+        height: 100%;
+        gap: 2px;
+        align-items: stretch;
+    }
+
+    &__split-main {
+        flex: 1;
+        :deep(.c-button) {
+            border-top-right-radius: 0;
+            border-bottom-right-radius: 0;
+        }
+        :deep(.c-button__front),
+        :deep(.c-button__edge) {
+            border-top-right-radius: 0;
+            border-bottom-right-radius: 0;
+        }
+    }
+
+    &__split-arrow {
+        width: 40px;
+        flex-shrink: 0;
+
+        :deep(.c-button) {
+            border-top-left-radius: 0;
+            border-bottom-left-radius: 0;
+        }
+        :deep(.c-button__front),
+        :deep(.c-button__edge) {
+            border-top-left-radius: 0;
+            border-bottom-left-radius: 0;
+        }
+
+        :deep(.c-button__front) {
+            padding: 0;
+            border-left: 1px solid rgba(0, 0, 0, 0.2);
+            justify-content: center;
+        }
+
+        &--open :deep(.c-button__front) {
+            transform: translateY(-1px);
+            filter: brightness(90%);
+        }
+
+        svg {
+            transition: transform 0.2s ease;
+        }
+        &--open svg {
+            transform: rotate(180deg);
+        }
+    }
+
+    &__versions {
+        position: fixed;
+        min-width: 300px;
+        width: max-content;
+        max-width: 500px;
+        background: var(--color-surface);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-md);
+        box-shadow: var(--shadow-xl);
+        overflow: hidden;
+        max-height: 250px;
+        overflow-y: auto;
+        z-index: 1000;
+    }
+
+    &__versions-header {
+        padding: var(--spacing-sm) var(--spacing-md);
+        font-size: 0.75rem;
+        font-weight: 800;
+        color: var(--color-text-muted);
+        text-transform: uppercase;
+        border-bottom: 1px solid var(--color-border);
+        background: color-mix(in srgb, var(--color-surface-variant) 50%, transparent);
+    }
+
+    &__versions-loading {
+        padding: var(--spacing-md);
+        color: var(--color-text-muted);
+        text-align: center;
+        font-size: 0.9rem;
+    }
+
+    &__version-item {
+        display: flex;
+        align-items: center;
+        gap: var(--spacing-sm);
+        width: 100%;
+        background: transparent;
+        border: none;
+        border-bottom: 1px solid var(--color-border);
+        padding: var(--spacing-sm) var(--spacing-md);
+        cursor: pointer;
+        text-align: left;
+        font-family: inherit;
+        transition: background 0.15s;
+
+        &:last-child {
+            border-bottom: none;
+        }
+
+        &:hover {
+            background: var(--color-surface-variant);
+        }
+
+        &.is-active {
+            background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+        }
+    }
+
+    &__version-thumb {
+        width: 32px;
+        height: 32px;
+        border-radius: var(--radius-xs, 4px);
+        object-fit: cover;
+        flex-shrink: 0;
+        border: 1px solid var(--color-border);
+    }
+
+    &__version-info {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-width: 0;
+    }
+
+    &__version-name {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: var(--color-text);
+        white-space: normal;
+        overflow: visible;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        line-clamp: 2;
+    }
+
+    &__version-region {
+        font-size: 0.7rem;
+        color: var(--color-text-muted);
+        font-weight: 500;
+    }
+
+    &__version-installed {
+        font-size: 0.65rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        color: var(--color-green);
+        background: color-mix(in srgb, var(--color-green) 15%, transparent);
+        padding: 2px 6px;
+        border-radius: var(--radius-full);
     }
 
     &--loading {

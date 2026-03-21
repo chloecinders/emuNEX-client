@@ -23,7 +23,6 @@ const emit = defineEmits(["click"]);
         :disabled="disabled"
         @click="emit('click', $event)"
     >
-        <span class="c-button__shadow"></span>
         <span class="c-button__edge"></span>
         <span class="c-button__front">
             <slot />
@@ -47,14 +46,11 @@ const emit = defineEmits(["click"]);
     font-size: 1rem;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    display: inline-block;
 
     &--full {
         width: 100%;
         height: 100%;
-
-        .c-button__front {
-            height: 100%;
-        }
     }
 
     &__front {
@@ -63,14 +59,17 @@ const emit = defineEmits(["click"]);
         justify-content: center;
         gap: 8px;
         position: relative;
+        top: -6px;
         width: 100%;
+        height: 100%;
         padding: 12px 28px;
         border-radius: var(--radius-md);
         color: white;
-        transform: translateY(-4px);
-        transition: transform 150ms cubic-bezier(0.3, 0.7, 0.4, 1);
+        transition: transform 150ms cubic-bezier(0.3, 0.7, 0.4, 1), top 150ms cubic-bezier(0.3, 0.7, 0.4, 1);
         text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
         border: 1px solid rgba(255, 255, 255, 0.1);
+        user-select: none;
+        z-index: 2;
     }
 
     &__edge {
@@ -80,6 +79,8 @@ const emit = defineEmits(["click"]);
         width: 100%;
         height: 100%;
         border-radius: var(--radius-md);
+        box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+        z-index: 1;
     }
 
     &--primary {
@@ -122,18 +123,18 @@ const emit = defineEmits(["click"]);
         font-size: 0.8rem;
         .c-button__front {
             padding: 8px 16px;
-            transform: translateY(-3px);
+            top: -4px;
         }
     }
 
     &:hover .c-button__front {
-        transform: translateY(-6px);
+        top: -7px;
         filter: brightness(110%);
     }
 
     &:active .c-button__front {
-        transform: translateY(-1px);
-        transition: transform 34ms;
+        top: 0;
+        transition: top 34ms;
     }
 
     &--disabled {
@@ -142,7 +143,7 @@ const emit = defineEmits(["click"]);
         opacity: 0.7;
 
         .c-button__front {
-            transform: translateY(-1px) !important;
+            top: 0 !important;
         }
     }
 }

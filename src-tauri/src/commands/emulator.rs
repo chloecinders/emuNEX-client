@@ -16,6 +16,7 @@ pub struct ApiEmulator {
     pub binary_path: String,
     pub binary_name: Option<String>,
     pub save_path: Option<String>,
+    pub save_extensions: Vec<String>,
     pub config_files: Vec<String>,
     pub zipped: bool,
     pub file_size: i64,
@@ -34,6 +35,8 @@ pub struct StoreEmulator {
     pub run_command: String,
     #[serde(default)]
     pub save_path: Option<String>,
+    #[serde(default)]
+    pub save_extensions: Vec<String>,
     #[serde(default)]
     pub config_files: Vec<String>,
     #[serde(default)]
@@ -271,6 +274,7 @@ pub async fn download_emulator<R: Runtime>(
         existing.binary_path = final_binary_path.to_string_lossy().to_string();
         existing.run_command = emulator.run_command.clone();
         existing.save_path = emulator.save_path.clone();
+        existing.save_extensions = emulator.save_extensions.clone();
         existing.config_files = emulator.config_files.clone();
         existing.zipped = emulator.zipped;
         existing.is_installed = true;
@@ -289,6 +293,7 @@ pub async fn download_emulator<R: Runtime>(
             binary_path: final_binary_path.to_string_lossy().to_string(),
             run_command: emulator.run_command,
             save_path: emulator.save_path,
+            save_extensions: emulator.save_extensions,
             config_files: emulator.config_files,
             zipped: emulator.zipped,
         });
