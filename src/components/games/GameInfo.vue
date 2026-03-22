@@ -287,7 +287,7 @@ const handlePlay = async (customEmulatorId?: string) => {
         <div v-if="game" class="c-bottom-panel">
             <div class="c-bottom-panel__header">
                 <div class="c-bottom-panel__banner" :style="{ background: consoleStore.getConsoleColor(game.console) }">
-                    <img :src="useStoragePath(game.image_path)" alt="Game Icon" class="c-bottom-panel__thumb" />
+                    <img v-if="game" :src="useStoragePath(game.image_path)" alt="Game Icon" class="c-bottom-panel__thumb" />
                     <Badge
                         class="c-bottom-panel__tag"
                         :bg-color="consoleStore.getConsoleColor(game.console) || 'var(--color-primary)'"

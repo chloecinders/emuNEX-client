@@ -49,10 +49,11 @@ export class DiscordRPC {
 
         if (game) {
             const gameImage = useStoragePath(game.image_path);
+            const gameIcon = useStoragePath(game.image_path.replace('/covers/', '/icons/').replace('.webp', '.png'));
             const activity = new Activity()
                 .setDetails(`Playing ${game.title}`)
                 .setTimestamps(new Timestamps(Date.now()))
-                .setAssets(new Assets().setLargeImage(gameImage).setSmallImage("emunex_icon"));
+                .setAssets(new Assets().setLargeImage(gameImage).setSmallImage(gameIcon));
 
             await setActivity(activity);
         }

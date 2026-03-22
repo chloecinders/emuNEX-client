@@ -123,7 +123,7 @@ function getDragGhostContent(gameId: string): string {
     if (!game) return "";
     const bg = consoleStore.getConsoleColor(game.console);
 
-    return `<div style="width:80px;height:120px;border-radius:8px;overflow:hidden;background:${bg};box-shadow:0 8px 24px rgba(0,0,0,0.5);transform:rotate(3deg);opacity:0.9;"><img src="http://localhost:1337/storage/${game.image_path}" style="width:100%;height:100%;object-fit:cover;" /></div>`;
+    return `<div style="width:80px;height:120px;border-radius:8px;overflow:hidden;background:${bg};box-shadow:0 8px 24px rgba(0,0,0,0.5);transform:rotate(3deg);opacity:0.9;"><img src="http://localhost:1337/storage${game.image_path}" style="width:100%;height:100%;object-fit:cover;" /></div>`;
 }
 
 function activateDrag(gameId: string, shelfId: string | null, x: number, y: number) {
