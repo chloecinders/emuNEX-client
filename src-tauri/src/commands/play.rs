@@ -248,8 +248,10 @@ pub async fn play_game<R: Runtime>(
         );
     }
 
+    let console_lower = console.to_lowercase();
     let all_emulators: Vec<&StoreEmulator> = stored_emulators
         .values()
+        .filter(|e| e.consoles.iter().any(|c| c.to_lowercase() == console_lower))
         .collect();
 
     if all_emulators.is_empty() {

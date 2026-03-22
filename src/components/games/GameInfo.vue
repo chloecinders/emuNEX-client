@@ -458,7 +458,7 @@ const handlePlay = async (customEmulatorId?: string) => {
             <div class="c-playwith-list">
                 <Button
                     v-for="emu in Object.values(emulatorStore.emulators).filter((e) =>
-                        e.consoles.includes(game!.console.toLowerCase()),
+                        e.consoles.some((c) => c.toLowerCase() === game!.console.toLowerCase()),
                     )"
                     :key="emu.id"
                     variant="secondary"
