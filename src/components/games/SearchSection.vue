@@ -2,7 +2,7 @@
 import { computed, onMounted, ref, watch } from "vue";
 import GameList from "./GameList.vue";
 import Select from "../ui/Select.vue";
-import { useGameStore, type PartialGame } from "../../stores/GameStore";
+import { useGameStore, type PartialGame, type SearchOverviewGroup } from "../../stores/GameStore";
 import { useMetadataStore } from "../../stores/MetadataStore";
 
 const props = defineProps<{
@@ -18,7 +18,7 @@ const isSearching = ref(false);
 const selectedCategory = ref("");
 const selectedConsole = ref("");
 
-const overviewGroups = ref<Record<string, PartialGame[]>>({});
+const overviewGroups = ref<SearchOverviewGroup[]>([]);
 
 const categoryOptions = computed(() => [
     { name: "All Categories", value: "" },
@@ -29,29 +29,6 @@ const consoleOptions = computed(() => [
     { name: "All Consoles", value: "" },
     ...metaStore.consoles.map((c) => ({ name: c.name, value: c.name })),
 ]);
-
-const orderedGroups = computed(() => {
-    const keys = Object.keys(overviewGroups.value);
-    const result: { title: string; games: PartialGame[] }[] = [];
-
-    if (overviewGroups.value["Most Played"]) {
-        result.push({ title: "Most Played", games: overviewGroups.value["Most Played"] });
-    }
-
-    if (overviewGroups.value["Recently Added"]) {
-        result.push({ title: "Recently Added", games: overviewGroups.value["Recently Added"] });
-    }
-
-    const categories = keys
-        .filter((k) => k !== "Most Played" && k !== "Recently Added")
-        .sort((a, b) => a.localeCompare(b));
-
-    for (const cat of categories) {
-        result.push({ title: cat, games: overviewGroups.value[cat] });
-    }
-
-    return result;
-});
 
 let timeout: ReturnType<typeof setTimeout>;
 
@@ -131,7 +108,7 @@ watch([() => props.searchQuery, selectedCategory, selectedConsole], () => {
             </div>
 
             <template v-else>
-                <div v-for="group in orderedGroups" :key="group.title" class="c-search-section__group-block">
+                <div v-for="group in overviewGroups" :key="group.title" class="c-search-section__group-block">
                     <h2 class="c-search-section__group-title">{{ group.title }}</h2>
                     <GameList :games="group.games" />
                 </div>

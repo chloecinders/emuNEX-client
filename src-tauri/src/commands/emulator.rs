@@ -139,10 +139,7 @@ pub async fn download_emulator<R: Runtime>(
     console: String,
     emulator_id: Option<String>,
 ) -> Result<(), String> {
-    println!("[Rust] download_emulator called for console: {}, emulator_id: {:?}", console, emulator_id);
-    // Use current store for connection details
     let current_store = store::get_current_store(&app)?;
-    // Use global store for emulator list
     let global_store = store::get_global_store(&app)?;
 
     let domain = current_store
@@ -354,18 +351,15 @@ pub async fn remove_emulator<R: Runtime>(
         .unwrap_or_default();
 
     if let Some(emulator) = stored_emulators.remove(&emulator_id) {
-        // 1. Delete local files
         let bin_path = std::path::Path::new(&emulator.binary_path);
         if let Some(emu_dir) = bin_path.parent() {
             if emu_dir.exists() && emu_dir.is_dir() {
-                // Sanity check: ensure we are in the emulators folder
                 if emu_dir.to_string_lossy().contains("emulators") {
                     let _ = std::fs::remove_dir_all(emu_dir);
                 }
             }
         }
 
-        // 3. Update store
         store.set(
             "emulators",
             serde_json::to_value(stored_emulators).map_err(|e| e.to_string())?,
@@ -400,7 +394,6 @@ pub async fn migrate_emulator_files<R: Runtime>(app: AppHandle<R>) -> Result<(),
         new_dir.push(&console_folder);
         new_dir.push(&emu_name_safe);
 
-        // If the emulator is already in the right place, skip
         if old_bin_path.starts_with(&new_dir) {
             continue;
         }
@@ -409,16 +402,12 @@ pub async fn migrate_emulator_files<R: Runtime>(app: AppHandle<R>) -> Result<(),
             continue;
         }
 
-        // 1. Create new dir
         let _ = std::fs::create_dir_all(&new_dir);
 
-        // 2. Find old dir (usually parent of the binary)
         if let Some(old_dir) = old_bin_path.parent() {
             if old_dir.exists() && old_dir.is_dir() {
-                // Sanity check: ensure we are indeed in an emulator folder
                 let old_str = old_dir.to_string_lossy();
                 if old_str.contains("emulators") || old_str.contains("domains") {
-                    // Move contents of old_dir to new_dir
                     if let Ok(entries) = std::fs::read_dir(old_dir) {
                         for entry in entries.flatten() {
                             let fname = entry.file_name();
@@ -427,13 +416,11 @@ pub async fn migrate_emulator_files<R: Runtime>(app: AppHandle<R>) -> Result<(),
                         }
                     }
 
-                    // 3. Update binary path
                     let bin_name = old_bin_path.file_name().unwrap_or_default();
                     let new_bin_path = new_dir.join(bin_name);
                     emulator.binary_path = new_bin_path.to_string_lossy().to_string();
                     changed = true;
 
-                    // 4. Try to remove the old directory if it's empty
                     let _ = std::fs::remove_dir_all(old_dir);
                 }
             }

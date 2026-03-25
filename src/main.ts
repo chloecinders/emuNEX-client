@@ -6,6 +6,8 @@ import App from "./App.vue";
 import { addSavedDomain, getDomainStore, getGlobalStore, normalizeDomain } from "./lib/store";
 import { router } from "./router";
 import { useUpdateStore } from "./stores/UpdateStore";
+import { DiscordRPC } from "./lib/rpc";
+import { useAuthStore } from "./stores/AuthStore";
 
 const app = createApp(App);
 const pinia = createPinia();
@@ -26,9 +28,6 @@ async function checkForUpdatesOnStartup() {
 }
 
 await checkForUpdatesOnStartup();
-
-import { DiscordRPC } from "./lib/rpc";
-import { useAuthStore } from "./stores/AuthStore";
 
 const authStore = useAuthStore(pinia);
 
@@ -70,6 +69,7 @@ const urlHandler = async (urls: string[]) => {
 
 onOpenUrl(urlHandler);
 
+const devParam = new URLSearchParams(window.location.search).get("dev");
 const domain = await globalStore.get<string>("domain");
 
 if (domain) {
@@ -80,11 +80,16 @@ if (domain) {
     if (token && storagePath) {
         authStore.setAuth(domain, token, storagePath);
         authStore.startup().then(() => {
-            if (router.currentRoute.value.name === "login") {
+            if (router.currentRoute.value.name === "login" && !devParam) {
                 router.push("/");
             }
         });
     }
+}
+
+if (devParam === "requests") {
+    await router.isReady();
+    router.replace({ name: "dev_requests" });
 }
 
 await DiscordRPC.start("1483456544556449842");

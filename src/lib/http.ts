@@ -1,5 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
+import { getActivePinia } from "pinia";
 import { useAuthStore } from "../stores/AuthStore";
+import { useDevStore } from "../stores/DevStore";
 
 export interface V1ApiResponse<T> {
     data: T;
@@ -14,14 +16,33 @@ export interface V1ApiError {
 
 export type V1ApiResponseType<T> = Promise<V1ApiResponse<T>>;
 
+function tryLogRequest(entry: {
+    method: string;
+    url: string;
+    body: any;
+    response: any;
+    success: boolean;
+    duration: number;
+}) {
+    try {
+        const pinia = getActivePinia();
+        if (!pinia) return;
+        const devStore = useDevStore();
+        if (devStore.isDevMode) {
+            devStore.addRequest(entry);
+        }
+    } catch { }
+}
+
 class ApiClient {
     private async request<T>(endpoint: string, method: string, body?: any): V1ApiResponseType<T> {
         const store = useAuthStore();
         const baseUrl = `${store.domain}/api/v1`;
         const url = `${baseUrl}${endpoint}`;
+        const startTime = Date.now();
 
         try {
-            const response = await invoke<T>("http", {
+            const response = await invoke<any>("http", {
                 req: {
                     url,
                     method,
@@ -30,7 +51,9 @@ class ApiClient {
                 },
             });
 
-            return response as any;
+            tryLogRequest({ method, url, body, response, success: true, duration: Date.now() - startTime });
+
+            return response;
         } catch (error: any) {
             let parsedError: V1ApiError;
 
@@ -48,6 +71,8 @@ class ApiClient {
                     success: false,
                 };
             }
+
+            tryLogRequest({ method, url, body, response: parsedError, success: false, duration: Date.now() - startTime });
 
             throw parsedError;
         }

@@ -66,14 +66,6 @@ const filteredShelves = computed(() => {
     return shelves;
 });
 
-const librarySearchResults = computed(() => {
-    const query = searchQuery.value.trim().toLowerCase();
-    if (!query) return [];
-
-    return gameStore.library.filter(
-        (game) => game.title.toLowerCase().includes(query) || game.console?.toLowerCase().includes(query),
-    );
-});
 
 async function handleCreateShelf() {
     if (!newShelfName.value.trim()) return;
@@ -325,7 +317,7 @@ const onDoubleClickGame = (gameId: string) => {
             </div>
 
             <div
-                v-else-if="!filteredShelves.length && !recentlyPlayedGames.length && !librarySearchResults.length"
+                v-else-if="!filteredShelves.length && !recentlyPlayedGames.length"
                 class="c-empty-state"
             >
                 <Text v-if="searchQuery" variant="muted" size="lg">No titles found for "{{ searchQuery }}"</Text>
@@ -482,43 +474,6 @@ const onDoubleClickGame = (gameId: string) => {
                     </template>
                 </div>
 
-                <div v-if="searchQuery" class="c-shelf">
-                    <div class="c-shelf__header-wrap">
-                        <Heading :level="2" color="primary" is-badge class="c-shelf__badge">
-                            Search Results
-                            <Text variant="label" size="xs">
-                                {{ librarySearchResults.length }}
-                                {{ librarySearchResults.length === 1 ? "match" : "matches" }}
-                            </Text>
-                        </Heading>
-                    </div>
-
-                    <div v-if="librarySearchResults.length" class="c-shelf__grid">
-                        <GameCard
-                            v-for="game in librarySearchResults"
-                            :key="'search-' + game.id"
-                            :game="game"
-                            @click="gameStore.currentSelectedGame = game.id"
-                            @dblclick="onDoubleClickGame(game.id)"
-                            @contextmenu.stop.prevent="onContextMenu($event, game.id)"
-                        />
-                    </div>
-
-                    <div
-                        v-else
-                        class="c-shelf__empty-dropzone"
-                        style="
-                            display: block;
-                            padding: var(--spacing-xl);
-                            text-align: center;
-                            border: 2px dashed var(--color-border);
-                            border-radius: var(--radius-md);
-                            color: var(--color-text-muted);
-                        "
-                    >
-                        No matches found in your library.
-                    </div>
-                </div>
             </div>
         </div>
     </div>

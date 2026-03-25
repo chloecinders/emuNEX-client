@@ -46,6 +46,8 @@ interface FetchFilters {
     console?: string | null;
 }
 
+export type SearchOverviewGroup = { title: string; games: PartialGame[] };
+
 export const useGameStore = defineStore("gameStore", () => {
     const currentSelectedGame = ref<string | null>(null);
     const partialGames = ref<PartialGame[]>([]);
@@ -190,14 +192,14 @@ export const useGameStore = defineStore("gameStore", () => {
         return [];
     }
 
-    const cachedSearchOverview = ref<Record<string, PartialGame[]> | null>(null);
+    const cachedSearchOverview = ref<SearchOverviewGroup[] | null>(null);
 
-    async function fetchSearchOverview(force = false): Promise<Record<string, PartialGame[]>> {
+    async function fetchSearchOverview(force = false): Promise<SearchOverviewGroup[]> {
         if (!force && cachedSearchOverview.value) return cachedSearchOverview.value;
 
         loading.value = true;
         try {
-            const res = await http.get<Record<string, PartialGame[]>>("/search/overview");
+            const res = await http.get<SearchOverviewGroup[]>("/search/overview");
             if (res.success) {
                 cachedSearchOverview.value = res.data;
                 return res.data;
@@ -207,7 +209,7 @@ export const useGameStore = defineStore("gameStore", () => {
         } finally {
             loading.value = false;
         }
-        return {};
+        return [];
     }
 
     async function fetchShelves() {

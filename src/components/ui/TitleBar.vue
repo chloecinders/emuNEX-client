@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { Window } from "@tauri-apps/api/window";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { CircleHelp } from "lucide-vue-next";
 import { ref } from "vue";
-const appWindow = new Window("main");
+const appWindow = getCurrentWindow();
+const isRequestsWindow = appWindow.label === "requests";
 
 const minimize = () => appWindow.minimize();
 const toggleMaximize = async () => {
@@ -37,7 +38,7 @@ const openIssueLink = async (url: string) => {
     <div data-tauri-drag-region class="c-titlebar">
         <div class="c-titlebar__content" data-tauri-drag-region>
             <span class="c-titlebar__logo">emuNEX</span>
-            <span class="c-titlebar__title">client</span>
+            <span class="c-titlebar__title">{{ isRequestsWindow ? "Request Viewer" : "client" }}</span>
         </div>
         <div class="c-titlebar__controls">
             <button class="c-titlebar__btn" @click="onHelpClick" title="Help">

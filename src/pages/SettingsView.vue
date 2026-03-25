@@ -1,17 +1,19 @@
 <script setup lang="ts">
 import { relaunch } from "@tauri-apps/plugin-process";
 import { check, type Update } from "@tauri-apps/plugin-updater";
-import { Download, RefreshCw } from "lucide-vue-next";
-import { onMounted, ref } from "vue";
+import { Activity, Download, RefreshCw, Terminal } from "lucide-vue-next";
+import { onMounted, onUnmounted, ref } from "vue";
 import Button from "../components/ui/Button.vue";
 import Heading from "../components/ui/Heading.vue";
 import Switch from "../components/ui/Switch.vue";
 import Text from "../components/ui/Text.vue";
+import { useDevStore } from "../stores/DevStore";
 import { useThemeStore } from "../stores/ThemeStore";
 import { useUserStore } from "../stores/UserStore";
 
 const userStore = useUserStore();
 const themeStore = useThemeStore();
+const devStore = useDevStore();
 const isChecking = ref(false);
 const isUpdating = ref(false);
 const foundUpdate = ref<Update | null>(null);
@@ -19,6 +21,45 @@ const updateStatus = ref<{ message: string; type: "success" | "error" | "info" |
     message: "",
     type: null,
 });
+const konamiToast = ref<string | null>(null);
+
+const KONAMI = ["ArrowUp", "ArrowUp", "ArrowDown", "ArrowDown", "ArrowLeft", "ArrowRight", "ArrowLeft", "ArrowRight", "b", "a"];
+const konamiProgress = ref<string[]>([]);
+
+const handleKeydown = (e: KeyboardEvent) => {
+    const expected = KONAMI[konamiProgress.value.length];
+    if (e.key === expected) {
+        konamiProgress.value.push(e.key);
+        if (konamiProgress.value.length === KONAMI.length) {
+            konamiProgress.value = [];
+            devStore.isDevMode = !devStore.isDevMode;
+            konamiToast.value = devStore.isDevMode ? "Developer Mode Enabled" : "Developer Mode Disabled";
+            setTimeout(() => (konamiToast.value = null), 3000);
+        }
+    } else {
+        konamiProgress.value = e.key === KONAMI[0] ? [e.key] : [];
+    }
+};
+
+const openRequestViewer = () => {
+    import("@tauri-apps/api/webviewWindow").then(({ WebviewWindow }) => {
+        const window = new WebviewWindow("requests", {
+            url: "index.html?dev=requests",
+            title: "Request Viewer",
+            width: 900,
+            height: 650,
+            decorations: false,
+        });
+        
+        window.once("tauri://created", () => {
+            window.show();
+        });
+
+        window.once("tauri://error", (e) => {
+            console.error(e);
+        });
+    });
+};
 
 const checkForUpdates = async () => {
     isChecking.value = true;
@@ -69,6 +110,11 @@ onMounted(async () => {
     if (!userStore.user) {
         await userStore.fetchUser();
     }
+    window.addEventListener("keydown", handleKeydown);
+});
+
+onUnmounted(() => {
+    window.removeEventListener("keydown", handleKeydown);
 });
 </script>
 
@@ -126,7 +172,38 @@ onMounted(async () => {
                     <Switch v-model="themeStore.isDark" label="Dark Mode" />
                 </div>
             </section>
+
+            <Transition name="fade">
+                <section v-if="devStore.isDevMode" class="c-settings__section">
+                    <Heading level="3" color="primary" is-badge class="c-settings__section-title">
+                        <Terminal :size="14" style="display: inline; vertical-align: middle; margin-right: 4px;" />
+                        Developer
+                    </Heading>
+
+                    <div class="c-settings__card c-settings__card--dev">
+                        <div class="c-settings__card-top">
+                            <div class="c-settings__description-wrap">
+                                <Heading :level="3">Request Viewer</Heading>
+                                <Text variant="muted" size="sm">Inspect all API requests made through the Rust HTTP bridge. Opens in a new window.</Text>
+                            </div>
+                        </div>
+                        <div class="c-settings__actions">
+                            <Button color="grey" size="sm" @click="openRequestViewer">
+                                <Activity :size="16" />
+                                <span>Open Request Viewer</span>
+                            </Button>
+                        </div>
+                        <div class="c-settings__dev-badge">{{ devStore.requests.length }} requests logged</div>
+                    </div>
+                </section>
+            </Transition>
         </div>
+
+        <Transition name="konami-toast">
+            <div v-if="konamiToast" class="c-settings__konami-toast">
+                {{ konamiToast }}
+            </div>
+        </Transition>
     </div>
 </template>
 
@@ -219,6 +296,33 @@ onMounted(async () => {
     &__spin {
         animation: spin 1.5s linear infinite;
     }
+
+    &__card--dev {
+        border-color: rgba(251, 146, 60, 0.4);
+        box-shadow: 0 0 0 1px rgba(251, 146, 60, 0.1), var(--shadow-sm);
+    }
+
+    &__dev-badge {
+        margin-top: var(--spacing-md);
+        font-size: 0.7rem;
+        color: var(--color-text-muted);
+        font-variant-numeric: tabular-nums;
+    }
+
+    &__konami-toast {
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        background: var(--color-surface);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-lg);
+        padding: 12px 18px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+        z-index: 9999;
+        pointer-events: none;
+    }
 }
 
 @keyframes spin {
@@ -237,5 +341,17 @@ onMounted(async () => {
 .fade-enter-from,
 .fade-leave-to {
     opacity: 0;
+}
+
+.konami-toast-enter-active {
+    transition: opacity 0.3s ease, transform 0.3s ease;
+}
+.konami-toast-leave-active {
+    transition: opacity 0.4s ease, transform 0.4s ease;
+}
+.konami-toast-enter-from,
+.konami-toast-leave-to {
+    opacity: 0;
+    transform: translateY(12px);
 }
 </style>

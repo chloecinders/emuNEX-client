@@ -4,6 +4,7 @@ import ShellLayout from "./layouts/ShellLayout.vue";
 import EmulatorView from "./pages/EmulatorView.vue";
 import IndexView from "./pages/IndexView.vue";
 import LoginView from "./pages/LoginView.vue";
+import RequestViewer from "./pages/RequestViewer.vue";
 
 import SettingsView from "./pages/SettingsView.vue";
 import StorageView from "./pages/StorageView.vue";
@@ -48,7 +49,13 @@ const routes = [
         name: "settings",
         component: SettingsView,
         meta: { layout: markRaw(ShellLayout) },
-    }
+    },
+    {
+        path: "/dev/requests",
+        name: "dev_requests",
+        component: RequestViewer,
+        meta: {},
+    },
 ];
 
 export const router = createRouter({
@@ -58,7 +65,7 @@ export const router = createRouter({
 
 router.beforeEach((to, _from, next) => {
     const authStore = useAuthStore();
-    if (to.name !== "login" && !authStore.token) {
+    if (to.name !== "login" && to.name !== "dev_requests" && !authStore.token) {
         next({ name: "login" });
     } else {
         next();

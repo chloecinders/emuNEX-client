@@ -13,9 +13,14 @@ onMounted(() => {
     consoleStore.fetchConsoles();
 });
 
-defineProps<{
-    games: PartialGame[];
-}>();
+const props = withDefaults(
+    defineProps<{
+        games?: PartialGame[];
+    }>(),
+    {
+        games: () => [],
+    }
+);
 
 const changeCurrentGame = (id: string) => {
     localSelectedId.value = id;
@@ -31,7 +36,7 @@ const onContextMenu = (event: MouseEvent, gameId: string) => {
 
 <template>
     <div class="c-game-list">
-        <div v-if="games.length === 0" class="c-game-list__empty"> No games found. </div>
+        <div v-if="!props.games || props.games.length === 0" class="c-game-list__empty"> No games found. </div>
 
         <div v-else class="c-game-list__grid">
             <GameCard

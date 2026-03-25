@@ -38,13 +38,11 @@ fn split_args(cmd: &str) -> Vec<String> {
     args
 }
 
-/// Metadata used for snapshot diffing.
 struct FileMeta {
     size: u64,
     modified: Option<std::time::SystemTime>,
 }
 
-/// Recursively snapshot all files under `dir`, mapping relative paths to their metadata.
 fn recursive_snapshot(dir: &std::path::Path) -> HashMap<std::path::PathBuf, FileMeta> {
     let mut map = HashMap::new();
     if !dir.exists() {
@@ -72,7 +70,6 @@ fn recursive_snapshot(dir: &std::path::Path) -> HashMap<std::path::PathBuf, File
     map
 }
 
-/// Recursively copy all files from `src_dir` into `dst_dir`, preserving sub-folder structure.
 fn recursive_copy_dir(src_dir: &std::path::Path, dst_dir: &std::path::Path) {
     if !src_dir.exists() {
         return;
@@ -101,7 +98,6 @@ fn recursive_copy_dir(src_dir: &std::path::Path, dst_dir: &std::path::Path) {
     }
 }
 
-/// Collect files matching `extensions` under `dir`, returning (relative, absolute) pairs.
 fn collect_by_extension(
     dir: &std::path::Path,
     extensions: &[String],
@@ -359,13 +355,10 @@ pub async fn play_game<R: Runtime>(
         None
     };
 
-    // --- Restore saves into sandbox (preserving sub-folder structure) ---
-    // If there's an absolute external save_path, restore there; otherwise restore into temp_dir.
     if let Some(ref path) = resolved_save_path {
         let p = std::path::Path::new(path);
         if p.is_absolute() {
             if p.is_file() || p.extension().is_some() {
-                // save_path points to a single save file: find a matching file in save_dir
                 if let Some(parent) = p.parent() {
                     std::fs::create_dir_all(parent).ok();
                 }
@@ -377,19 +370,14 @@ pub async fn play_game<R: Runtime>(
                     }
                 }
             } else {
-                // save_path points to a directory: recursively restore everything there
                 std::fs::create_dir_all(p).ok();
                 recursive_copy_dir(&save_dir, p);
             }
         }
     } else {
-        // No external save_path: restore into the sandbox temp_dir
         recursive_copy_dir(&save_dir, &temp_dir);
     }
 
-
-
-    // --- Pre-launch snapshot (used as diff fallback if no save_extensions configured) ---
     let scan_dir_for_snapshot = if let Some(ref path) = resolved_save_path {
         let p = std::path::Path::new(path);
         if p.is_absolute() && p.is_dir() {
@@ -468,8 +456,6 @@ pub async fn play_game<R: Runtime>(
 
     child.wait().map_err(|e| e.to_string())?;
 
-    // --- Post-launch save detection ---
-    // Determine which directory to scan for save files.
     let scan_dir = if let Some(ref path) = resolved_save_path {
         let p = std::path::Path::new(path);
         if p.is_absolute() && (p.is_dir() || (!p.exists() && p.extension().is_none())) {
@@ -481,11 +467,9 @@ pub async fn play_game<R: Runtime>(
         temp_dir.clone()
     };
 
-    // ROM filename to exclude
     let rom_abs = temp_rom_path.clone();
 
     if !emulator.save_extensions.is_empty() {
-        // PRIMARY: extension matching — collect all files with matching extensions
         let matched = collect_by_extension(&scan_dir, &emulator.save_extensions);
         for (rel, abs_path) in matched {
             let dest = save_dir.join(&rel);
@@ -495,15 +479,14 @@ pub async fn play_game<R: Runtime>(
             std::fs::copy(&abs_path, &dest).ok();
         }
     } else {
-        // FALLBACK: snapshot diffing — copy new or modified files (excl. ROM and config files)
         let post_snapshot = recursive_snapshot(&scan_dir);
         for (rel, post_meta) in &post_snapshot {
             let abs_path = scan_dir.join(rel);
-            // Skip the ROM itself
+
             if abs_path == rom_abs {
                 continue;
             }
-            // Skip known config files
+
             let fname = rel
                 .file_name()
                 .and_then(|f| f.to_str())
@@ -513,7 +496,7 @@ pub async fn play_game<R: Runtime>(
                 continue;
             }
             let is_new_or_changed = match pre_snapshot.get(rel) {
-                None => true, // new file
+                None => true,
                 Some(pre_meta) => {
                     pre_meta.size != post_meta.size
                         || pre_meta.modified != post_meta.modified
@@ -529,7 +512,6 @@ pub async fn play_game<R: Runtime>(
         }
     }
 
-    // --- Upload to cloud ---
     let mut sync_versions = store
         .get("sync_versions")
         .and_then(|v| v.as_object().cloned())

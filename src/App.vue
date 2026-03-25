@@ -24,7 +24,8 @@ const layout = computed(() => {
 watch(
     () => authStore.token,
     (newToken) => {
-        if (newToken && route.name === "login") {
+        const isDevWindow = new URLSearchParams(window.location.search).has("dev");
+        if (newToken && route.name === "login" && !isDevWindow) {
             router.push("/");
         }
     },
