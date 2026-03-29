@@ -108,7 +108,14 @@ fn collect_by_extension(
     }
     let exts_lower: Vec<String> = extensions
         .iter()
-        .map(|e| e.trim_start_matches('.').to_lowercase())
+        .map(|e| {
+            let lower = e.to_lowercase();
+            if lower.starts_with('.') {
+                lower
+            } else {
+                format!(".{}", lower)
+            }
+        })
         .collect();
     let mut stack = vec![dir.to_path_buf()];
     while let Some(current) = stack.pop() {
@@ -118,12 +125,8 @@ fn collect_by_extension(
                 if path.is_dir() {
                     stack.push(path);
                 } else if path.is_file() {
-                    let file_ext = path
-                        .extension()
-                        .and_then(|e| e.to_str())
-                        .map(|e| e.to_lowercase())
-                        .unwrap_or_default();
-                    if exts_lower.contains(&file_ext) {
+                    let path_str = path.to_string_lossy().to_lowercase();
+                    if exts_lower.iter().any(|ext| path_str.ends_with(ext)) {
                         let rel = path.strip_prefix(dir).unwrap_or(&path).to_path_buf();
                         results.push((rel, path));
                     }

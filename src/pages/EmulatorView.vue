@@ -49,6 +49,7 @@ const handleEditClose = () => {
 
 const handleEditSave = (id: string) => {
     newlyAddedIds.value.delete(id);
+    editingEmulatorId.value = null;
 };
 
 const handleSetDefault = async (id: string) => {

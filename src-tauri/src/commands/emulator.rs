@@ -216,7 +216,7 @@ pub async fn download_emulator<R: Runtime>(
         emulator.name, emulator.id
     );
 
-    let mut app_data_dir = store::get_data_dir(&app)?;
+    let mut app_data_dir = store::get_base_dir(&app)?;
     app_data_dir.push("emulators");
     app_data_dir.push(console.to_lowercase());
     let emu_name_safe = emulator.name.replace(" ", "_").to_lowercase();
@@ -434,7 +434,7 @@ pub async fn migrate_emulator_files<R: Runtime>(app: AppHandle<R>) -> Result<(),
         .and_then(|v| serde_json::from_value(v.clone()).ok())
         .unwrap_or_default();
 
-    let base_app_data = store::get_data_dir(&app)?;
+    let base_app_data = store::get_base_dir(&app)?;
     let mut changed = false;
 
     for emulator in stored_emulators.values_mut() {
