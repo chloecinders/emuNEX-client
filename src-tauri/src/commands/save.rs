@@ -113,15 +113,16 @@ pub async fn download_save_files<R: Runtime>(
     let server_v = files.first().map(|f| f.version_id).unwrap_or(0);
 
     for file_meta in files {
+        let payload = serde_json::json!({ "path": file_meta.file_name });
         let data = client
-            .get(format!(
-                "{}/api/v1/roms/{}/save/{}/{}",
+            .post(format!(
+                "{}/api/v1/roms/{}/save/{}/download",
                 domain.trim_end_matches('/'),
                 game_id,
-                file_meta.version_id,
-                file_meta.file_name
+                file_meta.version_id
             ))
             .header("Authorization", &token)
+            .json(&payload)
             .send()
             .await
             .map_err(|e| e.to_string())?
@@ -129,7 +130,11 @@ pub async fn download_save_files<R: Runtime>(
             .await
             .map_err(|e| e.to_string())?;
 
-        std::fs::write(save_dir.join(file_meta.file_name), data).map_err(|e| e.to_string())?;
+        let save_path = save_dir.join(&file_meta.file_name);
+        if let Some(parent) = save_path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        std::fs::write(save_path, data).map_err(|e| e.to_string())?;
     }
 
     let mut sync_versions = store
@@ -159,22 +164,41 @@ pub async fn upload_save_files<R: Runtime>(
         .and_then(|v| v.as_str().map(|s| s.to_string()))
         .ok_or("No token")?;
 
-    let mut files_map = HashMap::new();
+    let mut files_list = Vec::new();
 
-    for entry in std::fs::read_dir(save_dir)
-        .map_err(|e| e.to_string())?
-        .filter_map(|e| e.ok())
-    {
-        if entry.path().is_file() {
-            let name = entry.file_name().to_string_lossy().to_string();
-            let bytes = std::fs::read(entry.path()).map_err(|e| e.to_string())?;
-            let b64 = general_purpose::STANDARD.encode(bytes);
-            files_map.insert(name, b64);
+    if save_dir.exists() {
+        let mut stack = vec![save_dir.clone()];
+        while let Some(current) = stack.pop() {
+            if let Ok(entries) = std::fs::read_dir(&current) {
+                for entry in entries.filter_map(|e| e.ok()) {
+                    let path = entry.path();
+                    if path.is_dir() {
+                        stack.push(path);
+                    } else if path.is_file() {
+                        let rel = path.strip_prefix(save_dir)
+                            .unwrap_or(&path)
+                            .to_string_lossy()
+                            .replace("\\", "/");
+                        
+                        if let Ok(bytes) = std::fs::read(&path) {
+                            let digest = md5::compute(&bytes);
+                            let hash = format!("{:x}", digest);
+                            let content = general_purpose::STANDARD.encode(&bytes);
+                            
+                            files_list.push(serde_json::json!({
+                                "hash": hash,
+                                "path": rel,
+                                "content": content
+                            }));
+                        }
+                    }
+                }
+            }
         }
     }
 
-    if !files_map.is_empty() {
-        let payload = serde_json::json!({ "files": files_map });
+    if !files_list.is_empty() {
+        let payload = serde_json::json!({ "files": files_list });
         let client = reqwest::Client::new();
         let resp = client
             .post(format!(
@@ -193,5 +217,87 @@ pub async fn upload_save_files<R: Runtime>(
             return Err(format!("Upload failed: {}", resp.status()));
         }
     }
+    Ok(())
+}
+
+#[derive(serde::Serialize)]
+pub struct GameSaveFile {
+    pub path: String,
+    pub size: u64,
+    pub hash: String,
+}
+
+#[tauri::command]
+pub fn get_game_save_files<R: Runtime>(
+    app: AppHandle<R>,
+    game_id: String,
+) -> Result<Vec<GameSaveFile>, String> {
+    let base_path = store::get_data_dir(&app)?;
+    let save_dir = base_path.join("saves").join(&game_id);
+    let mut files = Vec::new();
+
+    if save_dir.exists() {
+        let mut stack = vec![save_dir.clone()];
+        while let Some(current) = stack.pop() {
+            if let Ok(entries) = std::fs::read_dir(&current) {
+                for entry in entries.filter_map(|e| e.ok()) {
+                    let path = entry.path();
+                    if path.is_dir() {
+                        stack.push(path);
+                    } else if path.is_file() {
+                        let rel = path.strip_prefix(&save_dir)
+                            .unwrap_or(&path)
+                            .to_string_lossy()
+                            .replace("\\", "/");
+                        let size = path.metadata().map(|m| m.len()).unwrap_or(0);
+                        let hash = if let Ok(bytes) = std::fs::read(&path) {
+                            format!("{:x}", md5::compute(&bytes))
+                        } else {
+                            String::new()
+                        };
+                        files.push(GameSaveFile { path: rel, size, hash });
+                    }
+                }
+            }
+        }
+    }
+    
+    Ok(files)
+}
+
+#[tauri::command]
+pub fn open_save_folder<R: Runtime>(
+    app: AppHandle<R>,
+    game_id: String,
+) -> Result<(), String> {
+    let base_path = store::get_data_dir(&app)?;
+    let save_dir = base_path.join("saves").join(&game_id);
+    
+    if !save_dir.exists() {
+        return Ok(());
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .arg(&save_dir)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(&save_dir)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(&save_dir)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+
     Ok(())
 }

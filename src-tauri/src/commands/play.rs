@@ -244,10 +244,9 @@ pub async fn play_game<R: Runtime>(
         );
     }
 
-    let console_lower = console.to_lowercase();
     let all_emulators: Vec<&StoreEmulator> = stored_emulators
         .values()
-        .filter(|e| e.consoles.iter().any(|c| c.to_lowercase() == console_lower))
+        .filter(|e| e.consoles.iter().any(|c| c == &console))
         .collect();
 
     if all_emulators.is_empty() {
@@ -476,7 +475,9 @@ pub async fn play_game<R: Runtime>(
             if let Some(parent) = dest.parent() {
                 std::fs::create_dir_all(parent).ok();
             }
-            std::fs::copy(&abs_path, &dest).ok();
+            if std::fs::copy(&abs_path, &dest).is_ok() && scan_dir != temp_dir {
+                let _ = std::fs::remove_file(&abs_path);
+            }
         }
     } else {
         let post_snapshot = recursive_snapshot(&scan_dir);
@@ -487,19 +488,14 @@ pub async fn play_game<R: Runtime>(
                 continue;
             }
 
-            let fname = rel
-                .file_name()
-                .and_then(|f| f.to_str())
-                .unwrap_or(""
-            );
+            let fname = rel.file_name().and_then(|f| f.to_str()).unwrap_or("");
             if emulator.config_files.iter().any(|c| c == fname) {
                 continue;
             }
             let is_new_or_changed = match pre_snapshot.get(rel) {
                 None => true,
                 Some(pre_meta) => {
-                    pre_meta.size != post_meta.size
-                        || pre_meta.modified != post_meta.modified
+                    pre_meta.size != post_meta.size || pre_meta.modified != post_meta.modified
                 }
             };
             if is_new_or_changed {
@@ -507,7 +503,11 @@ pub async fn play_game<R: Runtime>(
                 if let Some(parent) = dest.parent() {
                     std::fs::create_dir_all(parent).ok();
                 }
-                std::fs::copy(&abs_path, &dest).ok();
+                if std::fs::copy(&abs_path, &dest).is_ok() && scan_dir != temp_dir {
+                    let _ = std::fs::remove_file(&abs_path);
+                }
+            } else if scan_dir != temp_dir {
+                let _ = std::fs::remove_file(&abs_path);
             }
         }
     }
@@ -572,6 +572,7 @@ pub struct LocalStorageEntry {
     pub game_id: String,
     pub rom_size: u64,
     pub save_size: u64,
+    pub local_version: Option<i32>,
 }
 
 fn get_dir_size(path: &std::path::Path) -> u64 {
@@ -595,6 +596,16 @@ fn get_dir_size(path: &std::path::Path) -> u64 {
 pub fn get_local_storage<R: Runtime>(app: AppHandle<R>) -> Result<Vec<LocalStorageEntry>, String> {
     let base_path = store::get_data_dir(&app)?;
 
+    let global_store = match store::get_current_store(&app) {
+        Ok(s) => Some(s),
+        Err(_) => None,
+    };
+    let sync_versions = global_store
+        .as_ref()
+        .and_then(|s| s.get("sync_versions"))
+        .and_then(|v| v.as_object().cloned())
+        .unwrap_or_default();
+
     let mut entries: HashMap<String, LocalStorageEntry> = HashMap::new();
 
     let mut roms_dir = base_path.clone();
@@ -610,6 +621,9 @@ pub fn get_local_storage<R: Runtime>(app: AppHandle<R>) -> Result<Vec<LocalStora
                             let file_name = file_entry.file_name().to_string_lossy().to_string();
                             if let Some(game_id) = file_name.split('.').next() {
                                 let size = file_entry.metadata().map(|m| m.len()).unwrap_or(0);
+                                let local_version = sync_versions
+                                    .get(game_id)
+                                    .and_then(|v| v.as_i64().map(|i| i as i32));
                                 entries.insert(
                                     game_id.to_string(),
                                     LocalStorageEntry {
@@ -617,6 +631,7 @@ pub fn get_local_storage<R: Runtime>(app: AppHandle<R>) -> Result<Vec<LocalStora
                                         console: Some(console.clone()),
                                         rom_size: size,
                                         save_size: 0,
+                                        local_version,
                                     },
                                 );
                             }
@@ -635,16 +650,23 @@ pub fn get_local_storage<R: Runtime>(app: AppHandle<R>) -> Result<Vec<LocalStora
                 let game_ref = game_entry.file_name().to_string_lossy().to_string();
                 let size = get_dir_size(&game_entry.path());
                 if size > 0 {
+                    let local_version = sync_versions
+                        .get(&game_ref)
+                        .and_then(|v| v.as_i64().map(|i| i as i32));
                     entries
                         .entry(game_ref.clone())
                         .and_modify(|e| {
                             e.save_size = size;
+                            if e.local_version.is_none() {
+                                e.local_version = local_version;
+                            }
                         })
                         .or_insert(LocalStorageEntry {
                             game_id: game_ref,
                             console: None,
                             rom_size: 0,
                             save_size: size,
+                            local_version,
                         });
                 }
             }

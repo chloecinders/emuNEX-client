@@ -57,6 +57,7 @@ pub fn run() {
             commands::emulator::migrate_emulator_files,
             commands::emulator::fetch_server_emulators,
             commands::emulator::fetch_all_server_emulators,
+            commands::emulator::get_emulator_dir_sizes,
             commands::play::play_game,
             commands::play::install_game,
             commands::play::is_game_installed,
@@ -65,6 +66,12 @@ pub fn run() {
             commands::play::delete_local_save,
             commands::save::check_save_status,
             commands::save::download_save_files,
+            commands::save::get_game_save_files,
+            commands::save::open_save_folder,
+            commands::storage::get_data_dir,
+            commands::storage::set_custom_data_path,
+            commands::storage::open_data_dir,
+            commands::storage::pick_directory,
         ])
         .setup(|app| {
             #[cfg(desktop)]

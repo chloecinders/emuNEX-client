@@ -7,6 +7,22 @@ pub fn get_global_store<R: Runtime>(app: &AppHandle<R>) -> Result<Arc<Store<R>>,
     app.store("store.json").map_err(|e| e.to_string())
 }
 
+pub fn get_base_dir<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
+    let global = get_global_store(app).ok();
+    if let Some(ref store) = global {
+        if let Some(custom) = store
+            .get("custom_base_path")
+            .and_then(|v| v.as_str().map(|s| s.to_string()))
+        {
+            let p = PathBuf::from(custom);
+            if p.is_absolute() {
+                return Ok(p);
+            }
+        }
+    }
+    app.path().app_data_dir().map_err(|e| e.to_string())
+}
+
 pub fn normalize_domain(domain: &str) -> String {
     let mut domain = domain.to_lowercase();
 
@@ -39,7 +55,7 @@ pub fn normalize_domain(domain: &str) -> String {
 
 pub fn get_domain_folder<R: Runtime>(app: &AppHandle<R>, domain: &str) -> Result<PathBuf, String> {
     let normalized = normalize_domain(domain);
-    let mut base = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let mut base = get_base_dir(app)?;
     let safe_domain = normalized
         .replace(|c: char| !c.is_alphanumeric(), "_")
         .to_lowercase();
@@ -83,6 +99,6 @@ pub fn get_data_dir<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
     if let Some(domain) = get_current_domain(app) {
         get_domain_folder(app, &domain)
     } else {
-        app.path().app_data_dir().map_err(|e| e.to_string())
+        get_base_dir(app)
     }
 }

@@ -7,6 +7,18 @@ export interface LocalStorageEntry {
     game_id: string;
     rom_size: number;
     save_size: number;
+    local_version?: number;
+}
+
+export interface GameSaveFile {
+    path: string;
+    size: number;
+    hash: string;
+}
+
+export interface SyncResult {
+    conflict: boolean;
+    latest_version: number | null;
 }
 
 export const useRomStore = defineStore("rom", () => {
@@ -50,11 +62,40 @@ export const useRomStore = defineStore("rom", () => {
         }
     };
 
+    const getGameSaveFiles = async (gameId: string): Promise<GameSaveFile[]> => {
+        try {
+            return await invoke<GameSaveFile[]>("get_game_save_files", { gameId });
+        } catch (e) {
+            console.error("Failed to get game save files:", e);
+            return [];
+        }
+    };
+
+    const checkSaveStatus = async (gameId: string): Promise<SyncResult | null> => {
+        try {
+            return await invoke<SyncResult>("check_save_status", { gameId });
+        } catch (e) {
+            console.error("Failed to check save status:", e);
+            return null;
+        }
+    };
+
+    const openSaveFolder = async (gameId: string) => {
+        try {
+            await invoke("open_save_folder", { gameId });
+        } catch (e) {
+            console.error("Failed to open save folder:", e);
+        }
+    };
+
     return {
         installedRoms,
         loading,
         fetchInstalledRoms,
         deleteRom,
         deleteSave,
+        getGameSaveFiles,
+        checkSaveStatus,
+        openSaveFolder,
     };
 });

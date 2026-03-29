@@ -1,6 +1,8 @@
 <script setup lang="ts">
+export type ButtonColor = "primary" | "green" | "red" | "grey";
+
 interface Props {
-    color?: "primary" | "green" | "red" | "grey";
+    color?: ButtonColor;
     size?: "sm" | "md";
     disabled?: boolean;
     full?: boolean;
@@ -112,10 +114,10 @@ const emit = defineEmits(["click"]);
 
     &--grey {
         .c-button__front {
-            background: var(--color-text-muted);
+            background: #4a4a5a;
         }
         .c-button__edge {
-            background: #555;
+            background: #2b2b36;
         }
     }
 

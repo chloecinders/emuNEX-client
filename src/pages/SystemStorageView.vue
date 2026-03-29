@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import { ArrowLeft, HardDrive, Trash2 } from "lucide-vue-next";
+import { ArrowLeft, HardDrive } from "lucide-vue-next";
 import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import Badge from "../components/ui/Badge.vue";
-import Button from "../components/ui/Button.vue";
+import RomCard from "../components/cards/RomCard.vue";
+import AlertModal from "../components/ui/AlertModal.vue";
 import Heading from "../components/ui/Heading.vue";
-import Modal from "../components/ui/Modal.vue";
 import PillButton from "../components/ui/PillButton.vue";
 import Spinner from "../components/ui/Spinner.vue";
 import Text from "../components/ui/Text.vue";
@@ -27,16 +26,14 @@ onMounted(async () => {
     if (gameStore.library.length === 0) {
         await gameStore.fetchLibrary();
     }
-});
 
-const formatBytes = (bytes: number, decimals = 2) => {
-    if (!+bytes) return "0 Bytes";
-    const k = 1024;
-    const dm = decimals < 0 ? 0 : decimals;
-    const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
-};
+    systemRoms.value.forEach(async (rom) => {
+        const status = await romStore.checkSaveStatus(rom.game_id);
+        if (status?.latest_version !== null && status?.latest_version !== undefined) {
+            cloudSaves.value[rom.game_id] = status.latest_version;
+        }
+    });
+});
 
 const getGameTitle = (gameId: string) => {
     const game = gameStore.library.find((g) => g.rom_id === gameId);
@@ -53,36 +50,40 @@ const systemRoms = computed(() => {
     });
 });
 
-const showDeleteRomModal = ref(false);
-const showDeleteSaveModal = ref(false);
-const selectedRom = ref<LocalStorageEntry | null>(null);
+const cloudSaves = ref<Record<string, number>>({});
 
-const confirmDeleteRom = (rom: LocalStorageEntry) => {
-    selectedRom.value = rom;
+const showDeleteRomModal = ref(false);
+const selectedRomForDelete = ref<LocalStorageEntry | null>(null);
+
+const promptDeleteRom = (rom: LocalStorageEntry) => {
+    selectedRomForDelete.value = rom;
     showDeleteRomModal.value = true;
 };
 
-const confirmDeleteSave = (rom: LocalStorageEntry) => {
-    selectedRom.value = rom;
-    showDeleteSaveModal.value = true;
-};
-
 const executeDeleteRom = async () => {
-    if (selectedRom.value) {
-        await romStore.deleteRom(selectedRom.value.game_id, consoleName.value);
+    if (selectedRomForDelete.value) {
+        await romStore.deleteRom(selectedRomForDelete.value.game_id, consoleName.value);
         showDeleteRomModal.value = false;
-        selectedRom.value = null;
+        selectedRomForDelete.value = null;
         if (systemRoms.value.length === 0) {
             router.push("/manage/roms");
         }
     }
 };
 
+const showDeleteSaveModal = ref(false);
+const selectedRomForSave = ref<LocalStorageEntry | null>(null);
+
+const promptDeleteSave = (rom: LocalStorageEntry) => {
+    selectedRomForSave.value = rom;
+    showDeleteSaveModal.value = true;
+};
+
 const executeDeleteSave = async () => {
-    if (selectedRom.value) {
-        await romStore.deleteSave(selectedRom.value.game_id);
+    if (selectedRomForSave.value) {
+        await romStore.deleteSave(selectedRomForSave.value.game_id);
         showDeleteSaveModal.value = false;
-        selectedRom.value = null;
+        selectedRomForSave.value = null;
     }
 };
 </script>
@@ -110,61 +111,36 @@ const executeDeleteSave = async () => {
         </div>
 
         <div v-else class="c-rom-list">
-            <div v-for="rom in systemRoms" :key="rom.game_id" class="c-rom-card">
-                <div class="c-rom-card__info">
-                    <Heading :level="3" class="c-rom-card__title">{{ getGameTitle(rom.game_id) }}</Heading>
-                    <div class="c-rom-card__meta">
-                        <Badge v-if="rom.rom_size > 0" color="grey">ROM: {{ formatBytes(rom.rom_size) }}</Badge>
-                        <Badge v-else color="red">ROM Missing</Badge>
-                        <Badge v-if="rom.save_size > 0" color="primary"
-                            >Local Save: {{ formatBytes(rom.save_size) }}</Badge
-                        >
-                    </div>
-                </div>
-
-                <div class="c-rom-card__actions">
-                    <Button v-if="rom.save_size > 0" color="grey" size="sm" @click="confirmDeleteSave(rom)">
-                        <Trash2 :size="16" /> Delete Save
-                    </Button>
-                    <Button v-if="rom.rom_size > 0" color="red" size="sm" @click="confirmDeleteRom(rom)">
-                        <Trash2 :size="16" /> Delete ROM
-                    </Button>
-                </div>
-            </div>
+            <RomCard
+                v-for="rom in systemRoms"
+                :key="rom.game_id"
+                :rom="rom"
+                :game-title="getGameTitle(rom.game_id)"
+                :cloud-version="cloudSaves[rom.game_id]"
+                @delete-rom="promptDeleteRom(rom)"
+                @delete-save="promptDeleteSave(rom)"
+            />
         </div>
 
-        <Modal :show="showDeleteRomModal" title="Delete ROM File" @close="showDeleteRomModal = false">
-            <div class="c-delete-modal">
-                <Text
-                    >Are you sure you want to permanently delete the game file for
-                    <strong>{{ selectedRom ? getGameTitle(selectedRom.game_id) : "" }}</strong
-                    >?</Text
-                >
+        <AlertModal
+            :show="showDeleteRomModal"
+            title="Delete ROM File"
+            :message="`Are you sure you want to permanently delete the game file for <strong>${selectedRomForDelete ? getGameTitle(selectedRomForDelete.game_id) : ''}</strong>?`"
+            confirm-label="Delete ROM"
+            confirm-color="red"
+            @close="showDeleteRomModal = false"
+            @confirm="executeDeleteRom"
+        />
 
-                <div class="c-delete-modal__actions">
-                    <Button color="grey" @click="showDeleteRomModal = false">Cancel</Button>
-                    <Button color="red" @click="executeDeleteRom">Delete ROM</Button>
-                </div>
-            </div>
-        </Modal>
-
-        <Modal :show="showDeleteSaveModal" title="Delete Local Save Data" @close="showDeleteSaveModal = false">
-            <div class="c-delete-modal">
-                <Text
-                    >Are you sure you want to delete the local save data for
-                    <strong>{{ selectedRom ? getGameTitle(selectedRom.game_id) : "" }}</strong
-                    >?</Text
-                >
-                <Text variant="muted" size="sm"
-                    >This will permanently erase your progress unless it was already synchronized to the cloud.</Text
-                >
-
-                <div class="c-delete-modal__actions">
-                    <Button color="grey" @click="showDeleteSaveModal = false">Cancel</Button>
-                    <Button color="red" @click="executeDeleteSave">Delete</Button>
-                </div>
-            </div>
-        </Modal>
+        <AlertModal
+            :show="showDeleteSaveModal"
+            title="Delete Local Save Data"
+            :message="`Are you sure you want to delete the local save data for <strong>${selectedRomForSave ? getGameTitle(selectedRomForSave.game_id) : ''}</strong>?<br><br><small>This will permanently erase your progress unless it was already synchronized to the cloud.</small>`"
+            confirm-label="Delete"
+            confirm-color="red"
+            @close="showDeleteSaveModal = false"
+            @confirm="executeDeleteSave"
+        />
     </div>
 </template>
 
@@ -211,61 +187,5 @@ const executeDeleteSave = async () => {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(450px, 1fr));
     gap: var(--spacing-lg);
-}
-
-.c-rom-card {
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-lg);
-    padding: var(--spacing-lg);
-    display: flex;
-    flex-direction: column;
-    gap: var(--spacing-lg);
-    box-shadow: var(--shadow-sm);
-
-    &__info {
-        display: flex;
-        flex-direction: column;
-        gap: var(--spacing-sm);
-    }
-
-    &__title {
-        margin: 0;
-        font-weight: 800;
-        color: var(--color-text);
-        line-height: 1.2;
-    }
-
-    &__meta {
-        display: flex;
-        gap: var(--spacing-sm);
-        flex-wrap: wrap;
-    }
-
-    &__actions {
-        display: flex;
-        gap: var(--spacing-sm);
-        justify-content: flex-end;
-        align-items: center;
-        padding-top: var(--spacing-md);
-        margin-top: auto;
-    }
-}
-
-.c-delete-modal {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-    gap: var(--spacing-md);
-    padding: var(--spacing-md) 0;
-
-    &__actions {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: var(--spacing-md);
-        width: 100%;
-        margin-top: var(--spacing-lg);
-    }
 }
 </style>

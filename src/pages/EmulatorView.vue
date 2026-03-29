@@ -1,86 +1,54 @@
 <script setup lang="ts">
-import { CheckCircle, Download, Pencil, Plus, Save, Trash2 } from "lucide-vue-next";
+import { Download, Plus } from "lucide-vue-next";
 import { computed, onMounted, ref } from "vue";
+import EmulatorCard from "../components/cards/EmulatorCard.vue";
+import DownloadEmulatorsModal from "../components/modals/DownloadEmulatorsModal.vue";
+import EditEmulatorModal from "../components/modals/EditEmulatorModal.vue";
 import InstallModal, { type InstallItem } from "../components/modals/InstallModal.vue";
-import Badge from "../components/ui/Badge.vue";
-import Button from "../components/ui/Button.vue";
+import AlertModal from "../components/ui/AlertModal.vue";
 import Heading from "../components/ui/Heading.vue";
-import IconButton from "../components/ui/IconButton.vue";
-import Input from "../components/ui/Input.vue";
-import Modal from "../components/ui/Modal.vue";
 import PillButton from "../components/ui/PillButton.vue";
 import Spinner from "../components/ui/Spinner.vue";
 import Text from "../components/ui/Text.vue";
-import Tooltip from "../components/ui/Tooltip.vue";
 import { useConsoleStore } from "../stores/ConsoleStore";
 import { type Emulator, type ServerEmulator, useEmulatorStore } from "../stores/EmulatorStore";
 
 const emulatorStore = useEmulatorStore();
 const consoleStore = useConsoleStore();
+const emulatorDirSizes = ref<Record<string, number>>({});
+
+async function refreshDirSizes() {
+    try {
+        const { invoke } = await import("@tauri-apps/api/core");
+        emulatorDirSizes.value = await invoke<Record<string, number>>("get_emulator_dir_sizes");
+    } catch (e) {
+        console.error("Failed to get emulator dir sizes:", e);
+    }
+}
 
 onMounted(async () => {
     await consoleStore.fetchConsoles();
     await emulatorStore.fetchEmulators();
+    await refreshDirSizes();
 });
 
-const consoles = computed(() => {
-    const serverConsoles = Object.keys(consoleStore.consoles).map((c) => c.toLowerCase());
-    const localConsoles = Object.values(emulatorStore.emulators).flatMap((e) => e.consoles);
-    const allConsoles = new Set([...serverConsoles, ...localConsoles]);
-    return Array.from(allConsoles).sort();
-});
-
-const editState = ref<any>({});
 const newlyAddedIds = ref<Set<string>>(new Set());
-
-const newConsoleInputs = ref<Record<string, string>>({});
-const newSaveExtInputs = ref<Record<string, string>>({});
-
-const addConsoleToEmulator = (id: string) => {
-    const val = (newConsoleInputs.value[id] || "").trim().toLowerCase();
-    if (val && !editState.value[id].consoles.includes(val)) {
-        editState.value[id].consoles.push(val);
-    }
-    newConsoleInputs.value[id] = "";
-};
-
-const addSaveExtToEmulator = (id: string) => {
-    const val = (newSaveExtInputs.value[id] || "").trim().toLowerCase().replace(/^\./, '');
-    if (val && !editState.value[id].save_extensions.includes(val)) {
-        editState.value[id].save_extensions.push(val);
-    }
-    newSaveExtInputs.value[id] = "";
-};
-
-const removeSaveExtFromEmulator = (emulatorId: string, ext: string) => {
-    editState.value[emulatorId].save_extensions = editState.value[emulatorId].save_extensions.filter((e: string) => e !== ext);
-};
+const editingEmulatorId = ref<string | null>(null);
 
 const initEdit = (emulator: Emulator) => {
-    editState.value[emulator.id] = JSON.parse(JSON.stringify({
-        ...emulator,
-        save_extensions: emulator.save_extensions ?? [],
-    }));
-    newConsoleInputs.value[emulator.id] = "";
-    newSaveExtInputs.value[emulator.id] = "";
+    editingEmulatorId.value = emulator.id;
 };
 
-const saveEmulatorChanges = async (id: string) => {
-    const data = editState.value[id];
-    if (data && data.name) {
-        await emulatorStore.saveEmulator(data as Emulator);
-        newlyAddedIds.value.delete(id);
-        delete editState.value[id];
+const handleEditClose = () => {
+    if (editingEmulatorId.value && newlyAddedIds.value.has(editingEmulatorId.value)) {
+        delete emulatorStore.emulators[editingEmulatorId.value];
+        newlyAddedIds.value.delete(editingEmulatorId.value);
     }
+    editingEmulatorId.value = null;
 };
 
-const cancelEdit = (id: string) => {
-    delete editState.value[id];
-
-    if (newlyAddedIds.value.has(id)) {
-        delete emulatorStore.emulators[id];
-        newlyAddedIds.value.delete(id);
-    }
+const handleEditSave = (id: string) => {
+    newlyAddedIds.value.delete(id);
 };
 
 const handleSetDefault = async (id: string) => {
@@ -104,7 +72,7 @@ const addCustomEmulator = () => {
     };
 
     emulatorStore.emulators[id] = newEmulator;
-    editState.value[id] = { ...newEmulator };
+    editingEmulatorId.value = id;
 };
 
 const showDownloadModal = ref(false);
@@ -116,18 +84,6 @@ const openDownloadModal = async () => {
     isFetchingServer.value = true;
     serverEmulators.value = await emulatorStore.fetchAllServerEmulators();
     isFetchingServer.value = false;
-};
-
-const downloadFromServer = async (serverEmulator: ServerEmulator) => {
-    try {
-        const targetConsole = (serverEmulator.consoles && serverEmulator.consoles[0]) || "unknown";
-        await emulatorStore.downloadEmulator(targetConsole, serverEmulator.id);
-        showDownloadModal.value = false;
-        showConfirmDownloadModal.value = false;
-        pendingDownloadEmulator.value = null;
-    } catch (e) {
-        console.error("Failed to download emulator.", e);
-    }
 };
 
 const showConfirmDownloadModal = ref(false);
@@ -145,6 +101,30 @@ const cancelConfirmDownload = () => {
     pendingDownloadEmulator.value = null;
 };
 
+const downloadFromServer = async (serverEmulator: ServerEmulator) => {
+    try {
+        const targetConsole = (serverEmulator.consoles && serverEmulator.consoles[0]) || "unknown";
+        await emulatorStore.downloadEmulator(targetConsole, serverEmulator.id);
+        showDownloadModal.value = false;
+        showConfirmDownloadModal.value = false;
+        pendingDownloadEmulator.value = null;
+    } catch (e) {
+        console.error("Failed to download emulator.", e);
+    }
+};
+
+const installItems = computed<InstallItem[]>(() => {
+    if (!pendingDownloadEmulator.value) return [];
+    return [
+        {
+            name: pendingDownloadEmulator.value.name,
+            description: `Emulator for ${pendingDownloadEmulator.value.consoles.map((c) => c.toUpperCase()).join(", ")}`,
+            size: pendingDownloadEmulator.value.file_size,
+            type: "emulator",
+        },
+    ];
+});
+
 const showDeleteModal = ref(false);
 const pendingDeleteId = ref("");
 
@@ -155,21 +135,10 @@ const promptDelete = (id: string) => {
 
 const confirmDelete = async () => {
     await emulatorStore.removeEmulator(pendingDeleteId.value);
+    await refreshDirSizes();
     showDeleteModal.value = false;
     pendingDeleteId.value = "";
 };
-
-const installItems = computed<InstallItem[]>(() => {
-    if (!pendingDownloadEmulator.value) return [];
-    return [
-        {
-            name: pendingDownloadEmulator.value.name,
-            description: `Emulator for ${pendingDownloadEmulator.value.consoles.map(c=>c.toUpperCase()).join(', ')}`,
-            size: pendingDownloadEmulator.value.file_size,
-            type: "emulator",
-        },
-    ];
-});
 </script>
 
 <template>
@@ -178,8 +147,8 @@ const installItems = computed<InstallItem[]>(() => {
             <Heading :level="2" color="primary" is-badge class="c-emulator-management__badge">
                 Manage Emulators
             </Heading>
-            
-            <div style="display: flex; gap: 8px;">
+
+            <div style="display: flex; gap: 8px">
                 <PillButton @click="addCustomEmulator()"> <Plus /> Add Custom </PillButton>
                 <PillButton @click="openDownloadModal()"> <Download /> Download More </PillButton>
             </div>
@@ -195,206 +164,40 @@ const installItems = computed<InstallItem[]>(() => {
 
         <div v-else class="c-emulator-management__content">
             <div class="c-emulator-list">
-                <div
-                    v-if="Object.keys(emulatorStore.emulators).length === 0"
-                    class="c-emulator-empty"
-                >
+                <div v-if="Object.keys(emulatorStore.emulators).length === 0" class="c-emulator-empty">
                     <Text variant="muted">No emulators configured.</Text>
                 </div>
 
-                <div
+                <EmulatorCard
                     v-for="emulator in Object.values(emulatorStore.emulators)"
                     :key="emulator.id"
-                    class="c-emulator-card"
-                    :class="{
-                        'c-emulator-card--default': emulator.is_default,
-                        'c-emulator-card--editing': editState[emulator.id],
-                    }"
-                >
-                    <div class="c-emulator-card__header">
-                            <div class="c-emulator-card__title-area">
-                                <Input
-                                    v-if="editState[emulator.id]"
-                                    v-model="editState[emulator.id].name"
-                                    placeholder="e.g. RetroArch (GBA)"
-                                />
-                                <Heading v-else :level="3" class="c-emulator-card__name">{{
-                                    emulator.name || "Unnamed Emulator"
-                                }}</Heading>
-                                <Badge v-if="emulator.is_default" color="green">Default</Badge>
-                            </div>
-
-                            <div class="c-emulator-card__actions">
-                                <template v-if="editState[emulator.id]">
-                                    <Button color="grey" size="sm" @click="cancelEdit(emulator.id)"
-                                        >Cancel</Button
-                                    >
-                                    <Button
-                                        color="primary"
-                                        size="sm"
-                                        @click="saveEmulatorChanges(emulator.id)"
-                                    >
-                                        <Save :size="16" /> Save
-                                    </Button>
-                                </template>
-
-                                <Tooltip v-if="!editState[emulator.id]" text="Make Default">
-                                    <IconButton
-                                        v-if="!emulator.is_default"
-                                        @click="handleSetDefault(emulator.id)"
-                                    >
-                                        <CheckCircle />
-                                    </IconButton>
-                                </Tooltip>
-
-                                <Tooltip v-if="!editState[emulator.id]" text="Edit">
-                                    <IconButton @click="initEdit(emulator)">
-                                        <Pencil />
-                                    </IconButton>
-                                </Tooltip>
-
-                                <Tooltip v-if="!editState[emulator.id]" text="Delete">
-                                    <IconButton color="red" @click="promptDelete(emulator.id)">
-                                        <Trash2 />
-                                    </IconButton>
-                                </Tooltip>
-                            </div>
-                        </div>
-
-                        <div class="c-emulator-card__body">
-                            <div class="c-emulator-field">
-                                <Text variant="label" size="sm">Assigned Consoles</Text>
-                                <div v-if="editState[emulator.id]" style="display: flex; flex-direction: column; gap: 8px;">
-                                    <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-top: 4px;">
-                                        <label v-for="c in consoles" :key="c" style="display: flex; align-items: center; gap: 4px; font-size: 0.85rem;">
-                                            <input 
-                                                type="checkbox" 
-                                                :value="c" 
-                                                v-model="editState[emulator.id].consoles"
-                                            />
-                                            {{ c.toUpperCase() }}
-                                        </label>
-                                    </div>
-                                    <div style="display: flex; gap: 8px; align-items: center;">
-                                        <Input 
-                                            v-model="newConsoleInputs[emulator.id]" 
-                                            placeholder="Add custom console..." 
-                                            style="flex: 1;"
-                                        />
-                                        <Button size="sm" @click="addConsoleToEmulator(emulator.id)">Add</Button>
-                                    </div>
-                                </div>
-                                <div v-else style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px;">
-                                    <Badge v-for="c in emulator.consoles" :key="c" color="grey" size="sm">{{ c.toUpperCase() }}</Badge>
-                                </div>
-                            </div>
-
-                            <div class="c-emulator-field">
-                                <Text variant="label" size="sm">Binary Path</Text>
-                                <Input
-                                    v-if="editState[emulator.id]"
-                                    v-model="editState[emulator.id].binary_path"
-                                    placeholder="Leave blank if in system PATH"
-                                />
-                                <Text v-else variant="muted" class="c-emulator-field__value">{{
-                                    emulator.binary_path || "No binary path set"
-                                }}</Text>
-                            </div>
-
-                            <div class="c-emulator-field">
-                                <Text variant="label" size="sm">Run Command</Text>
-                                <Input
-                                    v-if="editState[emulator.id]"
-                                    v-model="editState[emulator.id].run_command"
-                                    placeholder="e.g. $exe -L core.so $rom"
-                                />
-                                <Text v-else variant="muted" class="c-emulator-field__value">{{
-                                    emulator.run_command || "Not set"
-                                }}</Text>
-                            </div>
-
-                            <div class="c-emulator-field">
-                                <Text variant="label" size="sm">Save Path (optional)</Text>
-                                <Input
-                                    v-if="editState[emulator.id]"
-                                    v-model="editState[emulator.id].save_path"
-                                    placeholder="e.g. /saves/$rom_name.sav"
-                                />
-                                <Text v-else variant="muted" class="c-emulator-field__value">{{
-                                    emulator.save_path || "No custom save path"
-                                }}</Text>
-                            </div>
-
-                            <div class="c-emulator-field">
-                                <Text variant="label" size="sm">Save File Extensions</Text>
-                                <div v-if="editState[emulator.id]" style="display: flex; flex-direction: column; gap: 8px;">
-                                    <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px;">
-                                        <Badge
-                                            v-for="ext in editState[emulator.id].save_extensions"
-                                            :key="ext"
-                                            color="grey"
-                                            size="sm"
-                                            style="cursor: pointer;"
-                                            @click="removeSaveExtFromEmulator(emulator.id, ext)"
-                                        >{{ ext }} ×</Badge>
-                                        <Text v-if="editState[emulator.id].save_extensions.length === 0" variant="muted" size="sm">No extensions — will use snapshot diffing</Text>
-                                    </div>
-                                    <div style="display: flex; gap: 8px; align-items: center;">
-                                        <Input
-                                            v-model="newSaveExtInputs[emulator.id]"
-                                            placeholder="e.g. sra, srm, eep"
-                                            style="flex: 1;"
-                                            @keydown.enter.prevent="addSaveExtToEmulator(emulator.id)"
-                                        />
-                                        <Button size="sm" @click="addSaveExtToEmulator(emulator.id)">Add</Button>
-                                    </div>
-                                </div>
-                                <div v-else style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px;">
-                                    <Badge v-for="ext in (emulator.save_extensions ?? [])" :key="ext" color="blue" size="sm">.{{ ext }}</Badge>
-                                    <Text v-if="!emulator.save_extensions?.length" variant="muted" size="sm">Snapshot diffing (auto)</Text>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                    :emulator="emulator"
+                    :dir-size="emulatorDirSizes[emulator.id]"
+                    @edit="initEdit(emulator)"
+                    @delete="promptDelete(emulator.id)"
+                    @set-default="handleSetDefault(emulator.id)"
+                />
             </div>
+        </div>
 
-        <Modal :show="showDownloadModal" title="Download Emulators" @close="showDownloadModal = false">
-            <div class="c-download-modal">
-                <div v-if="isFetchingServer" class="c-download-modal__loading">
-                    <Spinner />
-                    <Text>Fetching available emulators...</Text>
-                </div>
-                <div v-else-if="serverEmulators.length === 0" class="c-download-modal__empty">
-                    <Text variant="muted">No emulators available for download on the server.</Text>
-                </div>
-                <div v-else class="c-download-list">
-                    <div v-for="se in serverEmulators" :key="se.id" class="c-download-item">
-                        <div class="c-download-item__info">
-                            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px; flex-wrap: wrap;">
-                                <Heading :level="4" class="c-download-item__title">{{ se.name }}</Heading>
-                                <Badge v-for="c in se.consoles" :key="c" color="blue" size="sm">{{ c.toUpperCase() }}</Badge>
-                            </div>
-                            <Text variant="muted" size="sm">Platform: {{ se.platform }}</Text>
-                        </div>
-                        <Button @click="promptDownload(se)" :disabled="emulatorStore.loading" color="primary">
-                            <template v-if="emulatorStore.loading">Downloading...</template>
-                            <template v-else>Download</template>
-                        </Button>
-                    </div>
-                </div>
-            </div>
-        </Modal>
+        <DownloadEmulatorsModal
+            :show="showDownloadModal"
+            :server-emulators="serverEmulators"
+            :is-fetching="isFetchingServer"
+            :loading="emulatorStore.loading"
+            @close="showDownloadModal = false"
+            @download="promptDownload"
+        />
 
-        <Modal :show="showDeleteModal" title="Remove Emulator" @close="showDeleteModal = false">
-            <div class="c-delete-modal">
-                <Text>Are you sure you want to remove this emulator?</Text>
-                <div class="c-delete-modal__actions">
-                    <Button color="grey" @click="showDeleteModal = false">Cancel</Button>
-                    <Button color="red" @click="confirmDelete">Remove</Button>
-                </div>
-            </div>
-        </Modal>
+        <AlertModal
+            :show="showDeleteModal"
+            title="Remove Emulator"
+            message="Are you sure you want to remove this emulator?"
+            confirm-label="Remove"
+            confirm-color="red"
+            @close="showDeleteModal = false"
+            @confirm="confirmDelete"
+        />
 
         <InstallModal
             :show="showConfirmDownloadModal"
@@ -403,6 +206,13 @@ const installItems = computed<InstallItem[]>(() => {
             :loading="emulatorStore.loading"
             @close="cancelConfirmDownload()"
             @confirm="downloadFromServer(pendingDownloadEmulator!)"
+        />
+
+        <EditEmulatorModal
+            :show="!!editingEmulatorId"
+            :emulator-id="editingEmulatorId"
+            @close="handleEditClose"
+            @save="handleEditSave"
         />
     </div>
 </template>
@@ -431,35 +241,6 @@ const installItems = computed<InstallItem[]>(() => {
     }
 }
 
-.c-console-section {
-    margin-bottom: var(--spacing-xxl);
-
-    &__header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: var(--spacing-lg);
-    }
-
-    &__title {
-        display: inline-flex;
-        align-items: center;
-    }
-
-    &__count {
-        font-size: 0.75rem;
-        font-weight: 800;
-        color: var(--color-text-muted);
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-    }
-
-    &__actions {
-        display: flex;
-        gap: var(--spacing-sm);
-    }
-}
-
 .c-emulator-list {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
@@ -474,163 +255,5 @@ const installItems = computed<InstallItem[]>(() => {
     border: 2px dashed var(--color-border);
     color: var(--color-text-muted);
     font-weight: 600;
-}
-
-.c-emulator-card {
-    background: var(--color-surface-variant);
-    border: 2px solid var(--color-border);
-    border-radius: var(--radius-lg);
-    padding: var(--spacing-lg);
-    transition: all 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    display: flex;
-    flex-direction: column;
-    gap: var(--spacing-md);
-    box-shadow: var(--shadow-sm);
-    position: relative;
-
-    &--editing {
-        .c-emulator-card__header {
-            flex-direction: column-reverse;
-            align-items: stretch;
-            gap: var(--spacing-sm);
-        }
-
-        .c-emulator-card__actions {
-            justify-content: flex-end;
-            padding-bottom: var(--spacing-sm);
-            width: 100%;
-        }
-    }
-
-    &:hover {
-        border-color: var(--color-primary);
-        box-shadow: var(--shadow-md);
-        transform: translateY(-2px);
-    }
-
-    &--default {
-        background: var(--color-surface-variant);
-    }
-
-    &__header {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
-        gap: var(--spacing-md);
-        margin-bottom: var(--spacing-xs);
-    }
-
-    &__title-area {
-        display: flex;
-        flex-direction: column;
-        align-items: flex-start;
-        gap: var(--spacing-xs);
-        flex: 1;
-    }
-
-    &__name {
-        margin: 0;
-        font-weight: 800;
-        color: var(--color-text);
-        line-height: 1.2;
-    }
-
-    &__actions {
-        display: flex;
-        gap: var(--spacing-xs);
-        flex-wrap: wrap;
-        justify-content: flex-end;
-    }
-
-    &__body {
-        display: flex;
-        flex-direction: column;
-        gap: var(--spacing-md);
-        flex-grow: 1;
-    }
-}
-
-.c-emulator-field {
-    display: flex;
-    flex-direction: column;
-    gap: var(--spacing-xs);
-
-    &__value {
-        font-family: inherit;
-        font-size: 0.85rem;
-        word-break: break-all;
-        background: var(--color-surface-variant);
-        padding: var(--spacing-sm);
-        border-radius: var(--radius-sm);
-        border: 1px solid var(--color-border);
-        color: var(--color-text-muted);
-    }
-}
-
-.c-download-modal {
-    display: flex;
-    flex-direction: column;
-    gap: var(--spacing-md);
-
-    &__loading,
-    &__empty {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: var(--spacing-md);
-        padding: var(--spacing-xl) 0;
-    }
-}
-
-.c-download-list {
-    display: flex;
-    flex-direction: column;
-    gap: var(--spacing-sm);
-}
-
-.c-download-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: var(--spacing-md);
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
-    transition: all 0.2s ease;
-
-    &:hover {
-        border-color: var(--color-primary);
-        background: var(--color-surface-hover);
-    }
-
-    &__info {
-        display: flex;
-        flex-direction: column;
-        gap: var(--spacing-xs);
-    }
-
-    &__title {
-        margin: 0;
-        font-weight: 700;
-    }
-}
-
-.c-delete-modal {
-    display: flex;
-    flex-direction: column;
-    gap: var(--spacing-md);
-    padding: var(--spacing-sm) 0;
-
-    &__actions {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: var(--spacing-md);
-        width: 100%;
-        margin-top: var(--spacing-sm);
-
-        :deep(.c-button) {
-            width: 100%;
-        }
-    }
 }
 </style>

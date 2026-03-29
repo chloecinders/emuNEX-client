@@ -27,6 +27,7 @@ const onHelpClick = (event: MouseEvent) => {
 
 const bugReportUrl = "https://github.com/chloecinders/emuNEX-client/issues/new?template=bug_report.md";
 const featureRequestUrl = "https://github.com/chloecinders/emuNEX-client/issues/new?template=feature_request.md";
+const discordUrl = "https://discord.gg/uF65zSUnRs";
 
 const openIssueLink = async (url: string) => {
     helpMenu.value.show = false;
@@ -67,8 +68,9 @@ const openIssueLink = async (url: string) => {
             :style="{ left: helpMenu.x + 'px', top: helpMenu.y + 'px' }"
             @click.stop
         >
-            <button class="c-titlebar__help-item" @click="openIssueLink(bugReportUrl)">Report a bug…</button>
-            <button class="c-titlebar__help-item" @click="openIssueLink(featureRequestUrl)">Suggest a feature…</button>
+        <button class="c-titlebar__help-item" @click="openIssueLink(discordUrl)">Join the Discord...</button>
+            <button class="c-titlebar__help-item" @click="openIssueLink(bugReportUrl)">Report a bug...</button>
+            <button class="c-titlebar__help-item" @click="openIssueLink(featureRequestUrl)">Suggest a feature...</button>
         </div>
     </div>
 </template>

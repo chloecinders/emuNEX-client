@@ -3,21 +3,21 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { ChevronDown, Gamepad2, Library } from "lucide-vue-next";
 import { computed, onMounted, ref, type Ref, watch } from "vue";
+import { useStoragePath } from "../../lib/http";
 import { DiscordRPC } from "../../lib/rpc";
 import { useConsoleStore } from "../../stores/ConsoleStore";
 import { useEmulatorStore } from "../../stores/EmulatorStore";
 import { type Game, useGameStore } from "../../stores/GameStore";
-import { useStoragePath } from "../../lib/http";
 import InstallModal, { type InstallItem } from "../modals/InstallModal.vue";
 import SaveConflict from "../modals/SaveConflict.vue";
 import Badge from "../ui/Badge.vue";
 import Button from "../ui/Button.vue";
 import Heading from "../ui/Heading.vue";
 import IconButton from "../ui/IconButton.vue";
-import Modal from "../ui/Modal.vue";
 import Select from "../ui/Select.vue";
 import Text from "../ui/Text.vue";
 import Tooltip from "../ui/Tooltip.vue";
+import PlayWithModal from "./PlayWithModal.vue";
 import ShelfManager from "./ShelfManager.vue";
 
 const gameStore = useGameStore();
@@ -217,9 +217,9 @@ const installItems = computed<InstallItem[]>(() => {
 });
 
 const emulatorOptions = computed(() => {
-    return availableEmulators.value.map(emu => ({
+    return availableEmulators.value.map((emu) => ({
         name: emu.name,
-        value: emu.id
+        value: emu.id,
     }));
 });
 
@@ -287,7 +287,12 @@ const handlePlay = async (customEmulatorId?: string) => {
         <div v-if="game" class="c-bottom-panel">
             <div class="c-bottom-panel__header">
                 <div class="c-bottom-panel__banner" :style="{ background: consoleStore.getConsoleColor(game.console) }">
-                    <img v-if="game" :src="useStoragePath(game.image_path)" alt="Game Icon" class="c-bottom-panel__thumb" />
+                    <img
+                        v-if="game"
+                        :src="useStoragePath(game.image_path)"
+                        alt="Game Icon"
+                        class="c-bottom-panel__thumb"
+                    />
                     <Badge
                         class="c-bottom-panel__tag"
                         :bg-color="consoleStore.getConsoleColor(game.console) || 'var(--color-primary)'"
@@ -454,22 +459,14 @@ const handlePlay = async (customEmulatorId?: string) => {
         <ShelfManager v-if="game" :game-id="game.id" :show="showShelfManager" @close="showShelfManager = false" />
         <SaveConflict :show="showConflictModal" :version="conflictVersion" @choice="handleConflictChoice" />
 
-        <Modal v-if="game" :show="showEmulatorModal" title="Play with..." @close="showEmulatorModal = false">
-            <div class="c-playwith-list">
-                <Button
-                    v-for="emu in Object.values(emulatorStore.emulators).filter((e) =>
-                        e.consoles.some((c) => c.toLowerCase() === game!.console.toLowerCase()),
-                    )"
-                    :key="emu.id"
-                    variant="secondary"
-                    full
-                    @click="handlePlay(emu.id)"
-                >
-                    {{ emu.name }}
-                    <Badge v-if="emu.is_default" color="green" style="margin-left: 8px">Default</Badge>
-                </Button>
-            </div>
-        </Modal>
+        <PlayWithModal
+            v-if="game"
+            :show="showEmulatorModal"
+            :game="game"
+            :emulators="Object.values(emulatorStore.emulators).filter((e) => e.consoles.some((c) => c === game!.console))"
+            @close="showEmulatorModal = false"
+            @play="handlePlay"
+        />
 
         <InstallModal
             v-if="game"
@@ -481,11 +478,15 @@ const handlePlay = async (customEmulatorId?: string) => {
             @confirm="handleInstall"
         >
             <template #header v-if="availableEmulators.length > 1">
-                <div style="margin-top: 12px; margin-bottom: 8px;">
+                <div style="margin-top: 12px; margin-bottom: 8px">
                     <Select
                         label="Choose Emulator to Install"
                         :modelValue="pendingEmulatorInfo?.id || ''"
-                        @update:modelValue="val => { pendingEmulatorInfo = availableEmulators.find(em => em.id === val) }"
+                        @update:modelValue="
+                            (val) => {
+                                pendingEmulatorInfo = availableEmulators.find((em) => em.id === val);
+                            }
+                        "
                         :options="emulatorOptions"
                     />
                 </div>
@@ -793,10 +794,4 @@ const handlePlay = async (customEmulatorId?: string) => {
     opacity: 0;
 }
 
-.c-playwith-list {
-    display: flex;
-    flex-direction: column;
-    gap: var(--spacing-sm);
-    padding: var(--spacing-sm) 0;
-}
 </style>

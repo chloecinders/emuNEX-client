@@ -20,7 +20,7 @@ export const useConsoleStore = defineStore("consoleStore", () => {
             if (res.success) {
                 const map: Record<string, ConsoleMetadata> = {};
                 for (const c of res.data) {
-                    map[c.name.toLowerCase()] = c;
+                    map[c.name] = c;
                 }
                 consoles.value = map;
             }
@@ -33,7 +33,7 @@ export const useConsoleStore = defineStore("consoleStore", () => {
 
     function getConsoleColor(consoleName: string | undefined): string {
         if (!consoleName) return "var(--color-surface)";
-        const metadata = consoles.value[consoleName.toLowerCase()];
+        const metadata = consoles.value[consoleName];
         return metadata?.card_color || "var(--color-surface)";
     }
 

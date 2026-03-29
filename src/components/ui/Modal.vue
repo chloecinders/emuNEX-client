@@ -3,6 +3,7 @@ defineProps<{
     show: boolean;
     title: string;
     subtitle?: string;
+    width?: string;
 }>();
 
 const emit = defineEmits(["close"]);
@@ -12,7 +13,7 @@ const emit = defineEmits(["close"]);
     <Teleport to="body">
         <transition name="fade">
             <div v-if="show" class="c-modal__overlay" @click.self="emit('close')">
-                <div class="c-modal__card">
+                <div class="c-modal__card" :style="{ maxWidth: width || '440px' }">
                     <button class="c-modal__close" @click="emit('close')">
                         <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
                             <path
@@ -56,7 +57,6 @@ const emit = defineEmits(["close"]);
         background: var(--color-surface);
         border-radius: var(--radius-md);
         width: 90%;
-        max-width: 440px;
         box-shadow: 0 10px 40px rgba(0, 0, 0, 0.12);
         border: 1px solid var(--color-border);
         position: relative;

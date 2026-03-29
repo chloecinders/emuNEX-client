@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowLeftRight, GamepadDirectional, HardDrive, Library, Menu, Settings } from "lucide-vue-next";
+import { ArrowLeftRight, GamepadDirectional, HardDrive, Library, Settings } from "lucide-vue-next";
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import Logout from "../components/Logout.vue";
@@ -7,17 +7,15 @@ import GameInfo from "../components/games/GameInfo.vue";
 import ServerSwitcher from "../components/modals/ServerSwitcher.vue";
 import { useAuthStore } from "../stores/AuthStore";
 import { useGameStore } from "../stores/GameStore";
-import { useUserStore } from "../stores/UserStore";
 import { useUpdateStore } from "../stores/UpdateStore";
+import { useUserStore } from "../stores/UserStore";
 
 const userStore = useUserStore();
 const authStore = useAuthStore();
 const gameStore = useGameStore();
 const updateStore = useUpdateStore();
 const router = useRouter();
-const isSidebarOpen = ref(false);
 const isServerSwitcherOpen = ref(false);
-const toggleSidebar = () => (isSidebarOpen.value = !isSidebarOpen.value);
 const toggleServerSwitcher = () => (isServerSwitcherOpen.value = !isServerSwitcherOpen.value);
 const ready = ref(false);
 
@@ -32,6 +30,11 @@ const displayDomain = computed(() => {
     return (authStore?.domain || "").replace(/(^\w+:|^)\/\//, "").replace(/\/$/, "");
 });
 
+const isProfileOpen = ref(false);
+const toggleProfile = () => {
+    isProfileOpen.value = !isProfileOpen.value;
+};
+
 const goToSettingsForUpdate = () => {
     updateStore.dismissBanner();
     router.push({ name: "settings" });
@@ -44,80 +47,69 @@ onMounted(() => {
 
 <template>
     <div class="c-shell">
-        <Transition name="fade">
-            <div v-if="isSidebarOpen" class="c-shell__sidebar-overlay" @click="toggleSidebar"></div>
-        </Transition>
-
-        <Transition name="slide-side">
-            <aside v-if="isSidebarOpen" class="c-shell__sidebar">
-                <div class="c-shell__sidebar-header">
-                    <div class="c-shell__system-meta">
-                        <div class="c-shell__avatar-placeholder">
-                            {{ (userStore.user?.username || "G").charAt(0).toUpperCase() }}
-                        </div>
-                        <div class="c-shell__user-info">
-                            <span class="c-shell__username">{{ userStore.user?.username || "guest" }}</span>
-                            <a class="c-shell__domain-link" :href="authStore.domain || ''" target="_blank">
-                                @{{ displayDomain }}
-                            </a>
-                        </div>
-                    </div>
-                </div>
-
-                <nav class="c-shell__nav">
-                    <router-link
-                        v-for="item in menuItems"
-                        :key="item.path"
-                        :to="item.path"
-                        class="c-shell__nav-link"
-                        @click="toggleSidebar"
-                    >
-                        <div class="c-shell__nav-indicator"></div>
-                        <component :is="item.icon" class="c-shell__nav-icon" />
-                        <span class="c-shell__nav-text">{{ item.name }}</span>
-                    </router-link>
-
-                    <div class="c-shell__nav-spacer"></div>
-                </nav>
-
-                <div class="c-shell__sidebar-footer">
-                    <button
-                        class="c-shell__footer-btn"
-                        title="Switch Server"
-                        @click="
-                            toggleServerSwitcher();
-                            toggleSidebar();
-                        "
-                    >
-                        <ArrowLeftRight class="c-shell__icon" />
-                    </button>
-                    <Logout class="c-shell__logout" />
-                </div>
-            </aside>
-        </Transition>
-
         <header class="c-shell__status-bar">
             <div id="header-tools" class="c-shell__header-tools"></div>
 
-            <button class="c-shell__menu-button" @click="toggleSidebar">
-                <Menu class="c-shell__menu-icon" />
-            </button>
+            <nav class="c-shell__top-nav">
+                <router-link v-for="item in menuItems" :key="item.path" :to="item.path" class="c-shell__top-nav-link">
+                    <component :is="item.icon" class="c-shell__top-nav-icon" />
+                    <span class="c-shell__top-nav-text">{{ item.name }}</span>
+                </router-link>
+
+                <div class="c-shell__nav-spacer"></div>
+
+                <div class="c-shell__user-meta">
+                    <button class="c-shell__top-btn" title="Switch Server" @click="toggleServerSwitcher">
+                        <ArrowLeftRight class="c-shell__btn-icon" />
+                    </button>
+
+                    <div class="c-shell__profile-dropdown-wrapper" @mouseleave="isProfileOpen = false">
+                        <button class="c-shell__avatar-btn" @click="toggleProfile">
+                            <div class="c-shell__avatar-placeholder">
+                                {{ (userStore.user?.username || "G").charAt(0).toUpperCase() }}
+                            </div>
+                        </button>
+
+                        <Transition name="fade">
+                            <div v-show="isProfileOpen" class="c-shell__profile-menu-wrap">
+                                <div class="c-shell__profile-menu">
+                                    <div class="c-shell__profile-header">
+                                        <div class="c-shell__avatar-placeholder c-shell__avatar-placeholder--large">
+                                            {{ (userStore.user?.username || "G").charAt(0).toUpperCase() }}
+                                        </div>
+                                        <div class="c-shell__user-info">
+                                            <span class="c-shell__username">{{
+                                                userStore.user?.username || "guest"
+                                            }}</span>
+                                            <a
+                                                class="c-shell__domain-link"
+                                                :href="authStore.domain || ''"
+                                                target="_blank"
+                                            >
+                                                @{{ displayDomain }}
+                                            </a>
+                                        </div>
+                                    </div>
+                                    <div class="c-shell__profile-actions">
+                                        <Logout class="c-shell__logout-btn" />
+                                    </div>
+                                </div>
+                            </div>
+                        </Transition>
+                    </div>
+                </div>
+            </nav>
         </header>
 
         <Transition name="fade">
-            <div
-                v-if="updateStore.hasUpdate && !updateStore.bannerDismissed"
-                class="c-shell__update-banner"
-            >
+            <div v-if="updateStore.hasUpdate && !updateStore.bannerDismissed" class="c-shell__update-banner">
                 <span class="c-shell__update-text">
-                    Update available<span v-if="updateStore.availableVersion"> — v{{ updateStore.availableVersion }}</span>
+                    Update available<span v-if="updateStore.availableVersion">
+                        - v{{ updateStore.availableVersion }}</span
+                    >
                 </span>
-                <button class="c-shell__update-button" @click="goToSettingsForUpdate">
-                    Open Settings
-                </button>
-                <button class="c-shell__update-dismiss" @click="updateStore.dismissBanner">
-                    Dismiss
-                </button>
+                <button class="c-shell__update-button" @click="goToSettingsForUpdate"> Open Settings </button>
+                <button class="c-shell__update-dismiss" @click="updateStore.dismissBanner"> Dismiss </button>
             </div>
         </Transition>
 
@@ -145,185 +137,173 @@ onMounted(() => {
         background: var(--glass-bg);
         backdrop-filter: blur(12px);
         -webkit-backdrop-filter: blur(12px);
-        padding: 0 var(--spacing-md);
+        padding: var(--spacing-sm) var(--spacing-md);
         display: flex;
         justify-content: space-between;
         align-items: center;
         border-bottom: 2px solid var(--color-border);
         z-index: 50;
-        height: 56px;
+        min-height: 56px;
         flex-shrink: 0;
+        flex-wrap: wrap-reverse;
+        gap: var(--spacing-md);
     }
 
-    &__update-banner {
+    &__header-tools {
+        flex: 10000 1 auto;
+        min-width: 250px;
         display: flex;
-        align-items: center;
         justify-content: flex-start;
-        gap: var(--spacing-sm);
-        padding: var(--spacing-xs) var(--spacing-lg);
-        background: color-mix(in srgb, var(--color-primary) 12%, transparent);
-        border-bottom: 1px solid var(--color-primary);
-        font-size: 0.85rem;
+        align-items: center;
     }
 
-    &__update-text {
-        font-weight: 700;
-    }
-
-    &__update-button,
-    &__update-dismiss {
-        border-radius: var(--radius-full);
-        border: 1px solid var(--color-border);
-        background: var(--color-surface);
-        padding: 4px 10px;
-        font-size: 0.75rem;
-        font-weight: 700;
-        cursor: pointer;
-        transition: all 0.15s ease;
-    }
-
-    &__update-button {
-        border-color: var(--color-primary);
-        color: var(--color-primary);
-
-        &:hover {
-            background: var(--color-primary);
-            color: #fff;
-        }
-    }
-
-    &__update-dismiss {
-        color: var(--color-text-muted);
-
-        &:hover {
-            background: var(--color-surface-variant);
-        }
-    }
-
-    &__menu-button {
-        background: var(--color-surface);
-        border: 2px solid var(--color-border);
-        border-radius: var(--radius-sm);
-        padding: var(--spacing-sm) var(--spacing-md);
-        font-size: 0.75rem;
-        font-weight: 800;
-        color: var(--color-text);
-        cursor: pointer;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-        transition: all 0.2s;
-        letter-spacing: 1px;
-
-        &:hover {
-            border-color: var(--color-primary);
-            transform: translateY(-1px);
-        }
-    }
-
-    &__menu-icon {
-        width: 24px;
-        height: 24px;
-        stroke-width: 2.5px;
-        display: block;
-    }
-
-    &__nav {
-        flex: 1;
-        padding: var(--spacing-lg) var(--spacing-md);
-        display: flex;
-        flex-direction: column;
-        gap: var(--spacing-xs);
-    }
-
-    &__nav-link {
+    &__top-nav {
         display: flex;
         align-items: center;
-        padding: 12px var(--spacing-md);
+        gap: var(--spacing-sm);
+        flex: 1 1 auto;
+        justify-content: flex-start;
+    }
+
+    &__top-nav-link {
+        display: flex;
+        align-items: center;
+        padding: var(--spacing-xs) var(--spacing-md);
         text-decoration: none;
         color: var(--color-text-muted);
         font-weight: 700;
-        border-radius: var(--radius-md);
+        border-radius: var(--radius-full);
         transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         background: transparent;
-        border: none;
-        width: 100%;
-        cursor: pointer;
-        font-family: inherit;
-        text-align: left;
-        position: relative;
-        overflow: hidden;
+        border: 1px solid transparent;
+        white-space: nowrap;
 
         &:hover {
-            background: var(--color-surface-variant);
             color: var(--color-text);
+            background: rgba(255, 255, 255, 0.05); // Or any hover surface
+            border-color: var(--color-border);
         }
 
         &.router-link-active {
-            background: var(--color-surface-variant);
-            color: var(--color-primary);
+            background: var(--color-primary);
+            color: white;
+            border-color: var(--color-primary);
 
-            .c-shell__nav-indicator {
-                transform: translateX(0);
-            }
-
-            .c-shell__nav-icon {
-                color: var(--color-primary);
+            .c-shell__top-nav-icon {
+                color: white;
             }
         }
     }
 
-    &__nav-icon {
-        width: 20px;
-        height: 20px;
-        margin-right: var(--spacing-md);
+    &__top-nav-icon {
+        width: 16px;
+        height: 16px;
+        margin-right: var(--spacing-sm);
         stroke-width: 2.5px;
-        color: var(--color-text-muted);
-    }
-
-    &__nav-indicator {
-        position: absolute;
-        right: 0;
-        top: 12px;
-        bottom: 12px;
-        width: 4px;
-        background: var(--color-primary);
-        border-radius: 4px 0 0 4px;
-        transform: translateX(4px);
-        transition: transform 0.2s ease;
     }
 
     &__nav-spacer {
         flex: 1;
     }
 
-    &__header-tools {
-        flex: 1;
+    &__user-meta {
         display: flex;
-        justify-content: center;
         align-items: center;
-        height: 100%;
-        padding: 0 var(--spacing-lg);
+        gap: var(--spacing-sm);
     }
 
-    &__system-meta {
+    &__top-btn {
+        width: 32px;
+        height: 32px;
+        border-radius: var(--radius-full);
+        border: 1px solid var(--color-border);
+        background: var(--color-surface);
         display: flex;
         align-items: center;
-        gap: var(--spacing-md);
-        width: 100%;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s;
+        color: var(--color-text-muted);
+
+        &:hover {
+            border-color: var(--color-primary);
+            color: var(--color-primary);
+        }
+    }
+
+    &__btn-icon {
+        width: 16px;
+        height: 16px;
+        stroke-width: 2.5px;
+    }
+
+    &__profile-dropdown-wrapper {
+        position: relative;
+        display: flex;
+        align-items: center;
+    }
+
+    &__avatar-btn {
+        background: transparent;
+        border: none;
+        padding: 0;
+        cursor: pointer;
+        outline: none;
+        border-radius: var(--radius-full);
+        transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1);
+
+        &:hover {
+            transform: scale(1.05);
+        }
     }
 
     &__avatar-placeholder {
-        width: 40px;
-        height: 40px;
+        width: 32px;
+        height: 32px;
         border-radius: var(--radius-full);
         background: var(--color-primary);
         color: white;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-weight: 900;
-        font-size: 1.2rem;
+        font-weight: 800;
+        font-size: 1rem;
         flex-shrink: 0;
-        box-shadow: 0 4px 10px rgba(107, 92, 177, 0.3);
+        box-shadow: 0 2px 5px rgba(107, 92, 177, 0.3);
+
+        &--large {
+            width: 48px;
+            height: 48px;
+            font-size: 1.5rem;
+        }
+    }
+
+    &__profile-menu-wrap {
+        position: absolute;
+        top: 100%;
+        right: 0;
+        padding-top: var(--spacing-sm);
+        z-index: 1000;
+    }
+
+    &__profile-menu {
+        width: 260px;
+        background: var(--color-surface);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-lg);
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+    }
+
+    &__profile-header {
+        padding: var(--spacing-lg);
+        background: var(--color-surface-variant);
+        border-bottom: 1px solid var(--color-border);
+        display: flex;
+        align-items: center;
+        gap: var(--spacing-md);
     }
 
     &__user-info {
@@ -356,75 +336,13 @@ onMounted(() => {
         }
     }
 
-    &__sidebar {
-        position: fixed;
-        top: var(--titlebar-height, 0);
-        right: 0;
-        bottom: 0;
-        width: 280px;
-        background: var(--color-surface);
-        z-index: 1000;
-        display: flex;
-        flex-direction: column;
-        box-shadow: -4px 0 20px rgba(0, 0, 0, 0.05);
-        border-left: 1px solid var(--color-border);
-    }
-
-    &__sidebar-header {
-        padding: var(--spacing-lg) var(--spacing-md);
-        border-bottom: 1px solid var(--color-border);
-        background: var(--color-surface-variant);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-
-    &__sidebar-footer {
+    &__profile-actions {
         padding: var(--spacing-md);
-        border-top: 1px solid var(--color-border);
-        background: var(--color-surface-variant);
         display: flex;
-        gap: var(--spacing-sm);
-        align-items: center;
     }
 
-    &__footer-btn {
-        width: 44px;
-        height: 44px;
-        border-radius: var(--radius-md);
-        border: 2px solid var(--color-border);
-        background: var(--color-surface);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        transition: all 0.2s;
-        color: var(--color-text-muted);
-
-        &:hover {
-            border-color: var(--color-primary);
-            color: var(--color-primary);
-            transform: translateY(-2px);
-            background: white;
-        }
-    }
-
-    &__icon {
-        width: 24px;
-        height: 24px;
-        stroke-width: 2.5px;
-    }
-
-    &__logout {
-        flex: 1;
-    }
-
-    &__sidebar-overlay {
-        position: fixed;
-        inset: 0;
-        background: rgba(10, 10, 30, 0.4);
-        backdrop-filter: blur(8px);
-        z-index: 999;
+    &__logout-btn {
+        width: 100%;
     }
 
     &__content {

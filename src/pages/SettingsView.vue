@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import { getVersion } from "@tauri-apps/api/app";
+import { invoke } from "@tauri-apps/api/core";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { check, type Update } from "@tauri-apps/plugin-updater";
-import { Activity, Download, RefreshCw, Terminal } from "lucide-vue-next";
+import { Activity, Download, FolderOpen, FolderSearch, RefreshCw, Terminal } from "lucide-vue-next";
 import { onMounted, onUnmounted, ref } from "vue";
 import Button from "../components/ui/Button.vue";
 import Heading from "../components/ui/Heading.vue";
@@ -15,12 +17,53 @@ const userStore = useUserStore();
 const themeStore = useThemeStore();
 const devStore = useDevStore();
 const isChecking = ref(false);
+
+const currentDataDir = ref<string | null>(null);
+const isMigrating = ref(false);
+const storageStatus = ref<{ message: string; type: "success" | "error" | "info" | null }>({
+    message: "",
+    type: null,
+});
+
+const loadDataDir = async () => {
+    try {
+        currentDataDir.value = await invoke<string>("get_data_dir");
+    } catch (e) {
+        console.error("Failed to get data dir:", e);
+    }
+};
+
+const handleChangeLocation = async () => {
+    const selected = await invoke<string | null>("pick_directory");
+    if (!selected || selected === currentDataDir.value) return;
+
+    isMigrating.value = true;
+    storageStatus.value = { message: "Moving files to new location\u2026", type: "info" };
+
+    try {
+        await invoke("set_custom_data_path", { newPath: selected });
+        storageStatus.value = { message: "Done! Reloading\u2026", type: "success" };
+        setTimeout(() => window.location.reload(), 1200);
+    } catch (e) {
+        storageStatus.value = { message: String(e), type: "error" };
+        isMigrating.value = false;
+    }
+};
+
+const handleOpenDataDir = async () => {
+    try {
+        await invoke("open_data_dir");
+    } catch (e) {
+        console.error("Failed to open data dir:", e);
+    }
+};
 const isUpdating = ref(false);
 const foundUpdate = ref<Update | null>(null);
 const updateStatus = ref<{ message: string; type: "success" | "error" | "info" | null }>({
     message: "",
     type: null,
 });
+const currentVersion = ref<string>("");
 const konamiToast = ref<string | null>(null);
 
 const KONAMI = ["ArrowUp", "ArrowUp", "ArrowDown", "ArrowDown", "ArrowLeft", "ArrowRight", "ArrowLeft", "ArrowRight", "b", "a"];
@@ -110,6 +153,15 @@ onMounted(async () => {
     if (!userStore.user) {
         await userStore.fetchUser();
     }
+    
+    try {
+        currentVersion.value = await getVersion();
+    } catch (e) {
+        console.error("Failed to get client version:", e);
+    }
+
+    await loadDataDir();
+    
     window.addEventListener("keydown", handleKeydown);
 });
 
@@ -132,6 +184,7 @@ onUnmounted(() => {
                     <div class="c-settings__card-top">
                         <div class="c-settings__description-wrap">
                             <Heading :level="3">Client Updates</Heading>
+                            <Text v-if="currentVersion" variant="muted" size="sm">Current Version: {{ currentVersion }}</Text>
                         </div>
                     </div>
 
@@ -170,6 +223,45 @@ onUnmounted(() => {
 
                 <div class="c-settings__card">
                     <Switch v-model="themeStore.isDark" label="Dark Mode" />
+                </div>
+            </section>
+
+            <section class="c-settings__section">
+                <Heading level="3" color="primary" is-badge class="c-settings__section-title">Storage</Heading>
+
+                <div class="c-settings__card">
+                    <div class="c-settings__card-top">
+                        <div class="c-settings__description-wrap">
+                            <Heading :level="3">Data Location</Heading>
+                            <Text variant="muted" size="sm">ROMs, saves, and emulators are stored here.</Text>
+                        </div>
+                    </div>
+
+                    <div class="c-settings__path-display">
+                        <FolderOpen :size="14" class="c-settings__path-icon" />
+                        <code class="c-settings__path-text">{{ currentDataDir ?? '…' }}</code>
+                    </div>
+
+                    <div class="c-settings__actions" style="margin-top: var(--spacing-lg)">
+                        <Button color="grey" size="sm" :disabled="isMigrating" @click="handleChangeLocation">
+                            <FolderSearch :size="16" />
+                            <span>{{ isMigrating ? 'Moving files…' : 'Change Location' }}</span>
+                        </Button>
+                        <Button color="grey" size="sm" :disabled="isMigrating" @click="handleOpenDataDir">
+                            <FolderOpen :size="16" />
+                            <span>Open Folder</span>
+                        </Button>
+                    </div>
+
+                    <Transition name="fade">
+                        <div
+                            v-if="storageStatus.message"
+                            class="c-settings__status"
+                            :class="`c-settings__status--${storageStatus.type}`"
+                        >
+                            <Text size="sm">{{ storageStatus.message }}</Text>
+                        </div>
+                    </Transition>
                 </div>
             </section>
 
@@ -242,6 +334,31 @@ onUnmounted(() => {
         border-radius: var(--radius-lg);
         padding: var(--spacing-lg);
         box-shadow: var(--shadow-sm);
+    }
+
+    &__path-display {
+        display: flex;
+        align-items: center;
+        gap: var(--spacing-sm);
+        background: var(--color-surface-variant);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-md);
+        padding: var(--spacing-sm) var(--spacing-md);
+        overflow: hidden;
+    }
+
+    &__path-icon {
+        color: var(--color-text-muted);
+        flex-shrink: 0;
+    }
+
+    &__path-text {
+        font-family: 'Menlo', 'Consolas', 'Monaco', monospace;
+        font-size: 0.78rem;
+        color: var(--color-text-muted);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
 
     &__info-row {

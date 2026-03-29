@@ -40,6 +40,8 @@ pub struct StoreEmulator {
     pub config_files: Vec<String>,
     #[serde(default)]
     pub zipped: bool,
+    #[serde(default)]
+    pub file_size: i64,
 }
 
 #[tauri::command]
@@ -75,18 +77,17 @@ pub async fn fetch_server_emulators<R: Runtime>(
         .await
         .map_err(|e| e.to_string())?;
 
-    let response_text = response
-        .text()
-        .await
-        .map_err(|e| e.to_string())?;
+    let response_text = response.text().await.map_err(|e| e.to_string())?;
 
     let api_res: ApiResponse<Vec<ApiEmulator>> =
-        serde_json::from_str(&response_text).map_err(|e| {
-            e.to_string()
-        })?;
+        serde_json::from_str(&response_text).map_err(|e| e.to_string())?;
 
     let filtered = api_res.data.unwrap_or_default();
-    println!("[Rust] Found {} matching emulators for console: {}", filtered.len(), console_upper);
+    println!(
+        "[Rust] Found {} matching emulators for console: {}",
+        filtered.len(),
+        console_upper
+    );
 
     Ok(filtered)
 }
@@ -174,12 +175,15 @@ pub async fn download_emulator<R: Runtime>(
         .text()
         .await
         .map_err(|e| e.to_string())?;
-    
+
     println!("Server response received (length: {})", response_text.len());
 
     let api_res: ApiResponse<Vec<ApiEmulator>> =
         serde_json::from_str(&response_text).map_err(|e| {
-            println!("[Rust] Failed to parse JSON in download_emulator: {} | Raw JSON: {}", e, response_text);
+            println!(
+                "[Rust] Failed to parse JSON in download_emulator: {} | Raw JSON: {}",
+                e, response_text
+            );
             e.to_string()
         })?;
     let emulators = api_res.data.ok_or_else(|| {
@@ -190,23 +194,29 @@ pub async fn download_emulator<R: Runtime>(
     println!("[Rust] Found {} candidate(s) in list", emulators.len());
 
     let emulator = if let Some(id) = emulator_id {
-        emulators
-            .into_iter()
-            .find(|e| e.id == id)
-            .ok_or_else(|| {
-                println!("[Rust] Specified emulator ID '{}' not found in candidate list", id);
-                "Emulator not found".to_string()
-            })?
+        emulators.into_iter().find(|e| e.id == id).ok_or_else(|| {
+            println!(
+                "[Rust] Specified emulator ID '{}' not found in candidate list",
+                id
+            );
+            "Emulator not found".to_string()
+        })?
     } else {
         emulators.into_iter().next().ok_or_else(|| {
-            println!("[Rust] Empty emulator candidate list for console: {}", console);
+            println!(
+                "[Rust] Empty emulator candidate list for console: {}",
+                console
+            );
             "No emulator found".to_string()
         })?
     };
 
-    println!("Selected emulator: '{}' (ID: {})", emulator.name, emulator.id);
+    println!(
+        "Selected emulator: '{}' (ID: {})",
+        emulator.name, emulator.id
+    );
 
-    let mut app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let mut app_data_dir = store::get_data_dir(&app)?;
     app_data_dir.push("emulators");
     app_data_dir.push(console.to_lowercase());
     let emu_name_safe = emulator.name.replace(" ", "_").to_lowercase();
@@ -295,7 +305,9 @@ pub async fn download_emulator<R: Runtime>(
         .and_then(|v| serde_json::from_value(v.clone()).ok())
         .unwrap_or_default();
 
-    let safe_domain = domain.replace(|c: char| !c.is_alphanumeric(), "_").to_lowercase();
+    let safe_domain = domain
+        .replace(|c: char| !c.is_alphanumeric(), "_")
+        .to_lowercase();
     let server_id = format!("server-{}-{}", safe_domain, emulator.id);
     let is_first = stored_emulators.is_empty();
 
@@ -306,7 +318,7 @@ pub async fn download_emulator<R: Runtime>(
         existing.save_extensions = emulator.save_extensions.clone();
         existing.config_files = emulator.config_files.clone();
         existing.zipped = emulator.zipped;
-        
+
         for c in &emulator.consoles {
             if !existing.consoles.contains(c) {
                 existing.consoles.push(c.clone());
@@ -326,6 +338,7 @@ pub async fn download_emulator<R: Runtime>(
                 save_extensions: emulator.save_extensions,
                 config_files: emulator.config_files,
                 zipped: emulator.zipped,
+                file_size: emulator.file_size,
             },
         );
     }
@@ -337,6 +350,49 @@ pub async fn download_emulator<R: Runtime>(
     global_store.save().map_err(|e| e.to_string())?;
 
     Ok(())
+}
+
+fn dir_size(path: &std::path::Path) -> u64 {
+    let mut total = 0u64;
+    if let Ok(entries) = std::fs::read_dir(path) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if p.is_dir() {
+                total += dir_size(&p);
+            } else if let Ok(meta) = p.metadata() {
+                total += meta.len();
+            }
+        }
+    }
+    total
+}
+
+#[tauri::command]
+pub async fn get_emulator_dir_sizes<R: Runtime>(
+    app: AppHandle<R>,
+) -> Result<HashMap<String, u64>, String> {
+    let store = store::get_global_store(&app)?;
+    let stored_emulators: HashMap<String, StoreEmulator> = store
+        .get("emulators")
+        .and_then(|v| serde_json::from_value(v.clone()).ok())
+        .unwrap_or_default();
+
+    let mut sizes: HashMap<String, u64> = HashMap::new();
+    for (id, emu) in &stored_emulators {
+        let bin_path = std::path::Path::new(&emu.binary_path);
+        if let Some(dir) = bin_path.parent() {
+            if dir.exists() && dir.is_dir() {
+                sizes.insert(id.clone(), dir_size(dir));
+            } else if bin_path.exists() {
+                sizes.insert(
+                    id.clone(),
+                    bin_path.metadata().map(|m| m.len()).unwrap_or(0),
+                );
+            }
+        }
+    }
+
+    Ok(sizes)
 }
 
 #[tauri::command]
@@ -378,7 +434,7 @@ pub async fn migrate_emulator_files<R: Runtime>(app: AppHandle<R>) -> Result<(),
         .and_then(|v| serde_json::from_value(v.clone()).ok())
         .unwrap_or_default();
 
-    let base_app_data = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let base_app_data = store::get_data_dir(&app)?;
     let mut changed = false;
 
     for emulator in stored_emulators.values_mut() {
@@ -390,7 +446,11 @@ pub async fn migrate_emulator_files<R: Runtime>(app: AppHandle<R>) -> Result<(),
         let emu_name_safe = emulator.name.replace(" ", "_").to_lowercase();
         let mut new_dir = base_app_data.clone();
         new_dir.push("emulators");
-        let console_folder = emulator.consoles.first().map(|c| c.to_lowercase()).unwrap_or_else(|| "system".to_string());
+        let console_folder = emulator
+            .consoles
+            .first()
+            .map(|c| c.to_lowercase())
+            .unwrap_or_else(|| "system".to_string());
         new_dir.push(&console_folder);
         new_dir.push(&emu_name_safe);
 

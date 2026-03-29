@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { defineStore } from "pinia";
 import { ref } from "vue";
-import { getGlobalStore, getSavedDomains, getDomainStore } from "../lib/store";
+import { getDomainStore, getGlobalStore, getSavedDomains } from "../lib/store";
 
 export type Emulator = {
     id: string;
@@ -14,6 +14,7 @@ export type Emulator = {
     save_extensions: string[];
     config_files: string[];
     zipped: boolean;
+    file_size?: number;
 };
 
 export type ServerEmulator = {
@@ -122,10 +123,9 @@ export const useEmulatorStore = defineStore("emulatorStore", () => {
     }
 
     async function isEmulatorInstalled(cs: string): Promise<boolean> {
-        const normalized = cs.toLowerCase();
         if (Object.keys(emulators.value).length === 0) await fetchEmulators();
         return Object.values(emulators.value).some(e =>
-            e.consoles.some(c => c.toLowerCase() === normalized)
+            e.consoles.some(c => c === cs)
         );
     }
 

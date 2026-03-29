@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { type Ref, onMounted, ref, watch } from "vue";
+import { X } from "lucide-vue-next";
 import GameLibrary from "../components/games/GameLibrary.vue";
 import SearchSection from "../components/games/SearchSection.vue";
 import { type LibraryGame, useGameStore } from "../stores/GameStore";
@@ -29,6 +30,9 @@ watch(
         <Teleport to="#header-tools" v-if="ready">
             <div class="c-search">
                 <input v-model="searchQuery" placeholder="Search titles..." class="c-input" autofocus />
+                <button v-if="searchQuery.length > 0" class="c-search__clear" @click="searchQuery = ''" aria-label="Clear search">
+                    <X :size="16" />
+                </button>
             </div>
         </Teleport>
 
@@ -56,6 +60,7 @@ watch(
     display: flex;
     align-items: center;
     width: 100%;
+    position: relative;
 }
 
 .c-input {
@@ -63,7 +68,7 @@ watch(
     background: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-full);
-    padding: var(--spacing-sm) var(--spacing-lg);
+    padding: var(--spacing-sm) 40px var(--spacing-sm) var(--spacing-lg);
     font-size: 0.85rem;
     font-weight: 800;
     outline: none;
@@ -74,6 +79,28 @@ watch(
     &:focus {
         border-color: var(--color-primary);
         box-shadow: 0 0 0 4px rgba(107, 92, 177, 0.1);
+    }
+}
+
+.c-search__clear {
+    position: absolute;
+    right: 12px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: var(--color-text-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    width: 24px;
+    height: 24px;
+    border-radius: var(--radius-full);
+    transition: all 0.2s;
+
+    &:hover {
+        color: var(--color-text);
+        background: rgba(120, 120, 150, 0.2);
     }
 }
 </style>
