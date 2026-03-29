@@ -9,6 +9,7 @@ emuNEX is a service, think of it like Steam, but for emulators. The client conne
 Playing old games is as easy as searching for a game and pressing (download and then) play!
 
 Find the source code for the server here: https://github.com/chloecinders/emuNEX-server
+Join the Discord server for official updates for the client and the server: https://discord.gg/geFEWKE8Hp
 
 ## (Legal) Disclaimer
 
