@@ -2,6 +2,7 @@
 import { ArrowLeftRight, GamepadDirectional, HardDrive, Library, Settings } from "lucide-vue-next";
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
+import { useStoragePath } from "../lib/http";
 import Logout from "../components/Logout.vue";
 import GameInfo from "../components/games/GameInfo.vue";
 import ServerSwitcher from "../components/modals/ServerSwitcher.vue";
@@ -35,6 +36,11 @@ const toggleProfile = () => {
     isProfileOpen.value = !isProfileOpen.value;
 };
 
+const avatarUrl = computed(() => {
+    if (!userStore.user?.avatar_path) return null;
+    return useStoragePath(userStore.user.avatar_path);
+});
+
 const goToSettingsForUpdate = () => {
     updateStore.dismissBanner();
     router.push({ name: "settings" });
@@ -66,7 +72,12 @@ onMounted(() => {
                     <div class="c-shell__profile-dropdown-wrapper" @mouseleave="isProfileOpen = false">
                         <button class="c-shell__avatar-btn" @click="toggleProfile">
                             <div class="c-shell__avatar-placeholder">
-                                {{ (userStore.user?.username || "G").charAt(0).toUpperCase() }}
+                                <template v-if="avatarUrl">
+                                    <img :src="avatarUrl" class="c-shell__avatar-img" />
+                                </template>
+                                <template v-else>
+                                    {{ (userStore.user?.username || "G").charAt(0).toUpperCase() }}
+                                </template>
                             </div>
                         </button>
 
@@ -75,7 +86,12 @@ onMounted(() => {
                                 <div class="c-shell__profile-menu">
                                     <div class="c-shell__profile-header">
                                         <div class="c-shell__avatar-placeholder c-shell__avatar-placeholder--large">
-                                            {{ (userStore.user?.username || "G").charAt(0).toUpperCase() }}
+                                            <template v-if="avatarUrl">
+                                                <img :src="avatarUrl" class="c-shell__avatar-img" />
+                                            </template>
+                                            <template v-else>
+                                                {{ (userStore.user?.username || "G").charAt(0).toUpperCase() }}
+                                            </template>
                                         </div>
                                         <div class="c-shell__user-info">
                                             <span class="c-shell__username">{{
@@ -180,7 +196,7 @@ onMounted(() => {
 
         &:hover {
             color: var(--color-text);
-            background: rgba(255, 255, 255, 0.05); // Or any hover surface
+            background: rgba(255, 255, 255, 0.05);
             border-color: var(--color-border);
         }
 
@@ -278,6 +294,13 @@ onMounted(() => {
         }
     }
 
+    &__avatar-img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        border-radius: inherit;
+    }
+
     &__profile-menu-wrap {
         position: absolute;
         top: 100%;
@@ -351,6 +374,66 @@ onMounted(() => {
         display: flex;
         flex-direction: column;
         min-height: 0;
+    }
+
+    &__update-banner {
+        background: var(--color-primary);
+        color: white;
+        padding: calc(var(--spacing-xs) + 2px) var(--spacing-md);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: var(--spacing-md);
+        z-index: 100;
+        position: relative;
+    }
+
+    &__update-text {
+        font-weight: 800;
+        font-size: 0.85rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    &__update-button {
+        background: white;
+        color: var(--color-primary);
+        border: none;
+        padding: var(--spacing-xxs) var(--spacing-md);
+        border-radius: var(--radius-sm);
+        font-weight: 900;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        cursor: pointer;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+
+        &:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        &:active {
+            transform: translateY(0);
+        }
+    }
+
+    &__update-dismiss {
+        background: transparent;
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        color: white;
+        padding: var(--spacing-xxs) var(--spacing-sm);
+        border-radius: var(--radius-sm);
+        font-weight: 700;
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        cursor: pointer;
+        transition: all 0.2s;
+        opacity: 0.8;
+
+        &:hover {
+            background: rgba(255, 255, 255, 0.1);
+            opacity: 1;
+        }
     }
 
     &__info-wrapper {

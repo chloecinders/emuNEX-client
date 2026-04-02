@@ -6,6 +6,7 @@ export type User = {
     id: string;
     username: string;
     role: string;
+    avatar_path?: string;
 };
 
 export const useUserStore = defineStore("userStore", () => {

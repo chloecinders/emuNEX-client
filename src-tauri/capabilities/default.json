@@ -20,8 +20,6 @@
         "deep-link:default",
         "store:default",
         "dialog:allow-message",
-        "dialog:default",
-        "drpc:default",
-        "drpc:allow-is-running"
+        "dialog:default"
     ]
 }

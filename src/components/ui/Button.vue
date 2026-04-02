@@ -67,7 +67,9 @@ const emit = defineEmits(["click"]);
         padding: 12px 28px;
         border-radius: var(--radius-md);
         color: white;
-        transition: transform 150ms cubic-bezier(0.3, 0.7, 0.4, 1), top 150ms cubic-bezier(0.3, 0.7, 0.4, 1);
+        transition:
+            transform 150ms cubic-bezier(0.3, 0.7, 0.4, 1),
+            top 150ms cubic-bezier(0.3, 0.7, 0.4, 1);
         text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
         border: 1px solid rgba(255, 255, 255, 0.1);
         user-select: none;
@@ -81,7 +83,6 @@ const emit = defineEmits(["click"]);
         width: 100%;
         height: 100%;
         border-radius: var(--radius-md);
-        box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
         z-index: 1;
     }
 
@@ -114,10 +115,24 @@ const emit = defineEmits(["click"]);
 
     &--grey {
         .c-button__front {
-            background: #4a4a5a;
+            background: var(--color-surface);
+            color: var(--color-text);
+            text-shadow: none;
+            border: 1px solid var(--color-border);
         }
         .c-button__edge {
-            background: #2b2b36;
+            background: var(--color-border-hover);
+        }
+
+        [data-theme="dark"] & {
+            .c-button__front {
+                background: #4a4a5a;
+                color: #ffffff;
+                border-color: #5b5b6a;
+            }
+            .c-button__edge {
+                background: #2b2b36;
+            }
         }
     }
 

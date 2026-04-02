@@ -875,6 +875,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "discord-rich-presence"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "90c55d69cab17c19677ce3a5f8face993a9e6eaf847fecac3547f3a3ff4a2494"
+dependencies = [
+ "log",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "serde_repr",
+ "thiserror 2.0.18",
+ "uuid 0.8.2",
+]
+
+[[package]]
 name = "dispatch2"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1002,10 +1017,11 @@ checksum = "4ef6b89e5b37196644d8796de5268852ff179b44e96276cf4290264843743bb7"
 
 [[package]]
 name = "emuNEX-client"
-version = "0.7.1"
+version = "0.7.2"
 dependencies = [
  "base64 0.22.1",
  "chrono",
+ "discord-rich-presence",
  "futures-util",
  "md5",
  "reqwest",
@@ -1015,13 +1031,14 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-deep-link",
  "tauri-plugin-dialog",
- "tauri-plugin-drpc",
  "tauri-plugin-fs",
  "tauri-plugin-opener",
  "tauri-plugin-process",
  "tauri-plugin-single-instance",
  "tauri-plugin-store",
  "tauri-plugin-updater",
+ "thiserror 2.0.18",
+ "tokio",
  "url",
  "zip 8.2.0",
 ]
@@ -3512,19 +3529,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rpcdiscord"
-version = "0.2.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "71aa9a2097dc0176805e24debcb5d3ea5a17b796cd1d28e76b29f78fb49d7d5d"
-dependencies = [
- "serde",
- "serde_derive",
- "serde_json",
- "serde_repr",
- "uuid 0.8.2",
-]
-
-[[package]]
 name = "rust-ini"
 version = "0.21.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4473,22 +4477,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tauri-plugin-drpc"
-version = "0.1.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7b291669b7dbc05471fba380eeecf31e3f733ae6013aaa5216a43ca376027e5a"
-dependencies = [
- "log",
- "rpcdiscord",
- "serde",
- "serde_json",
- "tauri",
- "tauri-plugin",
- "thiserror 2.0.18",
- "tokio",
-]
-
-[[package]]
 name = "tauri-plugin-fs"
 version = "2.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4846,7 +4834,9 @@ dependencies = [
  "bytes",
  "libc",
  "mio",
+ "parking_lot",
  "pin-project-lite",
+ "signal-hook-registry",
  "socket2",
  "tokio-macros",
  "windows-sys 0.61.2",

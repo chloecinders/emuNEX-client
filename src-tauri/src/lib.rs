@@ -48,7 +48,6 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_drpc::init())
         .invoke_handler(tauri::generate_handler![
             commands::auth::get_client_start,
             commands::http::http,
@@ -72,9 +71,14 @@ pub fn run() {
             commands::storage::set_custom_data_path,
             commands::storage::open_data_dir,
             commands::storage::pick_directory,
+            commands::drpc::spawn_drpc_thread,
+            commands::drpc::destroy_drpc_thread,
+            commands::drpc::is_drpc_running,
+            commands::drpc::set_drpc_activity,
+            commands::drpc::clear_drpc_activity,
         ])
         .setup(|app| {
-            #[cfg(desktop)]
+            #[cfg(any(target_os = "windows", target_os = "linux"))]
             app.deep_link().register("emunex")?;
 
             let handle = app.handle().clone();
