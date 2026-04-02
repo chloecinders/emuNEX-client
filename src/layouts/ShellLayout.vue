@@ -2,6 +2,7 @@
 import { ArrowLeftRight, GamepadDirectional, HardDrive, Library, Settings } from "lucide-vue-next";
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
+import { useStoragePath } from "../lib/http";
 import Logout from "../components/Logout.vue";
 import GameInfo from "../components/games/GameInfo.vue";
 import ServerSwitcher from "../components/modals/ServerSwitcher.vue";
@@ -35,6 +36,11 @@ const toggleProfile = () => {
     isProfileOpen.value = !isProfileOpen.value;
 };
 
+const avatarUrl = computed(() => {
+    if (!userStore.user?.avatar_path) return null;
+    return useStoragePath(userStore.user.avatar_path);
+});
+
 const goToSettingsForUpdate = () => {
     updateStore.dismissBanner();
     router.push({ name: "settings" });
@@ -66,7 +72,12 @@ onMounted(() => {
                     <div class="c-shell__profile-dropdown-wrapper" @mouseleave="isProfileOpen = false">
                         <button class="c-shell__avatar-btn" @click="toggleProfile">
                             <div class="c-shell__avatar-placeholder">
-                                {{ (userStore.user?.username || "G").charAt(0).toUpperCase() }}
+                                <template v-if="avatarUrl">
+                                    <img :src="avatarUrl" class="c-shell__avatar-img" />
+                                </template>
+                                <template v-else>
+                                    {{ (userStore.user?.username || "G").charAt(0).toUpperCase() }}
+                                </template>
                             </div>
                         </button>
 
@@ -75,7 +86,12 @@ onMounted(() => {
                                 <div class="c-shell__profile-menu">
                                     <div class="c-shell__profile-header">
                                         <div class="c-shell__avatar-placeholder c-shell__avatar-placeholder--large">
-                                            {{ (userStore.user?.username || "G").charAt(0).toUpperCase() }}
+                                            <template v-if="avatarUrl">
+                                                <img :src="avatarUrl" class="c-shell__avatar-img" />
+                                            </template>
+                                            <template v-else>
+                                                {{ (userStore.user?.username || "G").charAt(0).toUpperCase() }}
+                                            </template>
                                         </div>
                                         <div class="c-shell__user-info">
                                             <span class="c-shell__username">{{
@@ -276,6 +292,13 @@ onMounted(() => {
             height: 48px;
             font-size: 1.5rem;
         }
+    }
+
+    &__avatar-img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        border-radius: inherit;
     }
 
     &__profile-menu-wrap {

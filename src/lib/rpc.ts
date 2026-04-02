@@ -1,9 +1,9 @@
-import { setActivity, start } from "tauri-plugin-drpc";
-import { Activity, Assets, Timestamps } from "tauri-plugin-drpc/activity";
+import { Activity, ActivityStatusDisplayType, Assets, Timestamps } from "./activity";
 import { useGameStore } from "../stores/GameStore";
 import { useStoragePath } from "./http";
+import { invoke } from "@tauri-apps/api/core";
 
-export { Activity } from "tauri-plugin-drpc/activity";
+export { Activity } from "./activity";
 
 export class DiscordRPC {
     static startTimestamp: number = 0;
@@ -19,7 +19,7 @@ export class DiscordRPC {
         this.startTimestamp = Date.now();
 
         try {
-            await start(app_id);
+            await invoke("spawn_drpc_thread", { id: app_id });
             this.active = true;
             await this.reset();
         } catch (e) {
@@ -33,7 +33,7 @@ export class DiscordRPC {
         }
 
         try {
-            await setActivity(this.defaultActivity);
+            await invoke("set_drpc_activity", { activity: this.defaultActivity });
         } catch (e) {
             console.error("Unable to reset activity to default", e);
         }
@@ -50,11 +50,12 @@ export class DiscordRPC {
         if (game) {
             const gameIcon = useStoragePath(game.image_path.replace('/covers/', '/icons/').replace('.webp', '.png'));
             const activity = new Activity()
-                .setDetails(`Playing ${game.title}`)
+                .setDetails(`${game.title}`)
                 .setTimestamps(new Timestamps(Date.now()))
-                .setAssets(new Assets().setLargeImage(gameIcon).setSmallImage("emunex_icon"));
+                .setAssets(new Assets().setLargeImage(gameIcon).setSmallImage("emunex_icon"))
+                .setDisplayType(ActivityStatusDisplayType.Details);
 
-            await setActivity(activity);
+            await invoke("set_drpc_activity", { activity });
         }
     }
 }

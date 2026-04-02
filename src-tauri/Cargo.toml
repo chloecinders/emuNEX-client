@@ -1,6 +1,6 @@
 [package]
 name = "emuNEX-client"
-version = "0.7.1"
+version = "0.7.2"
 description = "Remote Emulation & Library Management - Client"
 repository = "https://github.com/chloecinders/emuNEX-client"
 authors = ["chloecinders"]
@@ -30,8 +30,10 @@ tauri-plugin-dialog = "2"
 base64 = "0.22.1"
 tauri-plugin-fs = "2"
 url = "2.5.8"
-tauri-plugin-drpc = "0.1.6"
+discord-rich-presence = "1.1.0"
 md5 = "0.8.0"
+tokio = { version = "1", features = ["full"] }
+thiserror = "2"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-single-instance = "2"
