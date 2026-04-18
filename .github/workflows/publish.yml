@@ -30,15 +30,15 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            libgtk-3-dev=3.24.33-1ubuntu2.2 \
             libwebkit2gtk-4.1-0=2.44.0-2 \
             libwebkit2gtk-4.1-dev=2.44.0-2 \
             libjavascriptcoregtk-4.1-0=2.44.0-2 \
             libjavascriptcoregtk-4.1-dev=2.44.0-2 \
             gir1.2-javascriptcoregtk-4.1=2.44.0-2 \
-            libsoup-3.0-dev=3.0.7-0ubuntu1 \
             gir1.2-webkit2-4.1=2.44.0-2 \
-            librsvg2-dev=2.52.5+dfsg-3ubuntu0.2 \
+            libsoup-3.0-dev \
+            libgtk-3-dev \
+            librsvg2-dev \
             libappindicator3-dev \
             patchelf
 
