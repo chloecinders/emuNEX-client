@@ -36,6 +36,7 @@ export type Game = {
     rom_path?: string;
     image_path: string;
     file_size_bytes?: number;
+    file_extension?: string | null;
     release_year: number;
     languages?: string[] | null;
     versions_count: number;

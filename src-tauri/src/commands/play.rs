@@ -346,6 +346,7 @@ pub async fn install_game<R: Runtime>(
     game_id: String,
     console: String,
     rom_path: String,
+    extension: String,
     name: Option<String>,
 ) -> Result<(), String> {
     let store = store::get_current_store(&app)?;
@@ -374,10 +375,7 @@ pub async fn install_game<R: Runtime>(
     save_dir.push(&game_id);
     create_dir_all(&save_dir).map_err(|e| e.to_string())?;
 
-    let extension = Path::new(&rom_path)
-        .extension()
-        .and_then(|ext| ext.to_str())
-        .unwrap_or("rom");
+    let extension = extension.trim_start_matches('.');
     let file_name = format!("{}.{}", game_id, extension);
     rom_dir.push(&file_name);
 

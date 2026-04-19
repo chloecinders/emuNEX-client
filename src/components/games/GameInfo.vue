@@ -218,6 +218,7 @@ const handleInstall = async () => {
                 gameId: game.value.id.toString(),
                 console: game.value.console,
                 romPath: dlRes.data,
+                extension: game.value.file_extension || "rom",
                 name: game.value.realname || game.value.title,
             });
         }
