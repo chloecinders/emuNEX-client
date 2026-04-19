@@ -56,9 +56,7 @@ export async function getDomainStore(domain: string): Promise<Store> {
         const folder = await getDomainFolder(normalized);
         try {
             await mkdir(folder, { recursive: true });
-        } catch (e) {
-            // might already exist
-        }
+        } catch (e) { }
         domainStores[normalized] = await load(await join(folder, "store.json"));
     }
     return domainStores[normalized];

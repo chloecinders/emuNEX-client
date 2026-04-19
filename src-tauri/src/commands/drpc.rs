@@ -129,6 +129,7 @@ async fn initialize_rpc(id: String) -> Result<(), DrpcError> {
             if let Some(state) = &drpc_act.state {
                 payload = payload.state(state);
             }
+
             if let Some(details) = &drpc_act.details {
                 payload = payload.details(details);
             }
@@ -140,6 +141,7 @@ async fn initialize_rpc(id: String) -> Result<(), DrpcError> {
                     5 => ActivityType::Competing,
                     _ => ActivityType::Playing,
                 };
+
                 payload = payload.activity_type(activity_kind);
             }
 
@@ -149,34 +151,43 @@ async fn initialize_rpc(id: String) -> Result<(), DrpcError> {
                     2 => StatusDisplayType::Details,
                     _ => StatusDisplayType::Name,
                 };
+
                 payload = payload.status_display_type(status_kind);
             }
 
             if let Some(a) = &drpc_act.assets {
                 let mut assets = activity::Assets::new();
+
                 if let Some(li) = &a.large_image {
                     assets = assets.large_image(li);
                 }
+
                 if let Some(lt) = &a.large_text {
                     assets = assets.large_text(lt);
                 }
+
                 if let Some(si) = &a.small_image {
                     assets = assets.small_image(si);
                 }
+
                 if let Some(st) = &a.small_text {
                     assets = assets.small_text(st);
                 }
+
                 payload = payload.assets(assets);
             }
 
             if let Some(t) = &drpc_act.timestamps {
                 let mut timestamps = activity::Timestamps::new();
+
                 if let Some(s) = t.start {
                     timestamps = timestamps.start(s);
                 }
+
                 if let Some(e) = t.end {
                     timestamps = timestamps.end(e);
                 }
+
                 payload = payload.timestamps(timestamps);
             }
 
@@ -185,6 +196,7 @@ async fn initialize_rpc(id: String) -> Result<(), DrpcError> {
                     .iter()
                     .map(|b| activity::Button::new(&b.label, &b.url))
                     .collect();
+
                 payload = payload.buttons(payload_btns);
             }
 

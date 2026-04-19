@@ -1,16 +1,24 @@
 <script lang="ts" setup>
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useGameStore } from "../../stores/GameStore";
-import Button from "../ui/Button.vue";
+import { useRomStore } from "../../stores/RomStore";
 import ReportGameIssue from "../modals/ReportGameIssue.vue";
+import Button from "../ui/Button.vue";
+import Modal from "../ui/Modal.vue";
+import Switch from "../ui/Switch.vue";
+import Text from "../ui/Text.vue";
 
 const gameStore = useGameStore();
+const romStore = useRomStore();
 
 const show = ref(false);
 const x = ref(0);
 const y = ref(0);
 const gameId = ref<string | null>(null);
 const showReportModal = ref(false);
+
+const showDeleteModal = ref(false);
+const deleteSaveData = ref(false);
 
 const open = (event: MouseEvent, id: string) => {
     window.dispatchEvent(new CustomEvent("close-all-context-menus"));
@@ -19,6 +27,13 @@ const open = (event: MouseEvent, id: string) => {
     y.value = event.clientY;
     gameId.value = id;
     show.value = true;
+
+    setTimeout(() => {
+        const first = document.querySelector<HTMLElement>(".c-context-menu .c-button, .c-context-menu button");
+        if (first) {
+            first.focus();
+        }
+    }, 50);
 
     setTimeout(() => {
         document.addEventListener("click", close, { once: true });
@@ -43,6 +58,35 @@ const playOrInstall = () => {
     }
 
     close();
+};
+
+const deleteGame = () => {
+    deleteSaveData.value = false;
+    showDeleteModal.value = true;
+    close();
+};
+
+const confirmDeleteGame = async () => {
+    if (!gameId.value) return;
+
+    const game = await gameStore.fetchGame(gameId.value);
+    if (!game) {
+        alert("Could not load game metadata to uninstall.");
+        showDeleteModal.value = false;
+        return;
+    }
+
+    try {
+        await romStore.deleteRom(game.id, game.console);
+        if (deleteSaveData.value) {
+            await romStore.deleteSave(game.id);
+        }
+        await gameStore.fetchInstalledGames();
+    } catch (e) {
+        alert("Failed to delete game: " + e);
+    }
+
+    showDeleteModal.value = false;
 };
 
 const openReport = () => {
@@ -72,29 +116,54 @@ onUnmounted(() => {
     window.removeEventListener("scroll", handleScroll, true);
 });
 
-const isInstalled = computed(() => gameStore.installedGameIds.includes(gameId.value || ""))
+const isInstalled = computed(() => gameStore.installedGameIds.includes(gameId.value || ""));
 </script>
 
 <template>
-    <div
-        v-if="show"
-        class="c-context-menu"
-        :style="{ left: x + 'px', top: y + 'px' }"
-        @contextmenu.prevent
-    >
+    <div v-if="show" class="c-context-menu" :style="{ left: x + 'px', top: y + 'px' }" @contextmenu.prevent>
         <div class="c-context-menu__primary">
             <Button :color="isInstalled ? 'primary' : 'green'" size="sm" full @click="playOrInstall">
                 {{ gameId && isInstalled ? "Play" : "Install" }}
             </Button>
         </div>
+        <button v-if="isInstalled" class="c-context-menu__item c-context-menu__item--danger" @click="deleteGame"
+            >Delete Game</button
+        >
         <button class="c-context-menu__item" @click="openReport">Report Issue...</button>
     </div>
 
-    <ReportGameIssue
-        v-if="gameId"
-        :game-id="gameId"
-        v-model:show-modal="showReportModal"
-    />
+    <ReportGameIssue v-if="gameId" :game-id="gameId" v-model:show-modal="showReportModal" />
+
+    <Modal :show="showDeleteModal" title="Delete Game Data" @close="showDeleteModal = false">
+        <div style="display: flex; flex-direction: column; gap: var(--spacing-lg); padding: var(--spacing-sm) 0">
+            <Text variant="muted"
+                >Are you sure you want to delete this game? This will remove the game files from your system.</Text
+            >
+
+            <div
+                style="
+                    padding: var(--spacing-md);
+                    background: var(--color-surface-variant);
+                    border-radius: var(--radius-md);
+                    border: 1px solid var(--color-border);
+                "
+            >
+                <Switch v-model="deleteSaveData" label="Delete local save data as well" />
+                <Text size="xs" variant="muted" style="display: block; margin-top: 4px; padding-left: 2px">
+                    Cloud saves will not be affected.
+                </Text>
+            </div>
+
+            <div
+                style="display: flex; gap: var(--spacing-md); justify-content: flex-end; margin-top: var(--spacing-sm)"
+            >
+                <Button color="grey" @click="showDeleteModal = false">Cancel</Button>
+                <Button @click="confirmDeleteGame" style="background: var(--color-red, #ef4444); color: white"
+                    >Delete</Button
+                >
+            </div>
+        </div>
+    </Modal>
 </template>
 
 <style lang="scss" scoped>
@@ -130,6 +199,14 @@ const isInstalled = computed(() => gameStore.installedGameIds.includes(gameId.va
 
         &:hover {
             background: var(--color-surface-variant);
+        }
+
+        &--danger {
+            color: var(--color-red, #ef4444);
+
+            &:hover {
+                background: color-mix(in srgb, var(--color-red, #ef4444) 15%, transparent);
+            }
         }
     }
 }

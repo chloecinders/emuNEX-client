@@ -1,4 +1,7 @@
-use std::path::PathBuf;
+use std::{
+    fs::{copy, create_dir_all, remove_file, rename},
+    path::PathBuf,
+};
 use tauri::{AppHandle, Runtime};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
@@ -9,9 +12,11 @@ fn move_dir_contents(src: &PathBuf, dst: &PathBuf) -> Result<(), String> {
     if !src.exists() {
         return Ok(());
     }
-    std::fs::create_dir_all(dst).map_err(|e| e.to_string())?;
+
+    create_dir_all(dst).map_err(|e| e.to_string())?;
 
     let mut stack: Vec<PathBuf> = vec![src.clone()];
+
     while let Some(current) = stack.pop() {
         for entry in std::fs::read_dir(&current)
             .map_err(|e| e.to_string())?
@@ -22,16 +27,16 @@ fn move_dir_contents(src: &PathBuf, dst: &PathBuf) -> Result<(), String> {
             let dest = dst.join(rel);
 
             if path.is_dir() {
-                std::fs::create_dir_all(&dest).map_err(|e| e.to_string())?;
+                create_dir_all(&dest).map_err(|e| e.to_string())?;
                 stack.push(path);
             } else {
                 if let Some(parent) = dest.parent() {
-                    std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+                    create_dir_all(parent).map_err(|e| e.to_string())?;
                 }
 
-                if std::fs::rename(&path, &dest).is_err() {
-                    std::fs::copy(&path, &dest).map_err(|e| e.to_string())?;
-                    std::fs::remove_file(&path).ok();
+                if rename(&path, &dest).is_err() {
+                    copy(&path, &dest).map_err(|e| e.to_string())?;
+                    remove_file(&path).ok();
                 }
             }
         }
@@ -49,14 +54,16 @@ pub fn get_data_dir<R: Runtime>(app: AppHandle<R>) -> Result<String, String> {
 #[tauri::command]
 pub fn pick_directory<R: Runtime>(app: AppHandle<R>) -> Result<Option<String>, String> {
     let result = app.dialog().file().blocking_pick_folder();
-    Ok(result.and_then(|fp| fp.into_path().ok()).map(|p| p.to_string_lossy().into_owned()))
+    Ok(result
+        .and_then(|fp| fp.into_path().ok())
+        .map(|p| p.to_string_lossy().into_owned()))
 }
 
 #[tauri::command]
 pub fn open_data_dir<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
     let path = store::get_base_dir(&app)?;
     if !path.exists() {
-        std::fs::create_dir_all(&path).map_err(|e| e.to_string())?;
+        create_dir_all(&path).map_err(|e| e.to_string())?;
     }
     app.opener()
         .open_path(path.to_string_lossy(), None::<&str>)
@@ -79,7 +86,7 @@ pub async fn set_custom_data_path<R: Runtime>(
         return Ok(());
     }
 
-    std::fs::create_dir_all(&new_dir).map_err(|e| e.to_string())?;
+    create_dir_all(&new_dir).map_err(|e| e.to_string())?;
 
     if let Ok(entries) = std::fs::read_dir(&old_dir) {
         for entry in entries.flatten() {
@@ -92,12 +99,14 @@ pub async fn set_custom_data_path<R: Runtime>(
                 std::fs::remove_dir_all(&src).ok();
             } else if src.is_file() {
                 let fname = name.to_string_lossy();
+
                 if fname == "store.json" {
                     continue;
                 }
-                if std::fs::rename(&src, &dst).is_err() {
-                    std::fs::copy(&src, &dst).map_err(|e| e.to_string())?;
-                    std::fs::remove_file(&src).ok();
+
+                if rename(&src, &dst).is_err() {
+                    copy(&src, &dst).map_err(|e| e.to_string())?;
+                    remove_file(&src).ok();
                 }
             }
         }

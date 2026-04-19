@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, watch } from "vue";
+import { computed, onMounted, onUnmounted, watch } from "vue";
 import { useRoute } from "vue-router";
 import Button from "./components/ui/Button.vue";
 import Heading from "./components/ui/Heading.vue";
@@ -7,8 +7,10 @@ import Spinner from "./components/ui/Spinner.vue";
 import Text from "./components/ui/Text.vue";
 import TitleBar from "./components/ui/TitleBar.vue";
 import DefaultLayout from "./layouts/DefaultLayout.vue";
+import { useControllerNav } from "./lib/useControllerNav";
 import { router } from "./router";
 import { useAuthStore } from "./stores/AuthStore";
+import { useControllerStore } from "./stores/ControllerStore";
 import { useGameStore } from "./stores/GameStore";
 import { useThemeStore } from "./stores/ThemeStore";
 
@@ -16,6 +18,14 @@ const route = useRoute();
 const gameStore = useGameStore();
 const authStore = useAuthStore();
 useThemeStore();
+
+const controllerStore = useControllerStore();
+onMounted(async () => {
+    await controllerStore.start();
+});
+onUnmounted(() => controllerStore.stop());
+
+useControllerNav();
 
 const layout = computed(() => {
     return route.meta.layout || DefaultLayout;

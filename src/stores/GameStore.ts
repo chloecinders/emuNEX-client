@@ -1,7 +1,7 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
-import { DiscordRPC } from "../lib/rpc";
 import { http } from "../lib/http";
+import { DiscordRPC } from "../lib/rpc";
 
 export type PartialGame = {
     id: string;
@@ -9,7 +9,7 @@ export type PartialGame = {
     realname: string | null;
     console: string | undefined;
     image_path: string;
-    region: string;
+    region: string | null;
     versions_count: number;
 };
 
@@ -33,7 +33,7 @@ export type Game = {
     console: string;
     region: string | null;
     category: string;
-    rom_path: string;
+    rom_path?: string;
     image_path: string;
     file_size_bytes?: number;
     release_year: number;
@@ -119,6 +119,45 @@ export const useGameStore = defineStore("gameStore", () => {
             const { invoke } = await import("@tauri-apps/api/core");
             const storage = await invoke<any[]>("get_local_storage");
             installedGameIds.value = storage.filter((s) => s.rom_size > 0).map((s) => s.game_id);
+
+            const missingIds = installedGameIds.value.filter(
+                (id) => !library.value.some((g) => g.id === id),
+            );
+
+            if (missingIds.length > 0) {
+                const { useUserStore } = await import("./UserStore");
+                const userStore = useUserStore();
+
+                if (userStore.user && !userStore.user.has_migrated) {
+                    await http.post("/user_roms/migrate", { ids: missingIds.slice(0, 50) });
+                    userStore.user.has_migrated = true;
+                }
+
+                const chunks = [];
+                for (let i = 0; i < missingIds.length; i += 50) {
+                    chunks.push(missingIds.slice(i, i + 50));
+                }
+
+                const updates: Record<string, string> = {};
+
+                for (const chunk of chunks) {
+                    const res = await http.post<Game[]>("/roms/bulk_info", { ids: chunk });
+                    if (res.success && res.data) {
+                        for (const game of res.data) {
+                            library.value.push({
+                                ...game,
+                                play_count: 0,
+                                last_played: null,
+                            });
+                            updates[game.id] = game.realname || game.title;
+                        }
+                    }
+                }
+
+                if (Object.keys(updates).length > 0) {
+                    await invoke("update_manifest_names", { updates }).catch(() => { });
+                }
+            }
         } catch (err) {
             console.error("Failed to fetch installed games:", err);
         }

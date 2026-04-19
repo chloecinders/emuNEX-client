@@ -16,7 +16,13 @@ const emit = defineEmits<{
 </script>
 
 <template>
-    <div class="c-console-card" @click="emit('click')">
+    <div 
+        class="c-console-card" 
+        @click="emit('click')" 
+        tabindex="0" 
+        role="button"
+        @keydown.enter.space.prevent="emit('click')"
+    >
         <div
             class="c-console-card__bg-indicator"
             :style="{ backgroundColor: color || 'var(--color-primary)' }"
@@ -26,7 +32,7 @@ const emit = defineEmits<{
             <div class="c-console-card__info">
                 <div class="c-console-card__badge-wrapper">
                     <Heading :level="2" color="primary" class="c-console-card__badge">
-                        {{ consoleName.toUpperCase() }}
+                        {{ consoleName }}
                         <span class="c-console-card__count">{{ count }} Installed</span>
                     </Heading>
                 </div>

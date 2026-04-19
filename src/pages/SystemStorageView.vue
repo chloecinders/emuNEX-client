@@ -66,7 +66,7 @@ const executeDeleteRom = async () => {
         showDeleteRomModal.value = false;
         selectedRomForDelete.value = null;
         if (systemRoms.value.length === 0) {
-            router.push("/manage/roms");
+            router.push("/manage");
         }
     }
 };
@@ -91,12 +91,12 @@ const executeDeleteSave = async () => {
 <template>
     <div class="c-system-detail">
         <div class="c-system-detail__header-wrap">
+            <PillButton @click="router.push('/manage')"> <ArrowLeft /> Back </PillButton>
+
             <Heading :level="2" color="primary" is-badge class="c-system-detail__badge">
                 {{ consoleName.toUpperCase() }} Storage
                 <span class="c-system-detail__count">{{ systemRoms.length }} Installed</span>
             </Heading>
-
-            <PillButton @click="router.push('/manage/roms')"> <ArrowLeft /> Back </PillButton>
         </div>
 
         <div v-if="romStore.loading" class="c-system-detail__loading">

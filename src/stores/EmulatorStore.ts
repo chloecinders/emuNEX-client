@@ -12,7 +12,8 @@ export type Emulator = {
     run_command: string;
     save_path?: string;
     save_extensions: string[];
-    config_files: string[];
+    input_config_file: string;
+    input_mapper: string;
     zipped: boolean;
     file_size?: number;
 };

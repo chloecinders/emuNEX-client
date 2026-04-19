@@ -12,6 +12,7 @@ import Spinner from "../ui/Spinner.vue";
 import Text from "../ui/Text.vue";
 import GameCard from "./GameCard.vue";
 import GameContextMenu from "./GameContextMenu.vue";
+import { useStoragePath } from "../../lib/http";
 
 const vFocus = {
     mounted: (el: HTMLElement) => nextTick(() => el.focus()),
@@ -40,7 +41,9 @@ const recentlyPlayedGames = computed(() => {
 
 const downloadedGames = computed(() => {
     const query = searchQuery.value.trim().toLowerCase();
-    const installed = gameStore.library.filter((g) => gameStore.installedGameIds.includes(g.id));
+    const installed = gameStore.library
+        .filter((g) => gameStore.installedGameIds.includes(g.id))
+        .map((g) => ({ ...g, versions_count: 1 }));
 
     if (!query) return installed;
 
@@ -109,13 +112,14 @@ const insertBeforeGameId = ref<string | null>(null);
 
 const pendingDrag = ref<{ gameId: string; shelfId: string | null; startX: number; startY: number } | null>(null);
 const DRAG_THRESHOLD = 5;
-
+ 
 function getDragGhostContent(gameId: string): string {
     const game = gameStore.library.find((g) => g.id === gameId);
     if (!game) return "";
     const bg = consoleStore.getConsoleColor(game.console);
+    const imgUrl = useStoragePath(game.image_path || "");
 
-    return `<div style="width:80px;height:120px;border-radius:8px;overflow:hidden;background:${bg};box-shadow:0 8px 24px rgba(0,0,0,0.5);transform:rotate(3deg);opacity:0.9;"><img src="http://localhost:1337/storage${game.image_path}" style="width:100%;height:100%;object-fit:cover;" /></div>`;
+    return `<div style="width:80px;height:120px;border-radius:8px;overflow:hidden;background:${bg};box-shadow:0 8px 24px rgba(0,0,0,0.5);transform:rotate(3deg);opacity:0.9;"><img src="${imgUrl}" style="width:100%;height:100%;object-fit:cover;" /></div>`;
 }
 
 function activateDrag(gameId: string, shelfId: string | null, x: number, y: number) {

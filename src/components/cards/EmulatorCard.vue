@@ -25,6 +25,8 @@ const emit = defineEmits<{
         :class="{
             'c-emulator-card--default': emulator.is_default,
         }"
+        tabindex="0"
+        role="button"
     >
         <div class="c-emulator-card__header">
             <div class="c-emulator-card__title-area">
@@ -65,37 +67,6 @@ const emit = defineEmits<{
                 <Text variant="label" size="sm">Assigned Consoles</Text>
                 <div class="c-tag-list">
                     <span v-for="c in emulator.consoles" :key="c" class="c-tag">{{ c.toUpperCase() }}</span>
-                </div>
-            </div>
-
-            <div class="c-emulator-field">
-                <Text variant="label" size="sm">Binary Path</Text>
-                <Text variant="muted" class="c-emulator-field__value">{{
-                    emulator.binary_path || "No binary path set"
-                }}</Text>
-            </div>
-
-            <div class="c-emulator-field">
-                <Text variant="label" size="sm">Run Command</Text>
-                <Text variant="muted" class="c-emulator-field__value">{{ emulator.run_command || "Not set" }}</Text>
-            </div>
-
-            <div class="c-emulator-field">
-                <Text variant="label" size="sm">Save Path (optional)</Text>
-                <Text variant="muted" class="c-emulator-field__value">{{
-                    emulator.save_path || "No custom save path"
-                }}</Text>
-            </div>
-
-            <div class="c-emulator-field">
-                <Text variant="label" size="sm">Save File Extensions</Text>
-                <div class="c-tag-list">
-                    <span v-for="ext in emulator.save_extensions ?? []" :key="ext" class="c-tag"
-                        >.{{ ext.replace(/^\./, "") }}</span
-                    >
-                    <Text v-if="!emulator.save_extensions?.length" variant="muted" size="sm"
-                        >Snapshot diffing (auto)</Text
-                    >
                 </div>
             </div>
         </div>

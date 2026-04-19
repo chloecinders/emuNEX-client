@@ -1,6 +1,5 @@
 use base64::{engine::general_purpose, Engine as _};
 use serde::Deserialize;
-use std::collections::HashMap;
 use tauri::{AppHandle, Runtime};
 
 use crate::{store, ApiResponse};
@@ -15,7 +14,6 @@ pub struct SyncResult {
 pub struct SaveFileMetadata {
     pub file_name: String,
     pub version_id: i32,
-    pub created_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 #[tauri::command]
@@ -42,27 +40,29 @@ pub async fn check_save_status<R: Runtime>(
     let base_path = store::get_data_dir(&app)?;
     let save_dir = base_path.join("saves").join(&game_id);
 
-    let client = reqwest::Client::new();
-    let resp = client
-        .get(format!(
+    let api_res = match crate::commands::http::perform_backend_request(
+        &app,
+        reqwest::Method::GET,
+        &format!(
             "{}/api/v1/roms/{}/save/latest",
             domain.trim_end_matches('/'),
             game_id
-        ))
-        .header("Authorization", &token)
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
+        ),
+        Some(&token),
+        crate::commands::http::BackendBody::None,
+        false,
+    )
+    .await
+    {
+        Ok(res) => res.into_json::<ApiResponse<Vec<SaveFileMetadata>>>()?,
+        Err(_) => {
+            return Ok(SyncResult {
+                conflict: false,
+                latest_version: None,
+            });
+        }
+    };
 
-    if !resp.status().is_success() {
-        return Ok(SyncResult {
-            conflict: false,
-            latest_version: None,
-        });
-    }
-
-    let api_res: ApiResponse<Vec<SaveFileMetadata>> =
-        resp.json().await.map_err(|e| e.to_string())?;
     let files = api_res.data.unwrap_or_default();
     let server_v = files.first().map(|f| f.version_id).unwrap_or(0);
 
@@ -95,40 +95,46 @@ pub async fn download_save_files<R: Runtime>(
     let save_dir = base_path.join("saves").join(&game_id);
     std::fs::create_dir_all(&save_dir).map_err(|e| e.to_string())?;
 
-    let client = reqwest::Client::new();
-    let resp = client
-        .get(format!(
+    let api_res = crate::commands::http::perform_backend_request(
+        &app,
+        reqwest::Method::GET,
+        &format!(
             "{}/api/v1/roms/{}/save/latest",
             domain.trim_end_matches('/'),
             game_id
-        ))
-        .header("Authorization", &token)
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
+        ),
+        Some(&token),
+        crate::commands::http::BackendBody::None,
+        false,
+    )
+    .await?
+    .into_json::<ApiResponse<Vec<SaveFileMetadata>>>()?;
 
-    let api_res: ApiResponse<Vec<SaveFileMetadata>> =
-        resp.json().await.map_err(|e| e.to_string())?;
     let files = api_res.data.unwrap_or_default();
     let server_v = files.first().map(|f| f.version_id).unwrap_or(0);
 
     for file_meta in files {
         let payload = serde_json::json!({ "path": file_meta.file_name });
-        let data = client
-            .post(format!(
+        let data = crate::commands::http::perform_backend_request(
+            &app,
+            reqwest::Method::POST,
+            &format!(
                 "{}/api/v1/roms/{}/save/{}/download",
                 domain.trim_end_matches('/'),
                 game_id,
                 file_meta.version_id
-            ))
-            .header("Authorization", &token)
-            .json(&payload)
-            .send()
-            .await
-            .map_err(|e| e.to_string())?
-            .bytes()
-            .await
-            .map_err(|e| e.to_string())?;
+            ),
+            Some(&token),
+            crate::commands::http::BackendBody::Json(
+                serde_json::to_value(&payload).unwrap_or(serde_json::Value::Null),
+            ),
+            true,
+        )
+        .await?
+        .into_stream()?
+        .bytes()
+        .await
+        .map_err(|e| e.to_string())?;
 
         let save_path = save_dir.join(&file_meta.file_name);
         if let Some(parent) = save_path.parent() {
@@ -166,56 +172,67 @@ pub async fn upload_save_files<R: Runtime>(
 
     let mut files_list = Vec::new();
 
-    if save_dir.exists() {
-        let mut stack = vec![save_dir.clone()];
-        while let Some(current) = stack.pop() {
-            if let Ok(entries) = std::fs::read_dir(&current) {
-                for entry in entries.filter_map(|e| e.ok()) {
-                    let path = entry.path();
-                    if path.is_dir() {
-                        stack.push(path);
-                    } else if path.is_file() {
-                        let rel = path.strip_prefix(save_dir)
-                            .unwrap_or(&path)
-                            .to_string_lossy()
-                            .replace("\\", "/");
-                        
-                        if let Ok(bytes) = std::fs::read(&path) {
-                            let digest = md5::compute(&bytes);
-                            let hash = format!("{:x}", digest);
-                            let content = general_purpose::STANDARD.encode(&bytes);
-                            
-                            files_list.push(serde_json::json!({
-                                "hash": hash,
-                                "path": rel,
-                                "content": content
-                            }));
-                        }
-                    }
-                }
+    if !save_dir.exists() {
+        return Ok(());
+    }
+
+    let mut stack = vec![save_dir.clone()];
+    while let Some(current) = stack.pop() {
+        let entries = match std::fs::read_dir(&current) {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+
+        for entry in entries.filter_map(|e| e.ok()) {
+            let path = entry.path();
+            if path.is_dir() {
+                stack.push(path);
+                continue;
+            }
+
+            if path.is_file() {
+                let rel = path
+                    .strip_prefix(save_dir)
+                    .unwrap_or(&path)
+                    .to_string_lossy()
+                    .replace("\\", "/");
+
+                let bytes = match std::fs::read(&path) {
+                    Ok(b) => b,
+                    Err(_) => continue,
+                };
+
+                let digest = md5::compute(&bytes);
+                let hash = format!("{:x}", digest);
+                let content = general_purpose::STANDARD.encode(&bytes);
+
+                files_list.push(serde_json::json!({
+                    "hash": hash,
+                    "path": rel,
+                    "content": content
+                }));
             }
         }
     }
 
     if !files_list.is_empty() {
         let payload = serde_json::json!({ "files": files_list });
-        let client = reqwest::Client::new();
-        let resp = client
-            .post(format!(
+        crate::commands::http::perform_backend_request(
+            &app,
+            reqwest::Method::POST,
+            &format!(
                 "{}/api/v1/roms/{}/save/{}",
                 domain.trim_end_matches('/'),
                 game_id,
                 version_id
-            ))
-            .header("Authorization", token)
-            .json(&payload)
-            .send()
-            .await
-            .map_err(|e| e.to_string())?;
-
-        if !resp.status().is_success() {
-            return Err(format!("Upload failed: {}", resp.status()));
-        }
+            ),
+            Some(&token),
+            crate::commands::http::BackendBody::Json(
+                serde_json::to_value(&payload).unwrap_or(serde_json::Value::Null),
+            ),
+            false,
+        )
+        .await?;
     }
     Ok(())
 }
@@ -236,43 +253,56 @@ pub fn get_game_save_files<R: Runtime>(
     let save_dir = base_path.join("saves").join(&game_id);
     let mut files = Vec::new();
 
-    if save_dir.exists() {
-        let mut stack = vec![save_dir.clone()];
-        while let Some(current) = stack.pop() {
-            if let Ok(entries) = std::fs::read_dir(&current) {
-                for entry in entries.filter_map(|e| e.ok()) {
-                    let path = entry.path();
-                    if path.is_dir() {
-                        stack.push(path);
-                    } else if path.is_file() {
-                        let rel = path.strip_prefix(&save_dir)
-                            .unwrap_or(&path)
-                            .to_string_lossy()
-                            .replace("\\", "/");
-                        let size = path.metadata().map(|m| m.len()).unwrap_or(0);
-                        let hash = if let Ok(bytes) = std::fs::read(&path) {
-                            format!("{:x}", md5::compute(&bytes))
-                        } else {
-                            String::new()
-                        };
-                        files.push(GameSaveFile { path: rel, size, hash });
-                    }
-                }
+    if !save_dir.exists() {
+        return Ok(files);
+    }
+
+    let mut stack = vec![save_dir.clone()];
+
+    while let Some(current) = stack.pop() {
+        let entries = match std::fs::read_dir(&current) {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+
+        for entry in entries.filter_map(|e| e.ok()) {
+            let path = entry.path();
+            if path.is_dir() {
+                stack.push(path);
+                continue;
+            }
+
+            if path.is_file() {
+                let rel = path
+                    .strip_prefix(&save_dir)
+                    .unwrap_or(&path)
+                    .to_string_lossy()
+                    .replace("\\", "/");
+
+                let size = path.metadata().map(|m| m.len()).unwrap_or(0);
+                let hash = if let Ok(bytes) = std::fs::read(&path) {
+                    format!("{:x}", md5::compute(&bytes))
+                } else {
+                    String::new()
+                };
+
+                files.push(GameSaveFile {
+                    path: rel,
+                    size,
+                    hash,
+                });
             }
         }
     }
-    
+
     Ok(files)
 }
 
 #[tauri::command]
-pub fn open_save_folder<R: Runtime>(
-    app: AppHandle<R>,
-    game_id: String,
-) -> Result<(), String> {
+pub fn open_save_folder<R: Runtime>(app: AppHandle<R>, game_id: String) -> Result<(), String> {
     let base_path = store::get_data_dir(&app)?;
     let save_dir = base_path.join("saves").join(&game_id);
-    
+
     if !save_dir.exists() {
         return Ok(());
     }

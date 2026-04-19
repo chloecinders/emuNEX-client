@@ -1,6 +1,6 @@
 [package]
 name = "emuNEX-client"
-version = "0.7.2"
+version = "0.8.0"
 description = "Remote Emulation & Library Management - Client"
 repository = "https://github.com/chloecinders/emuNEX-client"
 authors = ["chloecinders"]

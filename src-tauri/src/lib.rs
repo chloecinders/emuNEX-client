@@ -1,21 +1,21 @@
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::{
+    fs::{copy, create_dir_all, read_dir, remove_dir_all},
+    sync::atomic::{AtomicBool, Ordering},
+};
 
 use serde::Deserialize;
-use tauri::{Emitter, Manager, WindowEvent};
+use tauri::{App, Emitter, Manager, WindowEvent};
 #[cfg(desktop)]
 use tauri_plugin_deep_link::DeepLinkExt;
-use tauri_plugin_store::StoreExt;
-
-use crate::commands::emulator::StoreEmulator;
 
 mod commands;
 mod store;
 
 #[derive(Deserialize)]
 struct ApiResponse<T> {
-    success: bool,
+    // success: bool,
     data: Option<T>,
-    message: Option<String>,
+    // message: Option<String>,
 }
 
 pub struct AppState {
@@ -32,8 +32,10 @@ pub fn run() {
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 let state = window.state::<AppState>();
+
                 if state.is_game_running.load(Ordering::SeqCst) {
                     api.prevent_close();
+
                     let _ = window.emit(
                         "close-prevented",
                         "Game is still running. Please close the emulator first.",
@@ -63,6 +65,7 @@ pub fn run() {
             commands::play::get_local_storage,
             commands::play::delete_installed_rom,
             commands::play::delete_local_save,
+            commands::play::update_manifest_names,
             commands::save::check_save_status,
             commands::save::download_save_files,
             commands::save::get_game_save_files,
@@ -76,81 +79,54 @@ pub fn run() {
             commands::drpc::is_drpc_running,
             commands::drpc::set_drpc_activity,
             commands::drpc::clear_drpc_activity,
+            commands::input::apply_scheme_to_emulator,
+            commands::input::save_global_inputs,
+            commands::input::load_global_inputs,
         ])
-        .setup(|app| {
-            #[cfg(any(target_os = "windows", target_os = "linux"))]
-            app.deep_link().register("emunex")?;
-
-            let handle = app.handle().clone();
-            let temp_base = std::env::temp_dir();
-
-            let store = if let Some(domain) = store::get_current_domain(&handle) {
-                store::get_domain_store(&handle, &domain).ok()
-            } else {
-                handle.store("store.json").ok()
-            };
-
-            if let Ok(entries) = std::fs::read_dir(temp_base) {
-                for entry in entries.flatten() {
-                    let name = entry.file_name().to_string_lossy().into_owned();
-                    if name.starts_with("emunex_") {
-                        let game_id = name.replace("emunex_", "");
-                        let recovery_path = entry.path();
-
-                        let mut save_dir = store::get_data_dir(&handle).unwrap();
-                        save_dir.push("saves");
-                        save_dir.push(&game_id);
-                        let _ = std::fs::create_dir_all(&save_dir);
-
-                        if let Ok(files) = std::fs::read_dir(&recovery_path) {
-                            for file in files.flatten() {
-                                let fpath = file.path();
-                                let fname = file.file_name().to_string_lossy().into_owned();
-
-                                if fpath.is_file() {
-                                    if fname.starts_with(&format!("{}.", game_id)) {
-                                        continue;
-                                    }
-
-                                    let is_config = if let Some(ref s) = store {
-                                        s.get("emulators")
-                                            .and_then(|v| {
-                                                serde_json::from_value::<
-                                                    std::collections::HashMap<
-                                                        String,
-                                                        StoreEmulator,
-                                                    >,
-                                                >(
-                                                    v.clone()
-                                                )
-                                                .ok()
-                                            })
-                                            .map(|ems| {
-                                                ems.values()
-                                                    .any(|e| e.config_files.contains(&fname))
-                                            })
-                                            .unwrap_or(false)
-                                    } else {
-                                        false
-                                    };
-
-                                    if is_config {
-                                        continue;
-                                    }
-
-                                    let dest = save_dir.join(file.file_name());
-                                    let _ = std::fs::copy(&fpath, &dest);
-                                }
-                            }
-                        }
-
-                        let _ = std::fs::remove_dir_all(recovery_path);
-                    }
-                }
-            }
-
-            Ok(())
-        })
+        .setup(startup)
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+fn startup(app: &mut App) -> std::result::Result<(), Box<dyn std::error::Error>> {
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    app.deep_link().register("emunex")?;
+
+    let handle = app.handle().clone();
+    let temp_base = std::env::temp_dir();
+
+    if let Ok(entries) = read_dir(temp_base) {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if name.starts_with("emunex_") {
+                let game_id = name.replace("emunex_", "");
+                let recovery_path = entry.path();
+
+                let mut save_dir = store::get_data_dir(&handle).unwrap();
+                save_dir.push("saves");
+                save_dir.push(&game_id);
+                let _ = create_dir_all(&save_dir);
+
+                if let Ok(files) = read_dir(&recovery_path) {
+                    for file in files.flatten() {
+                        let fpath = file.path();
+                        let fname = file.file_name().to_string_lossy().into_owned();
+
+                        if fpath.is_file() {
+                            if fname.starts_with(&format!("{}.", game_id)) {
+                                continue;
+                            }
+
+                            let dest = save_dir.join(file.file_name());
+                            let _ = copy(&fpath, &dest);
+                        }
+                    }
+                }
+
+                let _ = remove_dir_all(recovery_path);
+            }
+        }
+    }
+
+    Ok(())
 }

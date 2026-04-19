@@ -31,10 +31,10 @@ export const useConsoleStore = defineStore("consoleStore", () => {
         }
     }
 
-    function getConsoleColor(consoleName: string | undefined): string {
-        if (!consoleName) return "var(--color-surface)";
+    function getConsoleColor(consoleName: string | undefined): string | undefined {
+        if (!consoleName) return undefined;
         const metadata = consoles.value[consoleName];
-        return metadata?.card_color || "var(--color-surface)";
+        return metadata?.card_color || undefined;
     }
 
     return {
@@ -44,3 +44,4 @@ export const useConsoleStore = defineStore("consoleStore", () => {
         getConsoleColor,
     };
 });
+

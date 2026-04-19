@@ -115,13 +115,13 @@ const emit = defineEmits(["click"]);
 
     &--grey {
         .c-button__front {
-            background: var(--color-surface);
+            background: var(--color-border);
             color: var(--color-text);
             text-shadow: none;
-            border: 1px solid var(--color-border);
+            border: 1px solid var(--color-border-hover);
         }
         .c-button__edge {
-            background: var(--color-border-hover);
+            background: var(--color-text-muted);
         }
 
         [data-theme="dark"] & {

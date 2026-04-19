@@ -36,7 +36,7 @@ const toggleSaveDetails = async () => {
 </script>
 
 <template>
-    <div class="c-rom-card">
+    <div class="c-rom-card" tabindex="0" role="button">
         <div class="c-rom-card__info">
             <Heading :level="3" class="c-rom-card__title">{{ gameTitle }}</Heading>
             <div class="c-rom-card__meta">

@@ -89,7 +89,23 @@ const closeModal = () => {
                 <Text variant="label" size="sm">Assigned Consoles</Text>
                 <div style="display: flex; flex-direction: column; gap: 8px">
                     <div class="c-tag-list">
-                        <label v-for="c in consoles" :key="c" class="c-console-checkbox">
+                        <label
+                            v-for="c in consoles"
+                            :key="c"
+                            class="c-console-checkbox"
+                            tabindex="0"
+                            role="checkbox"
+                            :aria-checked="editState[props.emulatorId].consoles.includes(c)"
+                            @keydown.enter.space.prevent="
+                                if (editState[props.emulatorId].consoles.includes(c)) {
+                                    editState[props.emulatorId].consoles = editState[props.emulatorId].consoles.filter(
+                                        (v: string) => v !== c,
+                                    );
+                                } else {
+                                    editState[props.emulatorId].consoles.push(c);
+                                }
+                            "
+                        >
                             <input type="checkbox" :value="c" v-model="editState[props.emulatorId].consoles" />
                             {{ c.toUpperCase() }}
                         </label>
@@ -108,6 +124,19 @@ const closeModal = () => {
             </div>
 
             <div class="c-emulator-field">
+                <Text variant="label" size="sm">Input Config File (optional)</Text>
+                <Input
+                    v-model="editState[props.emulatorId].input_config_file"
+                    placeholder="e.g. %LocalAppData%/vbam/vbam.ini"
+                />
+            </div>
+
+            <div class="c-emulator-field">
+                <Text variant="label" size="sm">Input Mapper (optional)</Text>
+                <Input v-model="editState[props.emulatorId].input_mapper" placeholder="e.g. vbam" />
+            </div>
+
+            <div class="c-emulator-field">
                 <Text variant="label" size="sm">Save Path (optional)</Text>
                 <Input v-model="editState[props.emulatorId].save_path" placeholder="e.g. /saves/$rom_name.sav" />
             </div>
@@ -120,7 +149,11 @@ const closeModal = () => {
                             v-for="ext in editState[props.emulatorId].save_extensions"
                             :key="ext"
                             class="c-tag c-tag--button"
+                            tabindex="0"
+                            role="button"
+                            :aria-label="`Remove extension ${ext}`"
                             @click="removeSaveExtFromEmulator(props.emulatorId!, ext)"
+                            @keydown.enter.space.prevent="removeSaveExtFromEmulator(props.emulatorId!, ext)"
                             >.{{ ext.replace(/^\./, "") }} ×</span
                         >
                         <Text v-if="editState[props.emulatorId].save_extensions.length === 0" variant="muted" size="sm"
@@ -198,6 +231,10 @@ const closeModal = () => {
             color: var(--color-red);
             background: color-mix(in srgb, var(--color-red) 10%, transparent);
         }
+        &:focus {
+            outline: 2px solid var(--color-red);
+            outline-offset: 1px;
+        }
     }
 }
 
@@ -226,6 +263,12 @@ const closeModal = () => {
     &:hover:not(:has(input:checked)) {
         border-color: var(--color-text-muted);
         color: var(--color-text);
+    }
+
+    &:focus {
+        outline: 2px solid var(--color-primary);
+        outline-offset: 1px;
+        border-color: var(--color-primary);
     }
 
     input {

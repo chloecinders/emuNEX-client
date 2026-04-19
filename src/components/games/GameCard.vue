@@ -2,6 +2,7 @@
 import { useConsoleStore } from "../../stores/ConsoleStore";
 import { type PartialGame } from "../../stores/GameStore";
 import { useStoragePath } from "../../lib/http";
+import { ref } from "vue";
 
 defineProps<{
     game: PartialGame;
@@ -11,6 +12,7 @@ defineProps<{
 
 const emit = defineEmits(["mousedown", "click"]);
 const consoleStore = useConsoleStore();
+const imageError = ref(false);
 </script>
 
 <template>
@@ -22,8 +24,12 @@ const consoleStore = useConsoleStore();
         }"
         :data-game-id="game.id"
         :style="{ background: consoleStore.getConsoleColor(game.console) }"
+        tabindex="0"
+        role="button"
+        :aria-label="game.title"
         @mousedown="emit('mousedown', $event, game.id)"
         @click="emit('click', game.id)"
+        @keydown.enter.space.prevent="emit('click', game.id)"
     >
         <div
             v-if="game.region && (!game.versions_count || game.versions_count <= 1)"
@@ -37,7 +43,16 @@ const consoleStore = useConsoleStore();
             {{ game.versions_count }}
         </div>
 
-        <img :src="useStoragePath(game.image_path)" :alt="game.title" class="c-game-card__cover" />
+        <div v-if="imageError || !game.image_path" class="c-game-card__fallback-title">
+            {{ game.title }}
+        </div>
+        <img 
+            v-show="!imageError && game.image_path"
+            :src="useStoragePath(game.image_path)" 
+            :alt="game.title" 
+            class="c-game-card__cover" 
+            @error="imageError = true"
+        />
     </div>
 </template>
 
@@ -55,11 +70,13 @@ const consoleStore = useConsoleStore();
     border: var(--spacing-xxs) solid transparent;
     -webkit-user-drag: element;
 
-    &:hover {
+    &:hover,
+    &:focus {
         transform: scale(1.08) translateY(-var(--spacing-xs));
         z-index: 10;
         box-shadow: var(--shadow-md);
         border-color: var(--color-primary-light);
+        outline: none;
     }
 
     &:active {
@@ -116,6 +133,23 @@ const consoleStore = useConsoleStore();
         font-size: 0.65rem;
         z-index: 10;
         border: 1.5px solid rgba(255, 255, 255, 0.2);
+    }
+
+    &__fallback-title {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: var(--spacing-md);
+        text-align: center;
+        font-weight: 800;
+        font-size: 1.1rem;
+        color: #fff;
+        text-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+        z-index: 5;
+        line-height: 1.2;
+        word-break: break-word;
     }
 
     &__cover {

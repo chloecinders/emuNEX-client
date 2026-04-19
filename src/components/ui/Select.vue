@@ -51,7 +51,15 @@ const selectedLabel = computed(() => {
     <div class="c-select" ref="selectRef">
         <label v-if="label" class="c-select__label">{{ label }}</label>
 
-        <div class="c-select__wrapper" :class="{ 'c-select__wrapper--open': isOpen }" @click="toggle">
+        <div 
+            class="c-select__wrapper" 
+            :class="{ 'c-select__wrapper--open': isOpen }" 
+            @click="toggle"
+            tabindex="0"
+            role="combobox"
+            :aria-expanded="isOpen"
+            @keydown.enter.space.prevent="toggle"
+        >
             <div class="c-select__display">
                 <span class="c-select__display-text" :class="{ 'c-select__display-text--placeholder': !modelValue }">
                     {{ selectedLabel }}
@@ -68,7 +76,7 @@ const selectedLabel = computed(() => {
                     </svg>
                 </span>
             </div>
-
+ 
             <transition name="pop">
                 <div v-if="isOpen" class="c-select__menu">
                     <div
@@ -77,6 +85,9 @@ const selectedLabel = computed(() => {
                         class="c-select__option"
                         :class="{ 'c-select__option--selected': option.value === modelValue }"
                         @click.stop="selectOption(option.value)"
+                        tabindex="0"
+                        role="option"
+                        @keydown.enter.space.prevent="selectOption(option.value)"
                     >
                         {{ option.name }}
                     </div>
@@ -171,16 +182,20 @@ const selectedLabel = computed(() => {
         color: var(--color-text);
         transition: all 0.1s ease;
 
-        &:hover {
+        &:hover,
+        &:focus {
             background: var(--color-primary);
             color: white;
+            outline: none;
+            box-shadow: none !important;
         }
 
         &--selected {
             background: var(--color-surface-variant);
             color: var(--color-primary);
 
-            &:hover {
+            &:hover,
+            &:focus {
                 background: var(--color-primary);
                 color: white;
             }

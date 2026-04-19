@@ -1,13 +1,194 @@
 use futures_util::StreamExt;
-use std::fs::File;
+use serde::{Deserialize, Serialize};
+use std::fs::{copy, create_dir_all, read_dir, write, File};
 use std::io::Write;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
 use std::{collections::HashMap, process::Command};
 use tauri::{AppHandle, Emitter, Runtime};
 
 use crate::commands::emulator::StoreEmulator;
+use crate::commands::http::{perform_backend_request, BackendBody};
 use crate::commands::save::upload_save_files;
-use crate::{store, AppState};
+use crate::{store, ApiResponse, AppState};
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct InstalledRom {
+    pub game_id: String,
+    pub console: String,
+    pub rom_filename: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub _name: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Default, Debug)]
+pub struct InstalledRomsManifest {
+    pub roms: HashMap<String, InstalledRom>,
+}
+
+fn manifest_path(data_dir: &Path) -> PathBuf {
+    data_dir.join("installed_roms.json")
+}
+
+pub fn read_manifest(data_dir: &Path) -> InstalledRomsManifest {
+    let path = manifest_path(data_dir);
+    if path.exists() {
+        if let Ok(content) = std::fs::read_to_string(&path) {
+            if let Ok(manifest) = serde_json::from_str(&content) {
+                return manifest;
+            }
+        }
+    }
+
+    InstalledRomsManifest::default()
+}
+
+fn write_manifest(data_dir: &Path, manifest: &InstalledRomsManifest) -> Result<(), String> {
+    let path = manifest_path(data_dir);
+
+    if let Some(parent) = path.parent() {
+        let _ = create_dir_all(parent);
+    }
+
+    let content = serde_json::to_string_pretty(manifest).map_err(|e| e.to_string())?;
+    write(&path, content)
+        .map_err(|e| format!("Failed writing manifest to {}: {}", path.display(), e))
+}
+
+async fn migrate_to_manifest<R: Runtime>(
+    app: &AppHandle<R>,
+    data_dir: &Path,
+) -> InstalledRomsManifest {
+    let mut manifest = InstalledRomsManifest::default();
+    let roms_dir = data_dir.join("roms");
+
+    let mut found_game_ids: HashMap<String, (String, String)> = HashMap::new();
+
+    if roms_dir.exists() {
+        if let Ok(consoles) = read_dir(&roms_dir) {
+            for console_entry in consoles.filter_map(|e| e.ok()) {
+                let console_path = console_entry.path();
+
+                if !console_path.is_dir() {
+                    continue;
+                }
+
+                let fallback_console = console_entry.file_name().to_string_lossy().to_string();
+                let files = match read_dir(&console_path) {
+                    Ok(f) => f,
+                    Err(_) => continue,
+                };
+
+                for file_entry in files.filter_map(|e| e.ok()) {
+                    let file_name = file_entry.file_name().to_string_lossy().to_string();
+                    if let Some(game_id) = file_name.split('.').next() {
+                        found_game_ids
+                            .insert(game_id.to_string(), (file_name, fallback_console.clone()));
+                    }
+                }
+            }
+        }
+    }
+
+    if found_game_ids.is_empty() {
+        return manifest;
+    }
+
+    let ids_to_request: Vec<String> = found_game_ids.keys().cloned().collect();
+
+    #[derive(Serialize)]
+    struct BulkRequest {
+        ids: Vec<String>,
+    }
+
+    #[derive(Deserialize)]
+    struct BulkGame {
+        id: String,
+        console: String,
+        #[serde(rename = "title")]
+        name: String,
+    }
+
+    let mut verified_metadata: HashMap<String, BulkGame> = HashMap::new();
+
+    if let Ok(store) = store::get_current_store(app) {
+        let domain_opt = store
+            .get("domain")
+            .and_then(|v| v.as_str().map(|s| s.to_string()));
+        let token_opt = store
+            .get("token")
+            .and_then(|v| v.as_str().map(|s| s.to_string()));
+
+        if let (Some(domain), Some(token)) = (domain_opt, token_opt) {
+            let base_url = format!("{}/api/v1/roms/bulk_info", domain.trim_end_matches('/'));
+
+            for chunk in ids_to_request.chunks(50) {
+                let req_body = BulkRequest {
+                    ids: chunk.to_vec(),
+                };
+
+                let req_payload = BackendBody::Json(
+                    serde_json::to_value(&req_body).unwrap_or(serde_json::Value::Null),
+                );
+
+                if let Ok(resp) = perform_backend_request(
+                    app,
+                    reqwest::Method::POST,
+                    &base_url,
+                    Some(&token),
+                    req_payload,
+                    false,
+                )
+                .await
+                {
+                    if let Ok(api_res) = resp.into_json::<ApiResponse<Vec<BulkGame>>>() {
+                        if let Some(data) = api_res.data {
+                            for game in data {
+                                verified_metadata.insert(game.id.clone(), game);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    for (game_id, (file_name, fallback_console)) in found_game_ids {
+        let (console, name) = if let Some(meta) = verified_metadata.get(&game_id) {
+            (meta.console.clone(), Some(meta.name.clone()))
+        } else {
+            (fallback_console, None)
+        };
+
+        manifest.roms.insert(
+            game_id.clone(),
+            InstalledRom {
+                game_id,
+                console,
+                rom_filename: file_name,
+                _name: name,
+            },
+        );
+    }
+
+    if let Err(e) = write_manifest(data_dir, &manifest) {
+        println!("Error writing manifest: {}", e);
+    }
+
+    manifest
+}
+
+async fn get_or_create_manifest<R: Runtime>(
+    app: &AppHandle<R>,
+) -> Result<InstalledRomsManifest, String> {
+    let data_dir = store::get_data_dir(app)?;
+    let path = manifest_path(&data_dir);
+    if path.exists() {
+        Ok(read_manifest(&data_dir))
+    } else {
+        Ok(migrate_to_manifest(app, &data_dir).await)
+    }
+}
 
 fn split_args(cmd: &str) -> Vec<String> {
     let mut args = Vec::new();
@@ -43,69 +224,84 @@ struct FileMeta {
     modified: Option<std::time::SystemTime>,
 }
 
-fn recursive_snapshot(dir: &std::path::Path) -> HashMap<std::path::PathBuf, FileMeta> {
+fn recursive_snapshot(dir: &Path) -> HashMap<PathBuf, FileMeta> {
     let mut map = HashMap::new();
+
     if !dir.exists() {
         return map;
     }
+
     let mut stack = vec![dir.to_path_buf()];
+
     while let Some(current) = stack.pop() {
-        if let Ok(entries) = std::fs::read_dir(&current) {
-            for entry in entries.filter_map(|e| e.ok()) {
-                let path = entry.path();
-                if path.is_dir() {
-                    stack.push(path);
-                } else if path.is_file() {
-                    let meta = entry.metadata().ok();
-                    let file_meta = FileMeta {
-                        size: meta.as_ref().map(|m| m.len()).unwrap_or(0),
-                        modified: meta.as_ref().and_then(|m| m.modified().ok()),
-                    };
-                    let rel = path.strip_prefix(dir).unwrap_or(&path).to_path_buf();
-                    map.insert(rel, file_meta);
-                }
+        let entries = match read_dir(&current) {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+
+        for entry in entries.filter_map(|e| e.ok()) {
+            let path = entry.path();
+            if path.is_dir() {
+                stack.push(path);
+                continue;
+            }
+            if path.is_file() {
+                let meta = entry.metadata().ok();
+                let file_meta = FileMeta {
+                    size: meta.as_ref().map(|m| m.len()).unwrap_or(0),
+                    modified: meta.as_ref().and_then(|m| m.modified().ok()),
+                };
+                let rel = path.strip_prefix(dir).unwrap_or(&path).to_path_buf();
+                map.insert(rel, file_meta);
             }
         }
     }
     map
 }
 
-fn recursive_copy_dir(src_dir: &std::path::Path, dst_dir: &std::path::Path) {
+fn recursive_copy_dir(src_dir: &Path, dst_dir: &Path) {
     if !src_dir.exists() {
         return;
     }
+
     let mut stack = vec![src_dir.to_path_buf()];
+
     while let Some(current) = stack.pop() {
-        if let Ok(entries) = std::fs::read_dir(&current) {
-            for entry in entries.filter_map(|e| e.ok()) {
-                let path = entry.path();
-                let rel = match path.strip_prefix(src_dir) {
-                    Ok(r) => r.to_path_buf(),
-                    Err(_) => continue,
-                };
-                let dest = dst_dir.join(&rel);
-                if path.is_dir() {
-                    std::fs::create_dir_all(&dest).ok();
-                    stack.push(path);
-                } else if path.is_file() {
-                    if let Some(parent) = dest.parent() {
-                        std::fs::create_dir_all(parent).ok();
-                    }
-                    std::fs::copy(&path, &dest).ok();
+        let entries = match read_dir(&current) {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+
+        for entry in entries.filter_map(|e| e.ok()) {
+            let path = entry.path();
+            let rel = match path.strip_prefix(src_dir) {
+                Ok(r) => r.to_path_buf(),
+                Err(_) => continue,
+            };
+
+            let dest = dst_dir.join(&rel);
+
+            if path.is_dir() {
+                create_dir_all(&dest).ok();
+                stack.push(path);
+            } else if path.is_file() {
+                if let Some(parent) = dest.parent() {
+                    create_dir_all(parent).ok();
                 }
+
+                copy(&path, &dest).ok();
             }
         }
     }
 }
 
-fn collect_by_extension(
-    dir: &std::path::Path,
-    extensions: &[String],
-) -> Vec<(std::path::PathBuf, std::path::PathBuf)> {
+fn collect_by_extension(dir: &Path, extensions: &[String]) -> Vec<(PathBuf, PathBuf)> {
     let mut results = Vec::new();
+
     if !dir.exists() || extensions.is_empty() {
         return results;
     }
+
     let exts_lower: Vec<String> = extensions
         .iter()
         .map(|e| {
@@ -117,19 +313,26 @@ fn collect_by_extension(
             }
         })
         .collect();
+
     let mut stack = vec![dir.to_path_buf()];
+
     while let Some(current) = stack.pop() {
-        if let Ok(entries) = std::fs::read_dir(&current) {
-            for entry in entries.filter_map(|e| e.ok()) {
-                let path = entry.path();
-                if path.is_dir() {
-                    stack.push(path);
-                } else if path.is_file() {
-                    let path_str = path.to_string_lossy().to_lowercase();
-                    if exts_lower.iter().any(|ext| path_str.ends_with(ext)) {
-                        let rel = path.strip_prefix(dir).unwrap_or(&path).to_path_buf();
-                        results.push((rel, path));
-                    }
+        let entries = match read_dir(&current) {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+
+        for entry in entries.filter_map(|e| e.ok()) {
+            let path = entry.path();
+
+            if path.is_dir() {
+                stack.push(path);
+            } else if path.is_file() {
+                let path_str = path.to_string_lossy().to_lowercase();
+
+                if exts_lower.iter().any(|ext| path_str.ends_with(ext)) {
+                    let rel = path.strip_prefix(dir).unwrap_or(&path).to_path_buf();
+                    results.push((rel, path));
                 }
             }
         }
@@ -143,6 +346,7 @@ pub async fn install_game<R: Runtime>(
     game_id: String,
     console: String,
     rom_path: String,
+    name: Option<String>,
 ) -> Result<(), String> {
     let store = store::get_current_store(&app)?;
     let domain = store
@@ -162,24 +366,22 @@ pub async fn install_game<R: Runtime>(
 
     let mut rom_dir = base_path.clone();
     rom_dir.push("roms");
-    let console_lowercased = console.to_lowercase();
-    rom_dir.push(&console_lowercased);
-    std::fs::create_dir_all(&rom_dir).map_err(|e| e.to_string())?;
+    rom_dir.push(&console.to_lowercase());
+    create_dir_all(&rom_dir).map_err(|e| e.to_string())?;
 
     let mut save_dir = base_path.clone();
     save_dir.push("saves");
     save_dir.push(&game_id);
-    std::fs::create_dir_all(&save_dir).map_err(|e| e.to_string())?;
+    create_dir_all(&save_dir).map_err(|e| e.to_string())?;
 
-    let extension = std::path::Path::new(&rom_path)
+    let extension = Path::new(&rom_path)
         .extension()
         .and_then(|ext| ext.to_str())
         .unwrap_or("rom");
     let file_name = format!("{}.{}", game_id, extension);
-    rom_dir.push(file_name);
+    rom_dir.push(&file_name);
 
     if !rom_dir.exists() {
-        let client = reqwest::Client::new();
         let download_url = format!(
             "{}{}/{}",
             domain.trim_end_matches('/'),
@@ -187,12 +389,17 @@ pub async fn install_game<R: Runtime>(
             rom_path.trim_start_matches('/')
         );
 
-        let response = client
-            .get(&download_url)
-            .header("Authorization", &token)
-            .send()
-            .await
-            .map_err(|e| e.to_string())?;
+        let response = perform_backend_request(
+            &app,
+            reqwest::Method::GET,
+            &download_url,
+            Some(&token),
+            BackendBody::None,
+            true,
+        )
+        .await?
+        .into_stream()?;
+
         let mut stream = response.bytes_stream();
         let mut file = File::create(&rom_dir).map_err(|e| e.to_string())?;
 
@@ -201,6 +408,18 @@ pub async fn install_game<R: Runtime>(
             file.write_all(&chunk).map_err(|e| e.to_string())?;
         }
     }
+
+    let mut manifest = get_or_create_manifest(&app).await?;
+    manifest.roms.insert(
+        game_id.clone(),
+        InstalledRom {
+            game_id,
+            console,
+            rom_filename: file_name,
+            _name: name,
+        },
+    );
+    write_manifest(&base_path, &manifest)?;
 
     Ok(())
 }
@@ -219,7 +438,7 @@ pub async fn play_game<R: Runtime>(
     let mut save_dir = base_path.clone();
     save_dir.push("saves");
     save_dir.push(&game_id);
-    std::fs::create_dir_all(&save_dir).map_err(|e| e.to_string())?;
+    create_dir_all(&save_dir).map_err(|e| e.to_string())?;
 
     if state.is_game_running.load(Ordering::SeqCst) {
         return Err("A game is already running".to_string());
@@ -279,47 +498,56 @@ pub async fn play_game<R: Runtime>(
             })?
     };
 
-    let mut rom_dir = base_path.clone();
-    rom_dir.push("roms");
-    let console_lowercased = console.to_lowercase();
-    rom_dir.push(&console_lowercased);
+    if let Some(config) = global_store.get("input_manager_config").and_then(|v| {
+        serde_json::from_value::<crate::commands::input::InputManagerConfig>(v.clone()).ok()
+    }) {
+        if let Some(emu_cfg) = config.emulator_configs.get(&emulator.id) {
+            if emu_cfg.auto_apply_on_start {
+                if let Some(scheme) = emu_cfg
+                    .scheme_id
+                    .as_ref()
+                    .and_then(|id| config.schemes.iter().find(|s| &s.id == id))
+                {
+                    crate::commands::input::apply_inputs_to_emulator(&emulator, &scheme.mappings);
+                }
+            }
+        }
+    }
 
-    let persistent_rom_path = std::fs::read_dir(&rom_dir)
-        .map_err(|_| "ROM directory missing")?
-        .filter_map(|e| e.ok())
-        .find(|e| {
-            e.file_name()
-                .to_string_lossy()
-                .starts_with(&format!("{}.", game_id))
-        })
-        .map(|e| e.path())
-        .ok_or("ROM not found")?;
+    let manifest = get_or_create_manifest(&app).await?;
+    let rom_info = manifest
+        .roms
+        .get(&game_id)
+        .ok_or("ROM not found in manifest")?;
+
+    let persistent_rom_path = base_path
+        .join("roms")
+        .join(&rom_info.console.to_lowercase())
+        .join(&rom_info.rom_filename);
+
+    if !persistent_rom_path.exists() {
+        return {
+            state.is_game_running.store(false, Ordering::SeqCst);
+            Err("ROM file missing from disk".to_string())
+        };
+    }
 
     let temp_dir = std::env::temp_dir().join(format!("emunex_{}", game_id));
     if temp_dir.exists() {
         std::fs::remove_dir_all(&temp_dir).ok();
     }
-    std::fs::create_dir_all(&temp_dir).map_err(|e| e.to_string())?;
+    create_dir_all(&temp_dir).map_err(|e| e.to_string())?;
 
-    let emu_bin_path = std::path::Path::new(&emulator.binary_path);
-    let emu_dir = emu_bin_path
-        .parent()
-        .unwrap_or_else(|| std::path::Path::new(""));
-
-    for config_name in &emulator.config_files {
-        let src = emu_dir.join(config_name);
-        if src.exists() {
-            std::fs::copy(&src, temp_dir.join(config_name)).ok();
-        }
-    }
+    let emu_bin_path = Path::new(&emulator.binary_path);
+    let emu_dir = emu_bin_path.parent().unwrap_or_else(|| Path::new(""));
 
     let rom_filename = persistent_rom_path.file_name().ok_or("Invalid ROM path")?;
     let temp_rom_path = temp_dir.join(rom_filename);
-    std::fs::copy(&persistent_rom_path, &temp_rom_path).map_err(|e| e.to_string())?;
+    copy(&persistent_rom_path, &temp_rom_path).map_err(|e| e.to_string())?;
 
-    for entry in std::fs::read_dir(&save_dir).map_err(|e| e.to_string())? {
+    for entry in read_dir(&save_dir).map_err(|e| e.to_string())? {
         let entry = entry.map_err(|e| e.to_string())?;
-        std::fs::copy(entry.path(), temp_dir.join(entry.file_name())).ok();
+        copy(entry.path(), temp_dir.join(entry.file_name())).ok();
     }
 
     let rom_name = persistent_rom_path
@@ -331,13 +559,13 @@ pub async fn play_game<R: Runtime>(
     let save_dir_str = save_dir.to_string_lossy().to_string();
     let temp_dir_str = temp_dir.to_string_lossy().to_string();
     let emu_dir_str = emu_dir.to_string_lossy().to_string();
-    let bin_name = std::path::Path::new(&emulator.binary_path)
+    let bin_name = Path::new(&emulator.binary_path)
         .file_name()
         .and_then(|f| f.to_str())
         .unwrap_or("")
         .to_string();
 
-    let rom_path_escaped = format!("'{}'", temp_rom_path.to_string_lossy().replace("'", "''"));
+    let _rom_path_escaped = format!("'{}'", temp_rom_path.to_string_lossy().replace("'", "''"));
 
     let resolved_save_path = if let Some(ref template) = emulator.save_path {
         if template.is_empty() {
@@ -358,22 +586,23 @@ pub async fn play_game<R: Runtime>(
     };
 
     if let Some(ref path) = resolved_save_path {
-        let p = std::path::Path::new(path);
+        let p = Path::new(path);
         if p.is_absolute() {
-            if p.is_file() || p.extension().is_some() {
+            if p.is_dir() && p.extension().is_none() {
+                create_dir_all(p).ok();
+                recursive_copy_dir(&save_dir, p);
+            } else {
                 if let Some(parent) = p.parent() {
-                    std::fs::create_dir_all(parent).ok();
+                    create_dir_all(parent).ok();
                 }
-                let target_name = p.file_name().and_then(|f| f.to_str()).unwrap_or("");
-                if !target_name.is_empty() {
-                    let src = save_dir.join(target_name);
-                    if src.exists() {
-                        std::fs::copy(&src, p).ok();
+                if let Some(target_name) = p.file_name().and_then(|f| f.to_str()) {
+                    if !target_name.is_empty() {
+                        let src = save_dir.join(target_name);
+                        if src.exists() {
+                            copy(&src, p).ok();
+                        }
                     }
                 }
-            } else {
-                std::fs::create_dir_all(p).ok();
-                recursive_copy_dir(&save_dir, p);
             }
         }
     } else {
@@ -381,7 +610,7 @@ pub async fn play_game<R: Runtime>(
     }
 
     let scan_dir_for_snapshot = if let Some(ref path) = resolved_save_path {
-        let p = std::path::Path::new(path);
+        let p = Path::new(path);
         if p.is_absolute() && p.is_dir() {
             p.to_path_buf()
         } else {
@@ -459,7 +688,8 @@ pub async fn play_game<R: Runtime>(
     child.wait().map_err(|e| e.to_string())?;
 
     let scan_dir = if let Some(ref path) = resolved_save_path {
-        let p = std::path::Path::new(path);
+        let p = Path::new(path);
+
         if p.is_absolute() && (p.is_dir() || (!p.exists() && p.extension().is_none())) {
             p.to_path_buf()
         } else {
@@ -475,15 +705,18 @@ pub async fn play_game<R: Runtime>(
         let matched = collect_by_extension(&scan_dir, &emulator.save_extensions);
         for (rel, abs_path) in matched {
             let dest = save_dir.join(&rel);
+
             if let Some(parent) = dest.parent() {
-                std::fs::create_dir_all(parent).ok();
+                create_dir_all(parent).ok();
             }
-            if std::fs::copy(&abs_path, &dest).is_ok() && scan_dir != temp_dir {
+
+            if copy(&abs_path, &dest).is_ok() && scan_dir != temp_dir {
                 let _ = std::fs::remove_file(&abs_path);
             }
         }
     } else {
         let post_snapshot = recursive_snapshot(&scan_dir);
+
         for (rel, post_meta) in &post_snapshot {
             let abs_path = scan_dir.join(rel);
 
@@ -491,22 +724,21 @@ pub async fn play_game<R: Runtime>(
                 continue;
             }
 
-            let fname = rel.file_name().and_then(|f| f.to_str()).unwrap_or("");
-            if emulator.config_files.iter().any(|c| c == fname) {
-                continue;
-            }
             let is_new_or_changed = match pre_snapshot.get(rel) {
                 None => true,
                 Some(pre_meta) => {
                     pre_meta.size != post_meta.size || pre_meta.modified != post_meta.modified
                 }
             };
+
             if is_new_or_changed {
                 let dest = save_dir.join(rel);
+
                 if let Some(parent) = dest.parent() {
-                    std::fs::create_dir_all(parent).ok();
+                    create_dir_all(parent).ok();
                 }
-                if std::fs::copy(&abs_path, &dest).is_ok() && scan_dir != temp_dir {
+
+                if copy(&abs_path, &dest).is_ok() && scan_dir != temp_dir {
                     let _ = std::fs::remove_file(&abs_path);
                 }
             } else if scan_dir != temp_dir {
@@ -541,32 +773,22 @@ pub async fn play_game<R: Runtime>(
 }
 
 #[tauri::command]
-pub fn is_game_installed<R: Runtime>(
+pub async fn is_game_installed<R: Runtime>(
     app: AppHandle<R>,
     game_id: String,
-    console: String,
 ) -> Result<bool, String> {
     let base_path = store::get_data_dir(&app)?;
+    let manifest = get_or_create_manifest(&app).await?;
 
-    let mut rom_dir = base_path.clone();
-    rom_dir.push("roms");
-    let console_lowercased = console.to_lowercase();
-    rom_dir.push(&console_lowercased);
-
-    if !rom_dir.exists() {
-        return Ok(false);
+    if let Some(rom_info) = manifest.roms.get(&game_id) {
+        let rom_path = base_path
+            .join("roms")
+            .join(&rom_info.console.to_lowercase())
+            .join(&rom_info.rom_filename);
+        Ok(rom_path.exists())
+    } else {
+        Ok(false)
     }
-
-    let exists = std::fs::read_dir(&rom_dir)
-        .map_err(|e| e.to_string())?
-        .filter_map(|e| e.ok())
-        .any(|e| {
-            e.file_name()
-                .to_string_lossy()
-                .starts_with(&format!("{}.", game_id))
-        });
-
-    Ok(exists)
 }
 
 #[derive(serde::Serialize, Clone)]
@@ -578,84 +800,85 @@ pub struct LocalStorageEntry {
     pub local_version: Option<i32>,
 }
 
-fn get_dir_size(path: &std::path::Path) -> u64 {
+fn get_dir_size(path: &Path) -> u64 {
     if !path.exists() {
         return 0;
     }
+
     if path.is_file() {
         return path.metadata().map(|m| m.len()).unwrap_or(0);
     }
 
     let mut total = 0;
-    if let Ok(entries) = std::fs::read_dir(path) {
+
+    if let Ok(entries) = read_dir(path) {
         for entry in entries.filter_map(|e| e.ok()) {
             total += get_dir_size(&entry.path());
         }
     }
+
     total
 }
 
 #[tauri::command]
-pub fn get_local_storage<R: Runtime>(app: AppHandle<R>) -> Result<Vec<LocalStorageEntry>, String> {
+pub async fn get_local_storage<R: Runtime>(
+    app: AppHandle<R>,
+) -> Result<Vec<LocalStorageEntry>, String> {
     let base_path = store::get_data_dir(&app)?;
 
     let global_store = match store::get_current_store(&app) {
         Ok(s) => Some(s),
         Err(_) => None,
     };
+
     let sync_versions = global_store
         .as_ref()
         .and_then(|s| s.get("sync_versions"))
         .and_then(|v| v.as_object().cloned())
         .unwrap_or_default();
 
+    let manifest = get_or_create_manifest(&app).await?;
     let mut entries: HashMap<String, LocalStorageEntry> = HashMap::new();
 
-    let mut roms_dir = base_path.clone();
-    roms_dir.push("roms");
-    if roms_dir.exists() {
-        if let Ok(consoles) = std::fs::read_dir(&roms_dir) {
-            for console_entry in consoles.filter_map(|e| e.ok()) {
-                let console = console_entry.file_name().to_string_lossy().to_string();
-                let console_path = console_entry.path();
-                if console_path.is_dir() {
-                    if let Ok(files) = std::fs::read_dir(&console_path) {
-                        for file_entry in files.filter_map(|e| e.ok()) {
-                            let file_name = file_entry.file_name().to_string_lossy().to_string();
-                            if let Some(game_id) = file_name.split('.').next() {
-                                let size = file_entry.metadata().map(|m| m.len()).unwrap_or(0);
-                                let local_version = sync_versions
-                                    .get(game_id)
-                                    .and_then(|v| v.as_i64().map(|i| i as i32));
-                                entries.insert(
-                                    game_id.to_string(),
-                                    LocalStorageEntry {
-                                        game_id: game_id.to_string(),
-                                        console: Some(console.clone()),
-                                        rom_size: size,
-                                        save_size: 0,
-                                        local_version,
-                                    },
-                                );
-                            }
-                        }
-                    }
-                }
-            }
-        }
+    for (game_id, rom_info) in &manifest.roms {
+        let rom_path = base_path
+            .join("roms")
+            .join(&rom_info.console)
+            .join(&rom_info.rom_filename);
+        let rom_size = if rom_path.exists() {
+            rom_path.metadata().map(|m| m.len()).unwrap_or(0)
+        } else {
+            0
+        };
+
+        let local_version = sync_versions
+            .get(game_id)
+            .and_then(|v| v.as_i64().map(|i| i as i32));
+        entries.insert(
+            game_id.clone(),
+            LocalStorageEntry {
+                game_id: game_id.clone(),
+                console: Some(rom_info.console.clone()),
+                rom_size,
+                save_size: 0,
+                local_version,
+            },
+        );
     }
 
-    let mut saves_dir = base_path.clone();
-    saves_dir.push("saves");
+    let saves_dir = base_path.join("saves");
+
     if saves_dir.exists() {
-        if let Ok(games) = std::fs::read_dir(&saves_dir) {
+        if let Ok(games) = read_dir(&saves_dir) {
             for game_entry in games.filter_map(|e| e.ok()) {
                 let game_ref = game_entry.file_name().to_string_lossy().to_string();
                 let size = get_dir_size(&game_entry.path());
+
                 if size > 0 {
                     let local_version = sync_versions
                         .get(&game_ref)
                         .and_then(|v| v.as_i64().map(|i| i as i32));
+
                     entries
                         .entry(game_ref.clone())
                         .and_modify(|e| {
@@ -680,29 +903,22 @@ pub fn get_local_storage<R: Runtime>(app: AppHandle<R>) -> Result<Vec<LocalStora
 }
 
 #[tauri::command]
-pub fn delete_installed_rom<R: Runtime>(
+pub async fn delete_installed_rom<R: Runtime>(
     app: AppHandle<R>,
     game_id: String,
-    console: String,
 ) -> Result<(), String> {
     let base_path = store::get_data_dir(&app)?;
+    let mut manifest = get_or_create_manifest(&app).await?;
 
-    let mut rom_dir = base_path.clone();
-    rom_dir.push("roms");
-    let console_lowercased = console.to_lowercase();
-    rom_dir.push(&console_lowercased);
-
-    if !rom_dir.exists() {
-        return Ok(());
-    }
-
-    if let Ok(files) = std::fs::read_dir(&rom_dir) {
-        for file_entry in files.filter_map(|e| e.ok()) {
-            let file_name = file_entry.file_name().to_string_lossy().to_string();
-            if file_name.starts_with(&format!("{}.", game_id)) {
-                std::fs::remove_file(file_entry.path()).map_err(|e| e.to_string())?;
-            }
+    if let Some(rom_info) = manifest.roms.remove(&game_id) {
+        let rom_path = base_path
+            .join("roms")
+            .join(&rom_info.console.to_lowercase())
+            .join(&rom_info.rom_filename);
+        if rom_path.exists() {
+            std::fs::remove_file(&rom_path).map_err(|e| e.to_string())?;
         }
+        write_manifest(&base_path, &manifest)?;
     }
 
     Ok(())
@@ -718,5 +934,29 @@ pub fn delete_local_save<R: Runtime>(app: AppHandle<R>, game_id: String) -> Resu
         std::fs::remove_dir_all(save_dir).map_err(|e| e.to_string())?;
     }
 
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn update_manifest_names<R: Runtime>(
+    app: AppHandle<R>,
+    updates: HashMap<String, String>,
+) -> Result<(), String> {
+    let base_path = store::get_data_dir(&app)?;
+    let mut manifest = get_or_create_manifest(&app).await?;
+    let mut changed = false;
+
+    for (id, name) in updates {
+        if let Some(rom) = manifest.roms.get_mut(&id) {
+            if rom._name.as_ref() != Some(&name) {
+                rom._name = Some(name);
+                changed = true;
+            }
+        }
+    }
+
+    if changed {
+        let _ = write_manifest(&base_path, &manifest);
+    }
     Ok(())
 }
