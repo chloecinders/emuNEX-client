@@ -7,6 +7,7 @@ export type User = {
     username: string;
     role: string;
     avatar_path?: string;
+    has_migrated: boolean;
 };
 
 export const useUserStore = defineStore("userStore", () => {

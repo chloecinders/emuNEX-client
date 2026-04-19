@@ -55,6 +55,24 @@ export const useAuthStore = defineStore("authStore", () => {
         window.location.reload();
     }
 
+    async function invalidateSession() {
+        const currentDomain = domain.value;
+        clearAuth();
+        
+        const { getGlobalStore, getDomainStore } = await import("../lib/store");
+        const globalStore = await getGlobalStore();
+        await globalStore.set("domain", null);
+        await globalStore.save();
+
+        if (currentDomain) {
+            const domainStore = await getDomainStore(currentDomain);
+            await domainStore.set("token", null);
+            await domainStore.save();
+        }
+
+        window.location.reload();
+    }
+
     async function startup() {
         if (!domain.value) {
             return;
@@ -90,6 +108,7 @@ export const useAuthStore = defineStore("authStore", () => {
         clearAuth,
         initConnection,
         logout,
+        invalidateSession,
         startup,
     };
 });

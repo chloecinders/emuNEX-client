@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { ChevronDown, Gamepad2, Library } from "lucide-vue-next";
 import { computed, onMounted, ref, type Ref, watch } from "vue";
-import { useStoragePath } from "../../lib/http";
+import { http, useStoragePath } from "../../lib/http";
 import { DiscordRPC } from "../../lib/rpc";
 import { useConsoleStore } from "../../stores/ConsoleStore";
 import { useEmulatorStore } from "../../stores/EmulatorStore";
@@ -47,6 +47,14 @@ const toggleVersionPicker = async () => {
             versionPickerX.value = rect.right;
             versionPickerY.value = rect.top;
         }
+
+        setTimeout(() => {
+            const first = document.querySelector<HTMLElement>(
+                ".c-bottom-panel__versions .c-bottom-panel__version-item",
+            );
+            if (first) first.focus();
+        }, 50);
+
         if (versions.value.length === 0 && game.value) {
             loadingVersions.value = true;
 
@@ -56,6 +64,15 @@ const toggleVersionPicker = async () => {
                 console.error("[GameInfo] fetchVersions Error:", err);
             } finally {
                 loadingVersions.value = false;
+
+                if (showVersionPicker.value) {
+                    setTimeout(() => {
+                        const first = document.querySelector<HTMLElement>(
+                            ".c-bottom-panel__versions .c-bottom-panel__version-item",
+                        );
+                        if (first) first.focus();
+                    }, 50);
+                }
             }
         }
     }
@@ -102,6 +119,10 @@ onMounted(async () => {
         if (!customEvent.detail?.gameId || !game.value || customEvent.detail.gameId !== game.value.id) return;
         handleInstall();
     });
+
+    window.addEventListener("close-version-picker", () => {
+        showVersionPicker.value = false;
+    });
 });
 
 const checkInstallation = async () => {
@@ -137,33 +158,44 @@ watch(
     },
 );
 
+const formatError = (err: any): string => {
+    if (!err) return "Unknown error";
+    if (typeof err === "string") return err;
+    if (err.message) return err.message;
+    try {
+        return JSON.stringify(err, null, 2);
+    } catch {
+        return String(err);
+    }
+};
+
 const handleInstall = async () => {
     if (!game.value || isDownloading.value) return;
 
-    const emulatorInstalled = await emulatorStore.isEmulatorInstalled(game.value.console);
-    const romInstalled = await invoke<boolean>("is_game_installed", {
-        gameId: game.value.id.toString(),
-        console: game.value.console,
-    });
-
-    if (!showConfirmInstallModal.value && (!emulatorInstalled || !romInstalled)) {
-        if (!emulatorInstalled) {
-            const serverEms = await emulatorStore.fetchServerEmulators(game.value.console);
-            availableEmulators.value = serverEms;
-            pendingEmulatorInfo.value = serverEms[0] || null;
-
-            if (!pendingEmulatorInfo.value) {
-                alert(
-                    `No emulator found on the server for ${game.value.console.toUpperCase()}. You might need to add one in the Emulator Management page.`,
-                );
-                return;
-            }
-        }
-        showConfirmInstallModal.value = true;
-        return;
-    }
-
     try {
+        const emulatorInstalled = await emulatorStore.isEmulatorInstalled(game.value.console);
+        const romInstalled = await invoke<boolean>("is_game_installed", {
+            gameId: game.value.id.toString(),
+            console: game.value.console,
+        });
+
+        if (!showConfirmInstallModal.value && (!emulatorInstalled || !romInstalled)) {
+            if (!emulatorInstalled) {
+                const serverEms = await emulatorStore.fetchServerEmulators(game.value.console);
+                availableEmulators.value = serverEms;
+                pendingEmulatorInfo.value = serverEms[0] || null;
+
+                if (!pendingEmulatorInfo.value) {
+                    alert(
+                        `No emulator found on the server for ${game.value.console.toUpperCase()}. You might need to add one in the Emulator Management page.`,
+                    );
+                    return;
+                }
+            }
+            showConfirmInstallModal.value = true;
+            return;
+        }
+
         showConfirmInstallModal.value = false;
         isDownloading.value = true;
 
@@ -176,16 +208,24 @@ const handleInstall = async () => {
         }
 
         if (!romInstalled) {
+            const dlRes = await http.post<string>(`/roms/${game.value.id}/download`, {});
+
+            if (!dlRes.success) {
+                throw new Error(dlRes.message || "Failed to register download or get rom path from server");
+            }
+
             await invoke("install_game", {
                 gameId: game.value.id.toString(),
                 console: game.value.console,
-                romPath: game.value.rom_path,
+                romPath: dlRes.data,
+                name: game.value.realname || game.value.title,
             });
         }
 
         await checkInstallation();
+        gameStore.fetchInstalledGames();
     } catch (error) {
-        alert(`Failed to install: ${error}`);
+        alert(`Failed to install: ${formatError(error)}`);
     } finally {
         isDownloading.value = false;
         pendingEmulatorInfo.value = null;
@@ -245,6 +285,12 @@ const showEmulatorModal = ref(false);
 
 const handlePlay = async (customEmulatorId?: string) => {
     if (!game.value) return;
+
+    if (!isReadyToPlay.value) {
+        handleInstall();
+        return;
+    }
+
     try {
         gameStore.isLaunching = true;
         showEmulatorModal.value = false;
@@ -268,16 +314,17 @@ const handlePlay = async (customEmulatorId?: string) => {
 
         await gameStore.startGame(game.value.id);
         DiscordRPC.playGame(gameIdStr);
-        await invoke("install_game", { gameId: gameIdStr, console: game.value.console, romPath: game.value.rom_path });
+
         await invoke("play_game", {
             gameId: gameIdStr,
             console: game.value.console,
             emulatorId: customEmulatorId || null,
         });
     } catch (error) {
-        alert(error);
+        alert(`Launch Failed: ${formatError(error)}`);
         gameStore.isLaunching = false;
     } finally {
+        gameStore.isLaunching = false;
     }
 };
 </script>
@@ -463,7 +510,9 @@ const handlePlay = async (customEmulatorId?: string) => {
             v-if="game"
             :show="showEmulatorModal"
             :game="game"
-            :emulators="Object.values(emulatorStore.emulators).filter((e) => e.consoles.some((c) => c === game!.console))"
+            :emulators="
+                Object.values(emulatorStore.emulators).filter((e) => e.consoles.some((c) => c === game!.console))
+            "
             @close="showEmulatorModal = false"
             @play="handlePlay"
         />
@@ -725,12 +774,17 @@ const handlePlay = async (customEmulatorId?: string) => {
             border-bottom: none;
         }
 
-        &:hover {
+        &:hover,
+        &:focus {
             background: var(--color-surface-variant);
+            outline: none;
         }
 
         &.is-active {
             background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+            &:focus {
+                background: color-mix(in srgb, var(--color-primary) 20%, transparent);
+            }
         }
     }
 
@@ -793,5 +847,4 @@ const handlePlay = async (customEmulatorId?: string) => {
 .fade-leave-to {
     opacity: 0;
 }
-
 </style>

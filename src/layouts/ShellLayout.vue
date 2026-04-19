@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowLeftRight, GamepadDirectional, HardDrive, Library, Settings } from "lucide-vue-next";
+import { ArrowLeftRight, Gamepad2, Layers, Library, Settings } from "lucide-vue-next";
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { useStoragePath } from "../lib/http";
@@ -22,8 +22,8 @@ const ready = ref(false);
 
 const menuItems = [
     { name: "Library", path: "/", icon: Library },
-    { name: "Storage", path: "/manage/roms", icon: HardDrive },
-    { name: "Emulators", path: "/manage/emulators", icon: GamepadDirectional },
+    { name: "Storage", path: "/manage", icon: Layers },
+    { name: "Inputs", path: "/manage/inputs", icon: Gamepad2 },
     { name: "Settings", path: "/settings", icon: Settings },
 ];
 
@@ -46,6 +46,12 @@ const goToSettingsForUpdate = () => {
     router.push({ name: "settings" });
 };
 
+// Highlight the Storage nav item for /manage and all its sub-routes (/manage/roms/:console)
+const { currentRoute } = useRouter();
+const isStorageActive = computed(() =>
+    currentRoute.value.path === "/manage" || currentRoute.value.path.startsWith("/manage/roms")
+);
+
 onMounted(() => {
     ready.value = true;
 });
@@ -57,7 +63,13 @@ onMounted(() => {
             <div id="header-tools" class="c-shell__header-tools"></div>
 
             <nav class="c-shell__top-nav">
-                <router-link v-for="item in menuItems" :key="item.path" :to="item.path" class="c-shell__top-nav-link">
+                <router-link
+                    v-for="item in menuItems"
+                    :key="item.path"
+                    :to="item.path"
+                    class="c-shell__top-nav-link"
+                    :class="{ 'router-link-active': item.path === '/manage' && isStorageActive }"
+                >
                     <component :is="item.icon" class="c-shell__top-nav-icon" />
                     <span class="c-shell__top-nav-text">{{ item.name }}</span>
                 </router-link>
@@ -150,9 +162,7 @@ onMounted(() => {
 
     &__status-bar {
         position: relative;
-        background: var(--glass-bg);
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
+        background: var(--color-surface);
         padding: var(--spacing-sm) var(--spacing-md);
         display: flex;
         justify-content: space-between;
@@ -441,9 +451,7 @@ onMounted(() => {
         height: 0;
         overflow: hidden;
         transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-        background: var(--glass-bg);
-        backdrop-filter: blur(20px);
-        -webkit-backdrop-filter: blur(20px);
+        background: var(--color-surface);
         z-index: 100;
         position: relative;
         flex-shrink: 0;

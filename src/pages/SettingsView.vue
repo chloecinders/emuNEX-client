@@ -66,7 +66,18 @@ const updateStatus = ref<{ message: string; type: "success" | "error" | "info" |
 const currentVersion = ref<string>("");
 const konamiToast = ref<string | null>(null);
 
-const KONAMI = ["ArrowUp", "ArrowUp", "ArrowDown", "ArrowDown", "ArrowLeft", "ArrowRight", "ArrowLeft", "ArrowRight", "b", "a"];
+const KONAMI = [
+    "ArrowUp",
+    "ArrowUp",
+    "ArrowDown",
+    "ArrowDown",
+    "ArrowLeft",
+    "ArrowRight",
+    "ArrowLeft",
+    "ArrowRight",
+    "b",
+    "a",
+];
 const konamiProgress = ref<string[]>([]);
 
 const handleKeydown = (e: KeyboardEvent) => {
@@ -93,7 +104,7 @@ const openRequestViewer = () => {
             height: 650,
             decorations: false,
         });
-        
+
         window.once("tauri://created", () => {
             window.show();
         });
@@ -153,7 +164,7 @@ onMounted(async () => {
     if (!userStore.user) {
         await userStore.fetchUser();
     }
-    
+
     try {
         currentVersion.value = await getVersion();
     } catch (e) {
@@ -161,7 +172,7 @@ onMounted(async () => {
     }
 
     await loadDataDir();
-    
+
     window.addEventListener("keydown", handleKeydown);
 });
 
@@ -184,7 +195,9 @@ onUnmounted(() => {
                     <div class="c-settings__card-top">
                         <div class="c-settings__description-wrap">
                             <Heading :level="3">Client Updates</Heading>
-                            <Text v-if="currentVersion" variant="muted" size="sm">Current Version: {{ currentVersion }}</Text>
+                            <Text v-if="currentVersion" variant="muted" size="sm"
+                                >Current Version: {{ currentVersion }}</Text
+                            >
                         </div>
                     </div>
 
@@ -239,13 +252,13 @@ onUnmounted(() => {
 
                     <div class="c-settings__path-display">
                         <FolderOpen :size="14" class="c-settings__path-icon" />
-                        <code class="c-settings__path-text">{{ currentDataDir ?? '…' }}</code>
+                        <code class="c-settings__path-text">{{ currentDataDir ?? "…" }}</code>
                     </div>
 
                     <div class="c-settings__actions" style="margin-top: var(--spacing-lg)">
                         <Button color="grey" size="sm" :disabled="isMigrating" @click="handleChangeLocation">
                             <FolderSearch :size="16" />
-                            <span>{{ isMigrating ? 'Moving files…' : 'Change Location' }}</span>
+                            <span>{{ isMigrating ? "Moving files…" : "Change Location" }}</span>
                         </Button>
                         <Button color="grey" size="sm" :disabled="isMigrating" @click="handleOpenDataDir">
                             <FolderOpen :size="16" />
@@ -268,7 +281,7 @@ onUnmounted(() => {
             <Transition name="fade">
                 <section v-if="devStore.isDevMode" class="c-settings__section">
                     <Heading level="3" color="primary" is-badge class="c-settings__section-title">
-                        <Terminal :size="14" style="display: inline; vertical-align: middle; margin-right: 4px;" />
+                        <Terminal :size="14" style="display: inline; vertical-align: middle; margin-right: 4px" />
                         Developer
                     </Heading>
 
@@ -276,7 +289,10 @@ onUnmounted(() => {
                         <div class="c-settings__card-top">
                             <div class="c-settings__description-wrap">
                                 <Heading :level="3">Request Viewer</Heading>
-                                <Text variant="muted" size="sm">Inspect all API requests made through the Rust HTTP bridge. Opens in a new window.</Text>
+                                <Text variant="muted" size="sm"
+                                    >Inspect all API requests made through the Rust HTTP bridge. Opens in a new
+                                    window.</Text
+                                >
                             </div>
                         </div>
                         <div class="c-settings__actions">
@@ -353,7 +369,7 @@ onUnmounted(() => {
     }
 
     &__path-text {
-        font-family: 'Menlo', 'Consolas', 'Monaco', monospace;
+        font-family: "Menlo", "Consolas", "Monaco", monospace;
         font-size: 0.78rem;
         color: var(--color-text-muted);
         white-space: nowrap;
@@ -416,7 +432,9 @@ onUnmounted(() => {
 
     &__card--dev {
         border-color: rgba(251, 146, 60, 0.4);
-        box-shadow: 0 0 0 1px rgba(251, 146, 60, 0.1), var(--shadow-sm);
+        box-shadow:
+            0 0 0 1px rgba(251, 146, 60, 0.1),
+            var(--shadow-sm);
     }
 
     &__dev-badge {
@@ -461,10 +479,14 @@ onUnmounted(() => {
 }
 
 .konami-toast-enter-active {
-    transition: opacity 0.3s ease, transform 0.3s ease;
+    transition:
+        opacity 0.3s ease,
+        transform 0.3s ease;
 }
 .konami-toast-leave-active {
-    transition: opacity 0.4s ease, transform 0.4s ease;
+    transition:
+        opacity 0.4s ease,
+        transform 0.4s ease;
 }
 .konami-toast-enter-from,
 .konami-toast-leave-to {

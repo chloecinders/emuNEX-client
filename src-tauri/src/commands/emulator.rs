@@ -1,8 +1,12 @@
-use std::{collections::HashMap, fs::File, io::Write};
+use std::{
+    collections::HashMap,
+    fs::{create_dir_all, remove_file, File},
+    io::{copy, Write},
+};
 
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Manager, Runtime};
+use tauri::{AppHandle, Runtime};
 
 use crate::{store, ApiResponse};
 
@@ -17,7 +21,8 @@ pub struct ApiEmulator {
     pub binary_name: Option<String>,
     pub save_path: Option<String>,
     pub save_extensions: Vec<String>,
-    pub config_files: Vec<String>,
+    pub input_config_file: Option<String>,
+    pub input_mapper: Option<String>,
     pub zipped: bool,
     pub file_size: i64,
     pub md5_hash: Option<String>,
@@ -37,7 +42,9 @@ pub struct StoreEmulator {
     #[serde(default)]
     pub save_extensions: Vec<String>,
     #[serde(default)]
-    pub config_files: Vec<String>,
+    pub input_config_file: Option<String>,
+    #[serde(default)]
+    pub input_mapper: Option<String>,
     #[serde(default)]
     pub zipped: bool,
     #[serde(default)]
@@ -69,25 +76,18 @@ pub async fn fetch_server_emulators<R: Runtime>(
         platform
     );
 
-    let client = reqwest::Client::new();
-    let response = client
-        .get(&api_url)
-        .header("Authorization", &token)
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
-
-    let response_text = response.text().await.map_err(|e| e.to_string())?;
-
-    let api_res: ApiResponse<Vec<ApiEmulator>> =
-        serde_json::from_str(&response_text).map_err(|e| e.to_string())?;
+    let api_res = crate::commands::http::perform_backend_request(
+        &app,
+        reqwest::Method::GET,
+        &api_url,
+        Some(&token),
+        crate::commands::http::BackendBody::None,
+        false,
+    )
+    .await?
+    .into_json::<ApiResponse<Vec<ApiEmulator>>>()?;
 
     let filtered = api_res.data.unwrap_or_default();
-    println!(
-        "[Rust] Found {} matching emulators for console: {}",
-        filtered.len(),
-        console_upper
-    );
 
     Ok(filtered)
 }
@@ -110,19 +110,16 @@ pub async fn fetch_all_server_emulators<R: Runtime>(
     let platform = std::env::consts::OS.to_lowercase();
     let api_url = format!("{}/api/v1/emulators/all", domain.trim_end_matches('/'));
 
-    let client = reqwest::Client::new();
-    let response_text = client
-        .get(&api_url)
-        .header("Authorization", &token)
-        .send()
-        .await
-        .map_err(|e| e.to_string())?
-        .text()
-        .await
-        .map_err(|e| e.to_string())?;
-
-    let api_res: ApiResponse<Vec<ApiEmulator>> =
-        serde_json::from_str(&response_text).map_err(|e| e.to_string())?;
+    let api_res = crate::commands::http::perform_backend_request(
+        &app,
+        reqwest::Method::GET,
+        &api_url,
+        Some(&token),
+        crate::commands::http::BackendBody::None,
+        false,
+    )
+    .await?
+    .into_json::<ApiResponse<Vec<ApiEmulator>>>()?;
 
     let emulators = api_res.data.unwrap_or_default();
 
@@ -165,63 +162,36 @@ pub async fn download_emulator<R: Runtime>(
         platform
     );
 
-    let client = reqwest::Client::new();
-    let response_text = client
-        .get(&api_url)
-        .header("Authorization", &token)
-        .send()
-        .await
-        .map_err(|e| e.to_string())?
-        .text()
-        .await
-        .map_err(|e| e.to_string())?;
-
-    println!("Server response received (length: {})", response_text.len());
-
-    let api_res: ApiResponse<Vec<ApiEmulator>> =
-        serde_json::from_str(&response_text).map_err(|e| {
-            println!(
-                "[Rust] Failed to parse JSON in download_emulator: {} | Raw JSON: {}",
-                e, response_text
-            );
-            e.to_string()
-        })?;
-    let emulators = api_res.data.ok_or_else(|| {
-        println!("[Rust] No 'data' field in server response");
-        "No data".to_string()
-    })?;
-
-    println!("[Rust] Found {} candidate(s) in list", emulators.len());
+    let api_res = crate::commands::http::perform_backend_request(
+        &app,
+        reqwest::Method::GET,
+        &api_url,
+        Some(&token),
+        crate::commands::http::BackendBody::None,
+        false,
+    )
+    .await?
+    .into_json::<ApiResponse<Vec<ApiEmulator>>>()?;
+    let emulators = api_res.data.ok_or_else(|| "No data".to_string())?;
 
     let emulator = if let Some(id) = emulator_id {
-        emulators.into_iter().find(|e| e.id == id).ok_or_else(|| {
-            println!(
-                "[Rust] Specified emulator ID '{}' not found in candidate list",
-                id
-            );
-            "Emulator not found".to_string()
-        })?
+        emulators
+            .into_iter()
+            .find(|e| e.id == id)
+            .ok_or_else(|| "Emulator not found".to_string())?
     } else {
-        emulators.into_iter().next().ok_or_else(|| {
-            println!(
-                "[Rust] Empty emulator candidate list for console: {}",
-                console
-            );
-            "No emulator found".to_string()
-        })?
+        emulators
+            .into_iter()
+            .next()
+            .ok_or_else(|| "No emulator found".to_string())?
     };
-
-    println!(
-        "Selected emulator: '{}' (ID: {})",
-        emulator.name, emulator.id
-    );
 
     let mut app_data_dir = store::get_base_dir(&app)?;
     app_data_dir.push("emulators");
     app_data_dir.push(console.to_lowercase());
     let emu_name_safe = emulator.name.replace(" ", "_").to_lowercase();
     app_data_dir.push(&emu_name_safe);
-    std::fs::create_dir_all(&app_data_dir).map_err(|e| e.to_string())?;
+    create_dir_all(&app_data_dir).map_err(|e| e.to_string())?;
 
     let file_name = emulator
         .binary_path
@@ -237,12 +207,16 @@ pub async fn download_emulator<R: Runtime>(
         emulator.binary_path.trim_start_matches('/')
     );
 
-    let response = client
-        .get(&download_url)
-        .header("Authorization", &token)
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
+    let response = crate::commands::http::perform_backend_request(
+        &app,
+        reqwest::Method::GET,
+        &download_url,
+        Some(&token),
+        crate::commands::http::BackendBody::None,
+        true,
+    )
+    .await?
+    .into_stream()?;
 
     let mut stream = response.bytes_stream();
     let mut file = File::create(&local_file_path).map_err(|e| e.to_string())?;
@@ -266,27 +240,28 @@ pub async fn download_emulator<R: Runtime>(
             };
 
             if (*file.name()).ends_with('/') {
-                std::fs::create_dir_all(&outpath).map_err(|e| e.to_string())?;
+                create_dir_all(&outpath).map_err(|e| e.to_string())?;
             } else {
                 if let Some(p) = outpath.parent() {
                     if !p.exists() {
-                        std::fs::create_dir_all(p).map_err(|e| e.to_string())?;
+                        create_dir_all(p).map_err(|e| e.to_string())?;
                     }
                 }
                 let mut outfile = File::create(&outpath).map_err(|e| e.to_string())?;
-                std::io::copy(&mut file, &mut outfile).map_err(|e| e.to_string())?;
+                copy(&mut file, &mut outfile).map_err(|e| e.to_string())?;
             }
 
             #[cfg(unix)]
             {
                 use std::os::unix::fs::PermissionsExt;
+
                 if let Some(mode) = file.unix_mode() {
                     std::fs::set_permissions(&outpath, std::fs::Permissions::from_mode(mode)).ok();
                 }
             }
         }
 
-        std::fs::remove_file(&local_file_path).ok();
+        remove_file(&local_file_path).ok();
 
         let exec_name = if let Some(ref custom_name) = emulator.binary_name {
             if custom_name.is_empty() {
@@ -298,6 +273,17 @@ pub async fn download_emulator<R: Runtime>(
             emulator.run_command.split_whitespace().next().unwrap_or("")
         };
         final_binary_path = app_data_dir.join(exec_name);
+    }
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        if let Ok(metadata) = std::fs::metadata(&final_binary_path) {
+            let mut perms = metadata.permissions();
+            perms.set_mode(perms.mode() | 0o111);
+            std::fs::set_permissions(&final_binary_path, perms).ok();
+        }
     }
 
     let mut stored_emulators: HashMap<String, StoreEmulator> = global_store
@@ -316,7 +302,8 @@ pub async fn download_emulator<R: Runtime>(
         existing.run_command = emulator.run_command.clone();
         existing.save_path = emulator.save_path.clone();
         existing.save_extensions = emulator.save_extensions.clone();
-        existing.config_files = emulator.config_files.clone();
+        existing.input_config_file = emulator.input_config_file.clone();
+        existing.input_mapper = emulator.input_mapper.clone();
         existing.zipped = emulator.zipped;
 
         for c in &emulator.consoles {
@@ -336,7 +323,8 @@ pub async fn download_emulator<R: Runtime>(
                 run_command: emulator.run_command,
                 save_path: emulator.save_path,
                 save_extensions: emulator.save_extensions,
-                config_files: emulator.config_files,
+                input_config_file: emulator.input_config_file,
+                input_mapper: emulator.input_mapper,
                 zipped: emulator.zipped,
                 file_size: emulator.file_size,
             },
@@ -378,8 +366,10 @@ pub async fn get_emulator_dir_sizes<R: Runtime>(
         .unwrap_or_default();
 
     let mut sizes: HashMap<String, u64> = HashMap::new();
+
     for (id, emu) in &stored_emulators {
         let bin_path = std::path::Path::new(&emu.binary_path);
+
         if let Some(dir) = bin_path.parent() {
             if dir.exists() && dir.is_dir() {
                 sizes.insert(id.clone(), dir_size(dir));
@@ -408,6 +398,7 @@ pub async fn remove_emulator<R: Runtime>(
 
     if let Some(emulator) = stored_emulators.remove(&emulator_id) {
         let bin_path = std::path::Path::new(&emulator.binary_path);
+
         if let Some(emu_dir) = bin_path.parent() {
             if emu_dir.exists() && emu_dir.is_dir() {
                 if emu_dir.to_string_lossy().contains("emulators") {
@@ -462,11 +453,12 @@ pub async fn migrate_emulator_files<R: Runtime>(app: AppHandle<R>) -> Result<(),
             continue;
         }
 
-        let _ = std::fs::create_dir_all(&new_dir);
+        let _ = create_dir_all(&new_dir);
 
         if let Some(old_dir) = old_bin_path.parent() {
             if old_dir.exists() && old_dir.is_dir() {
                 let old_str = old_dir.to_string_lossy();
+
                 if old_str.contains("emulators") || old_str.contains("domains") {
                     if let Ok(entries) = std::fs::read_dir(old_dir) {
                         for entry in entries.flatten() {

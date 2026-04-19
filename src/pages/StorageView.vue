@@ -6,10 +6,10 @@ import ConsoleStorageCard from "../components/cards/ConsoleStorageCard.vue";
 import Heading from "../components/ui/Heading.vue";
 import Spinner from "../components/ui/Spinner.vue";
 import Text from "../components/ui/Text.vue";
+import { formatBytes } from "../lib/format";
 import { useConsoleStore } from "../stores/ConsoleStore";
 import { useGameStore } from "../stores/GameStore";
 import { useRomStore } from "../stores/RomStore";
-import { formatBytes } from "../lib/format";
 
 const router = useRouter();
 const romStore = useRomStore();
@@ -26,17 +26,22 @@ onMounted(async () => {
 
 const groupedRoms = computed(() => {
     const groups: Record<string, typeof romStore.installedRoms> = {};
+
     romStore.installedRoms.forEach((rom) => {
         let console = rom.console;
+
         if (!console) {
             const game = gameStore.library.find((g) => g.rom_id === rom.game_id);
             console = game?.console || "Unknown";
         }
+
         if (!groups[console]) {
             groups[console] = [];
         }
+
         groups[console].push(rom);
     });
+
     return groups;
 });
 
@@ -45,8 +50,7 @@ const sortedConsoles = computed(() => {
 });
 
 const getConsoleTotalSize = (consoleName: string) => {
-    const total =
-        groupedRoms.value[consoleName]?.reduce((acc, rom) => acc + rom.rom_size + rom.save_size, 0) || 0;
+    const total = groupedRoms.value[consoleName]?.reduce((acc, rom) => acc + rom.rom_size + rom.save_size, 0) || 0;
     return formatBytes(total) ?? "0 B";
 };
 
@@ -58,9 +62,7 @@ const navigateToConsole = (consoleName: string) => {
 <template>
     <div class="c-rom-management">
         <div class="c-rom-management__header-wrap">
-            <Heading :level="2" color="primary" is-badge class="c-rom-management__badge">
-                Storage
-            </Heading>
+            <Heading :level="2" color="primary" is-badge class="c-rom-management__badge"> Storage </Heading>
         </div>
 
         <div v-if="romStore.loading" class="c-rom-management__loading">

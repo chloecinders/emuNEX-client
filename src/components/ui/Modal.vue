@@ -1,5 +1,7 @@
-<script setup lang="ts">
-defineProps<{
+<script lang="ts" setup>
+import { nextTick, ref, watch } from "vue";
+
+const props = defineProps<{
     show: boolean;
     title: string;
     subtitle?: string;
@@ -7,12 +9,27 @@ defineProps<{
 }>();
 
 const emit = defineEmits(["close"]);
+const modalRef = ref<HTMLElement | null>(null);
+
+watch(
+    () => props.show,
+    (isShown) => {
+        if (isShown) {
+            nextTick(() => {
+                const firstFocusable = modalRef.value?.querySelector<HTMLElement>(
+                    'button, [tabindex="0"], input, select, textarea'
+                );
+                firstFocusable?.focus();
+            });
+        }
+    }
+);
 </script>
 
 <template>
     <Teleport to="body">
         <transition name="fade">
-            <div v-if="show" class="c-modal__overlay" @click.self="emit('close')">
+            <div v-if="show" ref="modalRef" class="c-modal__overlay" @click.self="emit('close')">
                 <div class="c-modal__card" :style="{ maxWidth: width || '440px' }">
                     <button class="c-modal__close" @click="emit('close')">
                         <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
@@ -62,6 +79,8 @@ const emit = defineEmits(["close"]);
         position: relative;
         padding: var(--spacing-xl);
         animation: modal-pop 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        max-height: 90vh;
+        overflow-y: auto;
     }
 
     &__close {

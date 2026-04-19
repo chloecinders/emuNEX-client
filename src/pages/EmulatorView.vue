@@ -68,7 +68,8 @@ const addCustomEmulator = () => {
         run_command: "",
         save_path: "",
         save_extensions: [],
-        config_files: [],
+        input_config_file: "",
+        input_mapper: "",
         zipped: false,
     };
 

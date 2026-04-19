@@ -5,3 +5,4 @@ pub mod play;
 pub mod save;
 pub mod storage;
 pub mod drpc;
+pub mod input;

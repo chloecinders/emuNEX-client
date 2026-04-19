@@ -2,10 +2,12 @@ import { emit, listen } from "@tauri-apps/api/event";
 import { defineStore } from "pinia";
 import { ref, watch } from "vue";
 
+
 export interface RequestLog {
     id: string;
     method: string;
     url: string;
+    status: number;
     body: any;
     response: any;
     success: boolean;
@@ -40,16 +42,24 @@ export const useDevStore = defineStore("devStore", () => {
         listen("dev://sync-request", () => {
             emit("dev://sync-response", requests.value);
         });
+
+        // Backend requests from Rust's perform_backend_request come in via a
+        // separate channel so they're routed through addRequest() here in the
+        // main window, giving them the same reliable frontend re-broadcast that
+        // frontend HTTP requests receive (and ensuring the Request Viewer window
+        // sees them even if its listener wasn't fully registered yet).
+        listen<Omit<RequestLog, "timestamp">>("dev://backend-request", (event) => {
+            addRequest(event.payload);
+        });
     }
 
     watch(isDevMode, (value) => {
         localStorage.setItem("devMode", value.toString());
     });
 
-    function addRequest(log: Omit<RequestLog, "id" | "timestamp">) {
+    function addRequest(log: Omit<RequestLog, "timestamp">) {
         const fullLog: RequestLog = {
             ...log,
-            id: Math.random().toString(36).substring(2, 9),
             timestamp: Date.now(),
         };
 
