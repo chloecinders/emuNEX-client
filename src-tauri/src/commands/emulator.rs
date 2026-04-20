@@ -8,7 +8,10 @@ use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Runtime};
 
-use crate::{store, ApiResponse};
+use crate::{
+    commands::http::{perform_backend_request, BackendBody},
+    store, ApiResponse,
+};
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct ApiEmulator {
@@ -26,6 +29,14 @@ pub struct ApiEmulator {
     pub zipped: bool,
     pub file_size: i64,
     pub md5_hash: Option<String>,
+    pub version: Option<String>,
+}
+
+#[derive(Serialize, Debug, Clone)]
+pub struct ApiEmulatorExtra {
+    #[serde(flatten)]
+    pub emulator: ApiEmulator,
+    pub source_server: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -49,6 +60,10 @@ pub struct StoreEmulator {
     pub zipped: bool,
     #[serde(default)]
     pub file_size: i64,
+    #[serde(default)]
+    pub version: Option<String>,
+    #[serde(default)]
+    pub source_server: Option<String>,
 }
 
 #[tauri::command]
@@ -76,12 +91,12 @@ pub async fn fetch_server_emulators<R: Runtime>(
         platform
     );
 
-    let api_res = crate::commands::http::perform_backend_request(
+    let api_res = perform_backend_request(
         &app,
         reqwest::Method::GET,
         &api_url,
         Some(&token),
-        crate::commands::http::BackendBody::None,
+        BackendBody::None,
         false,
     )
     .await?
@@ -95,40 +110,58 @@ pub async fn fetch_server_emulators<R: Runtime>(
 #[tauri::command]
 pub async fn fetch_all_server_emulators<R: Runtime>(
     app: AppHandle<R>,
-) -> Result<Vec<ApiEmulator>, String> {
-    let store = store::get_current_store(&app)?;
+) -> Result<Vec<ApiEmulatorExtra>, String> {
+    let global_store = store::get_global_store(&app)?;
+    let domains: Vec<String> = global_store
+        .get("domains")
+        .and_then(|v| serde_json::from_value(v.clone()).ok())
+        .unwrap_or_default();
 
-    let domain = store
-        .get("domain")
-        .and_then(|v| v.as_str().map(|s| s.to_string()))
-        .ok_or("Domain not found")?;
-    let token = store
-        .get("token")
-        .and_then(|v| v.as_str().map(|s| s.to_string()))
-        .ok_or("Token not found")?;
-
+    let mut all_results = Vec::new();
     let platform = std::env::consts::OS.to_lowercase();
-    let api_url = format!("{}/api/v1/emulators/all", domain.trim_end_matches('/'));
 
-    let api_res = crate::commands::http::perform_backend_request(
-        &app,
-        reqwest::Method::GET,
-        &api_url,
-        Some(&token),
-        crate::commands::http::BackendBody::None,
-        false,
-    )
-    .await?
-    .into_json::<ApiResponse<Vec<ApiEmulator>>>()?;
+    for domain in domains {
+        let domain_store = match store::get_domain_store(&app, &domain) {
+            Ok(s) => s,
+            Err(_) => continue,
+        };
 
-    let emulators = api_res.data.unwrap_or_default();
+        let token = match domain_store
+            .get("token")
+            .and_then(|v| v.as_str().map(|s| s.to_string()))
+        {
+            Some(t) => t,
+            None => continue,
+        };
 
-    let filtered: Vec<ApiEmulator> = emulators
-        .into_iter()
-        .filter(|e| e.platform.to_lowercase() == platform)
-        .collect();
+        let api_url = format!("{}/api/v1/emulators/all", domain.trim_end_matches('/'));
 
-    Ok(filtered)
+        if let Ok(res) = perform_backend_request(
+            &app,
+            reqwest::Method::GET,
+            &api_url,
+            Some(&token),
+            BackendBody::None,
+            false,
+        )
+        .await
+        {
+            if let Ok(api_res) = res.into_json::<ApiResponse<Vec<ApiEmulator>>>() {
+                if let Some(emulators) = api_res.data {
+                    for e in emulators {
+                        if e.platform.to_lowercase() == platform {
+                            all_results.push(ApiEmulatorExtra {
+                                emulator: e,
+                                source_server: domain.clone(),
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(all_results)
 }
 
 #[tauri::command]
@@ -136,19 +169,21 @@ pub async fn download_emulator<R: Runtime>(
     app: AppHandle<R>,
     console: String,
     emulator_id: Option<String>,
+    keep_config: Option<bool>,
+    source_server: Option<String>,
 ) -> Result<(), String> {
-    let current_store = store::get_current_store(&app)?;
     let global_store = store::get_global_store(&app)?;
+    let domain = match source_server {
+        Some(d) => d,
+        None => store::get_current_domain(&app).ok_or("Domain not found")?,
+    };
 
-    let domain = current_store
-        .get("domain")
-        .and_then(|v| v.as_str().map(|s| s.to_string()))
-        .ok_or("Domain not found")?;
-    let token = current_store
+    let domain_store = store::get_domain_store(&app, &domain)?;
+    let token = domain_store
         .get("token")
         .and_then(|v| v.as_str().map(|s| s.to_string()))
         .ok_or("Token not found")?;
-    let storage_path = current_store
+    let storage_path = domain_store
         .get("storage_path")
         .and_then(|v| v.as_str().map(|s| s.to_string()))
         .ok_or("Storage path not found")?;
@@ -162,12 +197,12 @@ pub async fn download_emulator<R: Runtime>(
         platform
     );
 
-    let api_res = crate::commands::http::perform_backend_request(
+    let api_res = perform_backend_request(
         &app,
         reqwest::Method::GET,
         &api_url,
         Some(&token),
-        crate::commands::http::BackendBody::None,
+        BackendBody::None,
         false,
     )
     .await?
@@ -207,12 +242,12 @@ pub async fn download_emulator<R: Runtime>(
         emulator.binary_path.trim_start_matches('/')
     );
 
-    let response = crate::commands::http::perform_backend_request(
+    let response = perform_backend_request(
         &app,
         reqwest::Method::GET,
         &download_url,
         Some(&token),
-        crate::commands::http::BackendBody::None,
+        BackendBody::None,
         true,
     )
     .await?
@@ -299,12 +334,18 @@ pub async fn download_emulator<R: Runtime>(
 
     if let Some(existing) = stored_emulators.get_mut(&server_id) {
         existing.binary_path = final_binary_path.to_string_lossy().to_string();
-        existing.run_command = emulator.run_command.clone();
-        existing.save_path = emulator.save_path.clone();
-        existing.save_extensions = emulator.save_extensions.clone();
-        existing.input_config_file = emulator.input_config_file.clone();
-        existing.input_mapper = emulator.input_mapper.clone();
-        existing.zipped = emulator.zipped;
+        let should_keep = keep_config.unwrap_or(false);
+
+        if !should_keep {
+            existing.run_command = emulator.run_command.clone();
+            existing.save_path = emulator.save_path.clone();
+            existing.save_extensions = emulator.save_extensions.clone();
+            existing.input_config_file = emulator.input_config_file.clone();
+            existing.input_mapper = emulator.input_mapper.clone();
+            existing.zipped = emulator.zipped;
+        }
+        existing.version = emulator.version.clone();
+        existing.source_server = Some(domain.clone());
 
         for c in &emulator.consoles {
             if !existing.consoles.contains(c) {
@@ -327,6 +368,8 @@ pub async fn download_emulator<R: Runtime>(
                 input_mapper: emulator.input_mapper,
                 zipped: emulator.zipped,
                 file_size: emulator.file_size,
+                version: emulator.version,
+                source_server: Some(domain.clone()),
             },
         );
     }
@@ -486,6 +529,99 @@ pub async fn migrate_emulator_files<R: Runtime>(app: AppHandle<R>) -> Result<(),
         );
         store.save().map_err(|e| e.to_string())?;
     }
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn refresh_emulator_config<R: Runtime>(
+    app: AppHandle<R>,
+    emulator_id: String,
+) -> Result<(), String> {
+    let global_store = store::get_global_store(&app)?;
+
+    let mut stored_emulators: HashMap<String, StoreEmulator> = global_store
+        .get("emulators")
+        .and_then(|v| serde_json::from_value(v.clone()).ok())
+        .unwrap_or_default();
+
+    let existing = stored_emulators
+        .get(&emulator_id)
+        .ok_or("Emulator not found locally")?;
+
+    if emulator_id.starts_with("custom-") {
+        return Err("Cannot refresh config for custom emulator".to_string());
+    }
+
+    let domain = existing
+        .source_server
+        .clone()
+        .or_else(|| store::get_current_domain(&app))
+        .ok_or("Source folder not known for this emulator")?;
+
+    let domain_store = store::get_domain_store(&app, &domain)?;
+    let token = domain_store
+        .get("token")
+        .and_then(|v| v.as_str().map(|s| s.to_string()))
+        .ok_or_else(|| format!("Login session expired for server {}", domain))?;
+
+    let platform = std::env::consts::OS.to_lowercase();
+    let api_url = format!("{}/api/v1/emulators/all", domain.trim_end_matches('/'));
+
+    let api_res = perform_backend_request(
+        &app,
+        reqwest::Method::GET,
+        &api_url,
+        Some(&token),
+        BackendBody::None,
+        false,
+    )
+    .await?
+    .into_json::<ApiResponse<Vec<ApiEmulator>>>()?;
+
+    let emulators = api_res.data.unwrap_or_default();
+    let safe_domain = domain
+        .replace(|c: char| !c.is_alphanumeric(), "_")
+        .to_lowercase();
+
+    let mut updated = false;
+    for server_emu in emulators {
+        if server_emu.platform.to_lowercase() != platform {
+            continue;
+        }
+
+        let expected_server_id = format!("server-{}-{}", safe_domain, server_emu.id);
+
+        if expected_server_id == emulator_id {
+            if let Some(existing) = stored_emulators.get_mut(&emulator_id) {
+                existing.run_command = server_emu.run_command;
+                existing.save_path = server_emu.save_path;
+                existing.save_extensions = server_emu.save_extensions;
+                existing.input_config_file = server_emu.input_config_file;
+                existing.input_mapper = server_emu.input_mapper;
+                existing.zipped = server_emu.zipped;
+                existing.file_size = server_emu.file_size;
+
+                for c in &server_emu.consoles {
+                    if !existing.consoles.contains(c) {
+                        existing.consoles.push(c.clone());
+                    }
+                }
+                updated = true;
+                break;
+            }
+        }
+    }
+
+    if !updated {
+        return Err("Server emulator config not found or mismatched.".to_string());
+    }
+
+    global_store.set(
+        "emulators",
+        serde_json::to_value(stored_emulators).map_err(|e| e.to_string())?,
+    );
+    global_store.save().map_err(|e| e.to_string())?;
 
     Ok(())
 }

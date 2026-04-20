@@ -39,6 +39,7 @@ const emit = defineEmits(["click"]);
     background: transparent;
     padding: 0;
     cursor: pointer;
+    border-radius: var(--radius-md);
     outline-offset: 4px;
     transition: filter 250ms;
     user-select: none;

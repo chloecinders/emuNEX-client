@@ -7,12 +7,14 @@ import EmulatorCard from "../components/cards/EmulatorCard.vue";
 import DownloadEmulatorsModal from "../components/modals/DownloadEmulatorsModal.vue";
 import EditEmulatorModal from "../components/modals/EditEmulatorModal.vue";
 import InstallModal, { type InstallItem } from "../components/modals/InstallModal.vue";
+import UpdateEmulatorModal from "../components/modals/UpdateEmulatorModal.vue";
 import AlertModal from "../components/ui/AlertModal.vue";
 import Heading from "../components/ui/Heading.vue";
 import PillButton from "../components/ui/PillButton.vue";
 import Spinner from "../components/ui/Spinner.vue";
 import Text from "../components/ui/Text.vue";
 import { formatBytes } from "../lib/format";
+import { useToast } from "../lib/useToast";
 import { useConsoleStore } from "../stores/ConsoleStore";
 import { type Emulator, type ServerEmulator, useEmulatorStore } from "../stores/EmulatorStore";
 import { useGameStore } from "../stores/GameStore";
@@ -23,6 +25,7 @@ const consoleStore = useConsoleStore();
 const emulatorStore = useEmulatorStore();
 const romStore = useRomStore();
 const gameStore = useGameStore();
+const toast = useToast();
 
 const groupedRoms = computed(() => {
     const groups: Record<string, typeof romStore.installedRoms> = {};
@@ -84,6 +87,86 @@ const handleSetDefault = async (id: string) => {
     await emulatorStore.setDefaultEmulator(id);
 };
 
+const syncMode = ref<"update" | "refresh">("update");
+
+const handleRefreshConfig = async (id: string) => {
+    const local = emulatorStore.emulators[id];
+    if (!local) return;
+
+    try {
+        const serverList = await emulatorStore.fetchAllServerEmulators();
+        const server = serverList.find((s) => {
+            return s.source_server === local.source_server && id.endsWith(`-${s.id}`);
+        });
+
+        if (!server) {
+            toast.warning("This emulator is not linked to any active server.");
+            return;
+        }
+
+        pendingUpdateLocal.value = local;
+        pendingUpdateServer.value = server;
+        syncMode.value = "refresh";
+    } catch (e) {
+        toast.error("Failed to fetch server config for comparison.");
+    }
+};
+
+const pendingUpdateLocal = ref<Emulator | null>(null);
+const pendingUpdateServer = ref<ServerEmulator | null>(null);
+
+const handleUpdateClick = (emulator: Emulator) => {
+    if (emulator.id.startsWith("server-")) {
+        pendingUpdateLocal.value = emulator;
+        pendingUpdateServer.value = emulatorStore.updatesAvailable[emulator.id];
+        syncMode.value = "update";
+    }
+};
+
+const cancelUpdate = () => {
+    pendingUpdateLocal.value = null;
+    pendingUpdateServer.value = null;
+};
+
+const confirmUpdate = async (keepConfig: boolean) => {
+    if (!pendingUpdateLocal.value) return;
+
+    if (syncMode.value === "refresh") {
+        if (keepConfig) {
+            cancelUpdate();
+            return;
+        }
+        try {
+            await emulatorStore.refreshEmulatorConfig(pendingUpdateLocal.value.id);
+            toast.success("Configuration refreshed successfully!");
+            emulatorStore.checkForUpdates();
+        } catch (e) {
+            toast.error(`Failed to refresh config: ${e}`);
+        } finally {
+            cancelUpdate();
+        }
+        return;
+    }
+
+    const parts = pendingUpdateLocal.value.id.split("-");
+    const id = parts[parts.length - 1];
+
+    try {
+        await emulatorStore.downloadEmulator(
+            pendingUpdateLocal.value.consoles[0] || "unknown",
+            id,
+            keepConfig,
+            pendingUpdateLocal.value.source_server,
+        );
+        toast.success("Emulator updated successfully!");
+        emulatorStore.checkForUpdates();
+    } catch (e: any) {
+        toast.error(`Failed to update emulator: ${e}`);
+    } finally {
+        cancelUpdate();
+    }
+};
+
 const addCustomEmulator = () => {
     const id = `custom-${Date.now()}`;
     newlyAddedIds.value.add(id);
@@ -133,7 +216,7 @@ const cancelConfirmDownload = () => {
 const downloadFromServer = async (serverEmulator: ServerEmulator) => {
     try {
         const targetConsole = (serverEmulator.consoles && serverEmulator.consoles[0]) || "unknown";
-        await emulatorStore.downloadEmulator(targetConsole, serverEmulator.id);
+        await emulatorStore.downloadEmulator(targetConsole, serverEmulator.id, false, serverEmulator.source_server);
         showDownloadModal.value = false;
         showConfirmDownloadModal.value = false;
         pendingDownloadEmulator.value = null;
@@ -175,12 +258,12 @@ onMounted(async () => {
     if (gameStore.library.length === 0) {
         await gameStore.fetchLibrary();
     }
+    emulatorStore.checkForUpdates();
 });
 </script>
 
 <template>
     <div class="c-manage">
-        <!-- ── Storage section ─────────────────────────────────────────────── -->
         <section class="c-manage__section">
             <div class="c-manage__section-header">
                 <Heading :level="2" color="primary" is-badge>
@@ -211,7 +294,6 @@ onMounted(async () => {
             </div>
         </section>
 
-        <!-- ── Emulators section ───────────────────────────────────────────── -->
         <section class="c-manage__section">
             <div class="c-manage__section-header">
                 <Heading :level="2" color="primary" is-badge>
@@ -223,7 +305,12 @@ onMounted(async () => {
                 </div>
             </div>
 
-            <div v-if="consoleStore.loading || (emulatorStore.loading && !showDownloadModal)" class="c-manage__loading">
+            <div
+                v-if="
+                    (consoleStore.loading || emulatorStore.loading) && Object.keys(emulatorStore.emulators).length === 0
+                "
+                class="c-manage__loading"
+            >
                 <Spinner />
                 <Text>Loading configurations...</Text>
             </div>
@@ -239,14 +326,16 @@ onMounted(async () => {
                     :key="emulator.id"
                     :emulator="emulator"
                     :dir-size="emulatorDirSizes[emulator.id]"
+                    :has-update="!!emulatorStore.updatesAvailable[emulator.id]"
                     @edit="initEdit(emulator)"
                     @delete="promptDelete(emulator.id)"
                     @set-default="handleSetDefault(emulator.id)"
+                    @refresh-config="handleRefreshConfig(emulator.id)"
+                    @update="handleUpdateClick(emulator)"
                 />
             </div>
         </section>
 
-        <!-- ── Modals ──────────────────────────────────────────────────────── -->
         <DownloadEmulatorsModal
             :show="showDownloadModal"
             :server-emulators="serverEmulators"
@@ -280,6 +369,16 @@ onMounted(async () => {
             :emulator-id="editingEmulatorId"
             @close="handleEditClose"
             @save="handleEditSave"
+        />
+
+        <UpdateEmulatorModal
+            :show="!!pendingUpdateLocal"
+            :mode="syncMode"
+            :local-emulator="pendingUpdateLocal"
+            :server-emulator="pendingUpdateServer"
+            :loading="emulatorStore.loading"
+            @close="cancelUpdate"
+            @confirm="confirmUpdate"
         />
     </div>
 </template>

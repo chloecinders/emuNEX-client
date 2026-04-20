@@ -6,6 +6,7 @@ import Heading from "./components/ui/Heading.vue";
 import Spinner from "./components/ui/Spinner.vue";
 import Text from "./components/ui/Text.vue";
 import TitleBar from "./components/ui/TitleBar.vue";
+import Toast from "./components/ui/Toast.vue";
 import DefaultLayout from "./layouts/DefaultLayout.vue";
 import { useControllerNav } from "./lib/useControllerNav";
 import { router } from "./router";
@@ -44,6 +45,7 @@ watch(
 
 <template>
     <TitleBar />
+    <Toast />
 
     <div class="c-app-main">
         <transition name="dim">

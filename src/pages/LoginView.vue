@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { invoke } from "@tauri-apps/api/core";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import { onMounted, ref } from "vue";
+import { openExternalUrl } from "../lib/opener";
 import { addSavedDomain, getDomainStore, getGlobalStore, getSavedDomains, normalizeDomain } from "../lib/store";
 import { router } from "../router";
 import { useAuthStore } from "../stores/AuthStore";
@@ -61,7 +61,7 @@ const handleConnect = async () => {
         authStore.storagePath = resp.storage_path;
 
         const fullUrl = new URL(resp.login_url, normalized).href;
-        await openUrl(fullUrl);
+        await openExternalUrl(fullUrl);
     } catch (err) {
         errorMessage.value = String(err);
     } finally {

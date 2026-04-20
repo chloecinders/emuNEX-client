@@ -5,16 +5,19 @@ import EmulatorCard from "../components/cards/EmulatorCard.vue";
 import DownloadEmulatorsModal from "../components/modals/DownloadEmulatorsModal.vue";
 import EditEmulatorModal from "../components/modals/EditEmulatorModal.vue";
 import InstallModal, { type InstallItem } from "../components/modals/InstallModal.vue";
+import UpdateEmulatorModal from "../components/modals/UpdateEmulatorModal.vue";
 import AlertModal from "../components/ui/AlertModal.vue";
 import Heading from "../components/ui/Heading.vue";
 import PillButton from "../components/ui/PillButton.vue";
 import Spinner from "../components/ui/Spinner.vue";
 import Text from "../components/ui/Text.vue";
+import { useToast } from "../lib/useToast";
 import { useConsoleStore } from "../stores/ConsoleStore";
 import { type Emulator, type ServerEmulator, useEmulatorStore } from "../stores/EmulatorStore";
 
 const emulatorStore = useEmulatorStore();
 const consoleStore = useConsoleStore();
+const toast = useToast();
 const emulatorDirSizes = ref<Record<string, number>>({});
 
 async function refreshDirSizes() {
@@ -30,6 +33,7 @@ onMounted(async () => {
     await consoleStore.fetchConsoles();
     await emulatorStore.fetchEmulators();
     await refreshDirSizes();
+    emulatorStore.checkForUpdates();
 });
 
 const newlyAddedIds = ref<Set<string>>(new Set());
@@ -54,6 +58,86 @@ const handleEditSave = (id: string) => {
 
 const handleSetDefault = async (id: string) => {
     await emulatorStore.setDefaultEmulator(id);
+};
+
+const syncMode = ref<"update" | "refresh">("update");
+
+const handleRefreshConfig = async (id: string) => {
+    const local = emulatorStore.emulators[id];
+    if (!local) return;
+
+    try {
+        const serverList = await emulatorStore.fetchAllServerEmulators();
+        const server = serverList.find((s) => {
+            return s.source_server === local.source_server && id.endsWith(`-${s.id}`);
+        });
+
+        if (!server) {
+            toast.warning("This emulator is not linked to any active server.");
+            return;
+        }
+
+        pendingUpdateLocal.value = local;
+        pendingUpdateServer.value = server;
+        syncMode.value = "refresh";
+    } catch (e) {
+        toast.error("Failed to fetch server config for comparison.");
+    }
+};
+
+const pendingUpdateLocal = ref<Emulator | null>(null);
+const pendingUpdateServer = ref<ServerEmulator | null>(null);
+
+const handleUpdateClick = (emulator: Emulator) => {
+    if (emulator.id.startsWith("server-")) {
+        pendingUpdateLocal.value = emulator;
+        pendingUpdateServer.value = emulatorStore.updatesAvailable[emulator.id];
+        syncMode.value = "update";
+    }
+};
+
+const cancelUpdate = () => {
+    pendingUpdateLocal.value = null;
+    pendingUpdateServer.value = null;
+};
+
+const confirmUpdate = async (keepConfig: boolean) => {
+    if (!pendingUpdateLocal.value) return;
+
+    if (syncMode.value === "refresh") {
+        if (keepConfig) {
+            cancelUpdate();
+            return;
+        }
+        try {
+            await emulatorStore.refreshEmulatorConfig(pendingUpdateLocal.value.id);
+            toast.success("Configuration refreshed successfully!");
+            emulatorStore.checkForUpdates();
+        } catch (e) {
+            toast.error(`Failed to refresh config: ${e}`);
+        } finally {
+            cancelUpdate();
+        }
+        return;
+    }
+
+    const parts = pendingUpdateLocal.value.id.split("-");
+    const id = parts[parts.length - 1];
+
+    try {
+        await emulatorStore.downloadEmulator(
+            pendingUpdateLocal.value.consoles[0] || "unknown",
+            id,
+            keepConfig,
+            pendingUpdateLocal.value.source_server,
+        );
+        toast.success("Emulator updated successfully!");
+        emulatorStore.checkForUpdates();
+    } catch (e: any) {
+        toast.error(`Failed to update emulator: ${e}`);
+    } finally {
+        cancelUpdate();
+    }
 };
 
 const addCustomEmulator = () => {
@@ -106,7 +190,7 @@ const cancelConfirmDownload = () => {
 const downloadFromServer = async (serverEmulator: ServerEmulator) => {
     try {
         const targetConsole = (serverEmulator.consoles && serverEmulator.consoles[0]) || "unknown";
-        await emulatorStore.downloadEmulator(targetConsole, serverEmulator.id);
+        await emulatorStore.downloadEmulator(targetConsole, serverEmulator.id, false, serverEmulator.source_server);
         showDownloadModal.value = false;
         showConfirmDownloadModal.value = false;
         pendingDownloadEmulator.value = null;
@@ -157,7 +241,7 @@ const confirmDelete = async () => {
         </div>
 
         <div
-            v-if="consoleStore.loading || (emulatorStore.loading && !showDownloadModal)"
+            v-if="(consoleStore.loading || emulatorStore.loading) && Object.keys(emulatorStore.emulators).length === 0"
             class="c-emulator-management__loading"
         >
             <Spinner />
@@ -175,9 +259,12 @@ const confirmDelete = async () => {
                     :key="emulator.id"
                     :emulator="emulator"
                     :dir-size="emulatorDirSizes[emulator.id]"
+                    :has-update="!!emulatorStore.updatesAvailable[emulator.id]"
                     @edit="initEdit(emulator)"
                     @delete="promptDelete(emulator.id)"
                     @set-default="handleSetDefault(emulator.id)"
+                    @refresh-config="handleRefreshConfig(emulator.id)"
+                    @update="handleUpdateClick(emulator)"
                 />
             </div>
         </div>
@@ -215,6 +302,16 @@ const confirmDelete = async () => {
             :emulator-id="editingEmulatorId"
             @close="handleEditClose"
             @save="handleEditSave"
+        />
+
+        <UpdateEmulatorModal
+            :show="!!pendingUpdateLocal"
+            :mode="syncMode"
+            :local-emulator="pendingUpdateLocal"
+            :server-emulator="pendingUpdateServer"
+            :loading="emulatorStore.loading"
+            @close="cancelUpdate"
+            @confirm="confirmUpdate"
         />
     </div>
 </template>

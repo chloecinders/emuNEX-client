@@ -1,22 +1,46 @@
 <script setup lang="ts">
-import { CheckCircle, Pencil, Trash2 } from "lucide-vue-next";
+import { ArrowDownToLine, CheckCircle, MoreVertical, Pencil, RefreshCw, Trash2 } from "lucide-vue-next";
+import { onMounted, onUnmounted, ref } from "vue";
 import { formatBytes } from "../../lib/format";
 import type { Emulator } from "../../stores/EmulatorStore";
 import Heading from "../ui/Heading.vue";
 import IconButton from "../ui/IconButton.vue";
 import Text from "../ui/Text.vue";
-import Tooltip from "../ui/Tooltip.vue";
 
 defineProps<{
     emulator: Emulator;
     dirSize?: number;
+    hasUpdate?: boolean;
 }>();
 
-const emit = defineEmits<{
-    (e: "edit"): void;
-    (e: "delete"): void;
-    (e: "setDefault"): void;
-}>();
+const emit = defineEmits(["edit", "delete", "setDefault", "refreshConfig", "update"]);
+
+const showMenu = ref(false);
+
+const toggleMenu = (e: Event) => {
+    e.stopPropagation();
+    showMenu.value = !showMenu.value;
+};
+
+const closeMenu = (e: Event) => {
+    const target = e.target as HTMLElement;
+    if (!target.closest(".c-emulator-card__actions")) {
+        showMenu.value = false;
+    }
+};
+
+onMounted(() => {
+    window.addEventListener("click", closeMenu);
+});
+
+onUnmounted(() => {
+    window.removeEventListener("click", closeMenu);
+});
+
+const handleAction = (action: "edit" | "delete" | "setDefault" | "refreshConfig") => {
+    emit(action);
+    showMenu.value = false;
+};
 </script>
 
 <template>
@@ -24,6 +48,7 @@ const emit = defineEmits<{
         class="c-emulator-card"
         :class="{
             'c-emulator-card--default': emulator.is_default,
+            'c-emulator-card--menu-open': showMenu,
         }"
         tabindex="0"
         role="button"
@@ -38,27 +63,54 @@ const emit = defineEmits<{
                         <CheckCircle :size="14" /> Default
                     </div>
                 </div>
-                <Text v-if="dirSize" variant="muted" size="sm">{{ formatBytes(dirSize) }}</Text>
+                <div class="c-emulator-card__meta">
+                    <Text v-if="dirSize" variant="muted" size="sm">{{ formatBytes(dirSize) }}</Text>
+                    <Text v-if="emulator.source_server" variant="muted" size="sm">
+                        {{ dirSize ? " • " : "" }}
+                        {{ emulator.source_server.replace(/^https?:\/\//, "").replace(/\/$/, "") }}
+                    </Text>
+                    <Text v-if="emulator.version" variant="muted" size="sm">
+                        {{ dirSize || emulator.source_server ? " • " : "" }}
+                        v{{ emulator.version }}
+                    </Text>
+                </div>
             </div>
 
             <div class="c-emulator-card__actions">
-                <Tooltip v-if="!emulator.is_default" text="Make Default">
-                    <IconButton @click="emit('setDefault')">
-                        <CheckCircle />
-                    </IconButton>
-                </Tooltip>
+                <IconButton v-if="hasUpdate" @click.stop="emit('update')" class="c-emulator-card__update-icon">
+                    <ArrowDownToLine />
+                </IconButton>
+                <IconButton @click="toggleMenu" :class="{ 'is-active': showMenu }">
+                    <MoreVertical />
+                </IconButton>
 
-                <Tooltip text="Edit">
-                    <IconButton @click="emit('edit')">
-                        <Pencil />
-                    </IconButton>
-                </Tooltip>
-
-                <Tooltip text="Delete">
-                    <IconButton color="red" @click="emit('delete')">
-                        <Trash2 />
-                    </IconButton>
-                </Tooltip>
+                <transition name="fade">
+                    <div v-if="showMenu" class="c-emulator-card__menu">
+                        <button
+                            v-if="!emulator.is_default"
+                            class="c-emulator-card__menu-item"
+                            @click="handleAction('setDefault')"
+                        >
+                            <CheckCircle :size="16" /> Make Default
+                        </button>
+                        <button
+                            v-if="!emulator.id.startsWith('custom-')"
+                            class="c-emulator-card__menu-item"
+                            @click="handleAction('refreshConfig')"
+                        >
+                            <RefreshCw :size="16" /> Refresh Config
+                        </button>
+                        <button class="c-emulator-card__menu-item" @click="handleAction('edit')">
+                            <Pencil :size="16" /> Edit
+                        </button>
+                        <button
+                            class="c-emulator-card__menu-item c-emulator-card__menu-item--danger"
+                            @click="handleAction('delete')"
+                        >
+                            <Trash2 :size="16" /> Delete
+                        </button>
+                    </div>
+                </transition>
             </div>
         </div>
 
@@ -96,6 +148,10 @@ const emit = defineEmits<{
         background: var(--color-surface-variant);
     }
 
+    &--menu-open {
+        z-index: 100;
+    }
+
     &__header {
         display: flex;
         justify-content: space-between;
@@ -121,8 +177,24 @@ const emit = defineEmits<{
         display: flex;
         flex-direction: column;
         align-items: flex-start;
-        gap: var(--spacing-xs);
+        gap: 4px;
         flex: 1;
+    }
+
+    &__meta {
+        display: flex;
+        align-items: center;
+        gap: 2px;
+    }
+
+    &__update-icon {
+        color: var(--color-primary);
+        background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+
+        &:hover {
+            background: var(--color-primary);
+            color: var(--color-surface);
+        }
     }
 
     &__name {
@@ -137,6 +209,58 @@ const emit = defineEmits<{
         gap: var(--spacing-xs);
         flex-wrap: wrap;
         justify-content: flex-end;
+        position: relative;
+    }
+
+    &__menu {
+        position: absolute;
+        top: 100%;
+        right: 0;
+        margin-top: 4px;
+        background: var(--color-surface);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-md);
+        box-shadow: var(--shadow-lg);
+        min-width: 160px;
+        display: flex;
+        flex-direction: column;
+        padding: 4px;
+        z-index: 100;
+    }
+
+    &__menu-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        font-family: inherit;
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: var(--color-text);
+        background: transparent;
+        border: none;
+        border-radius: var(--radius-sm);
+        cursor: pointer;
+        text-align: left;
+        transition:
+            background-color 0.15s,
+            color 0.15s;
+
+        &:hover,
+        &:focus {
+            background: var(--color-surface-variant);
+            outline: none;
+        }
+
+        &--danger {
+            color: var(--color-danger);
+        }
+
+        &--danger:hover,
+        &--danger:focus {
+            background: color-mix(in srgb, var(--color-danger) 15%, transparent);
+            color: var(--color-danger);
+        }
     }
 
     &__body {

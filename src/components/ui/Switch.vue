@@ -20,7 +20,16 @@ const toggle = () => {
 </script>
 
 <template>
-    <div class="c-switch-field" :class="{ 'c-switch-field--disabled': disabled }" @click="toggle">
+    <div
+        class="c-switch-field"
+        :class="{ 'c-switch-field--disabled': disabled }"
+        role="switch"
+        :aria-checked="modelValue"
+        :tabindex="disabled ? -1 : 0"
+        @click="toggle"
+        @keydown.enter.prevent="toggle"
+        @keydown.space.prevent="toggle"
+    >
         <label v-if="label" class="c-switch-field__label">{{ label }}</label>
 
         <div class="c-switch" :class="{ 'c-switch--active': modelValue }">
@@ -41,7 +50,8 @@ const toggle = () => {
     gap: var(--spacing-md);
     cursor: pointer;
     user-select: none;
-    padding: var(--spacing-sm) 0;
+    padding: var(--spacing-sm) var(--spacing-md);
+    border-radius: var(--radius-full);
     transition: opacity 0.2s ease;
 
     &--disabled {
@@ -123,7 +133,7 @@ const toggle = () => {
         .c-switch__track {
             border-color: var(--color-primary-light);
         }
-        
+
         &.c-switch--active .c-switch__track {
             filter: brightness(110%);
         }

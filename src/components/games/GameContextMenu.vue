@@ -1,5 +1,6 @@
 <script lang="ts" setup>
 import { computed, onMounted, onUnmounted, ref } from "vue";
+import { useToast } from "../../lib/useToast";
 import { useGameStore } from "../../stores/GameStore";
 import { useRomStore } from "../../stores/RomStore";
 import ReportGameIssue from "../modals/ReportGameIssue.vue";
@@ -10,6 +11,7 @@ import Text from "../ui/Text.vue";
 
 const gameStore = useGameStore();
 const romStore = useRomStore();
+const toast = useToast();
 
 const show = ref(false);
 const x = ref(0);
@@ -71,7 +73,7 @@ const confirmDeleteGame = async () => {
 
     const game = await gameStore.fetchGame(gameId.value);
     if (!game) {
-        alert("Could not load game metadata to uninstall.");
+        toast.warning("Could not load game metadata to uninstall.");
         showDeleteModal.value = false;
         return;
     }
@@ -83,7 +85,7 @@ const confirmDeleteGame = async () => {
         }
         await gameStore.fetchInstalledGames();
     } catch (e) {
-        alert("Failed to delete game: " + e);
+        toast.error("Failed to delete game: " + e);
     }
 
     showDeleteModal.value = false;

@@ -1,22 +1,22 @@
 <script setup lang="ts">
 import { getVersion } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
-import { relaunch } from "@tauri-apps/plugin-process";
-import { check, type Update } from "@tauri-apps/plugin-updater";
-import { Activity, Download, FolderOpen, FolderSearch, RefreshCw, Terminal } from "lucide-vue-next";
+import { Activity, Download, FolderOpen, FolderSearch, Pipette, RefreshCw, Terminal } from "lucide-vue-next";
 import { onMounted, onUnmounted, ref } from "vue";
 import Button from "../components/ui/Button.vue";
 import Heading from "../components/ui/Heading.vue";
 import Switch from "../components/ui/Switch.vue";
 import Text from "../components/ui/Text.vue";
+import { useToast } from "../lib/useToast";
 import { useDevStore } from "../stores/DevStore";
 import { useThemeStore } from "../stores/ThemeStore";
+import { useUpdateStore } from "../stores/UpdateStore";
 import { useUserStore } from "../stores/UserStore";
 
 const userStore = useUserStore();
 const themeStore = useThemeStore();
 const devStore = useDevStore();
-const isChecking = ref(false);
+const updateStore = useUpdateStore();
 
 const currentDataDir = ref<string | null>(null);
 const isMigrating = ref(false);
@@ -57,14 +57,8 @@ const handleOpenDataDir = async () => {
         console.error("Failed to open data dir:", e);
     }
 };
-const isUpdating = ref(false);
-const foundUpdate = ref<Update | null>(null);
-const updateStatus = ref<{ message: string; type: "success" | "error" | "info" | null }>({
-    message: "",
-    type: null,
-});
+const toast = useToast();
 const currentVersion = ref<string>("");
-const konamiToast = ref<string | null>(null);
 
 const KONAMI = [
     "ArrowUp",
@@ -87,8 +81,7 @@ const handleKeydown = (e: KeyboardEvent) => {
         if (konamiProgress.value.length === KONAMI.length) {
             konamiProgress.value = [];
             devStore.isDevMode = !devStore.isDevMode;
-            konamiToast.value = devStore.isDevMode ? "Developer Mode Enabled" : "Developer Mode Disabled";
-            setTimeout(() => (konamiToast.value = null), 3000);
+            toast.info(devStore.isDevMode ? "Developer Mode Enabled" : "Developer Mode Disabled");
         }
     } else {
         konamiProgress.value = e.key === KONAMI[0] ? [e.key] : [];
@@ -115,51 +108,6 @@ const openRequestViewer = () => {
     });
 };
 
-const checkForUpdates = async () => {
-    isChecking.value = true;
-    updateStatus.value = { message: "Checking for latest client version...", type: "info" };
-
-    try {
-        const update = await check();
-        if (update) {
-            foundUpdate.value = update;
-            updateStatus.value = {
-                message: `New version ${update.version} available!`,
-                type: "success",
-            };
-        } else {
-            foundUpdate.value = null;
-            updateStatus.value = { message: "You are running the latest version.", type: "success" };
-        }
-    } catch (e) {
-        console.error("Failed to check for updates:", e);
-        updateStatus.value = { message: "Failed to check for updates. Please try again later.", type: "error" };
-    } finally {
-        isChecking.value = false;
-    }
-};
-
-const installUpdate = async () => {
-    if (!foundUpdate.value) return;
-
-    isUpdating.value = true;
-    updateStatus.value = { message: "Downloading and installing update...", type: "info" };
-
-    try {
-        // we have to fetch the update again due to a typescript error
-        const update = await check();
-        await update?.downloadAndInstall();
-        updateStatus.value = { message: "Update installed! Relaunching...", type: "success" };
-        setTimeout(async () => {
-            await relaunch();
-        }, 2000);
-    } catch (e) {
-        console.error("Failed to install update:", e);
-        updateStatus.value = { message: "Failed to install update.", type: "error" };
-        isUpdating.value = false;
-    }
-};
-
 onMounted(async () => {
     if (!userStore.user) {
         await userStore.fetchUser();
@@ -172,6 +120,10 @@ onMounted(async () => {
     }
 
     await loadDataDir();
+
+    if (!updateStore.hasChecked) {
+        updateStore.checkForUpdates();
+    }
 
     window.addEventListener("keydown", handleKeydown);
 });
@@ -202,17 +154,22 @@ onUnmounted(() => {
                     </div>
 
                     <div class="c-settings__actions">
-                        <Button color="grey" size="sm" :disabled="isChecking || isUpdating" @click="checkForUpdates">
-                            <RefreshCw :size="16" :class="{ 'c-settings__spin': isChecking }" />
+                        <Button
+                            color="grey"
+                            size="sm"
+                            :disabled="updateStore.isChecking || updateStore.isUpdating"
+                            @click="updateStore.checkForUpdates()"
+                        >
+                            <RefreshCw :size="16" :class="{ 'c-settings__spin': updateStore.isChecking }" />
                             <span>Check for Updates</span>
                         </Button>
 
                         <Button
-                            v-if="foundUpdate"
+                            v-if="updateStore.foundUpdate"
                             color="primary"
                             size="sm"
-                            :disabled="isUpdating"
-                            @click="installUpdate"
+                            :disabled="updateStore.isUpdating"
+                            @click="updateStore.installUpdate()"
                         >
                             <Download :size="16" />
                             <span>Install Updates</span>
@@ -221,11 +178,11 @@ onUnmounted(() => {
 
                     <Transition name="fade">
                         <div
-                            v-if="updateStatus.message"
+                            v-if="updateStore.updateStatus.message"
                             class="c-settings__status"
-                            :class="`c-settings__status--${updateStatus.type}`"
+                            :class="`c-settings__status--${updateStore.updateStatus.type}`"
                         >
-                            <Text size="sm">{{ updateStatus.message }}</Text>
+                            <Text size="sm">{{ updateStore.updateStatus.message }}</Text>
                         </div>
                     </Transition>
                 </div>
@@ -236,6 +193,53 @@ onUnmounted(() => {
 
                 <div class="c-settings__card">
                     <Switch v-model="themeStore.isDark" label="Dark Mode" />
+
+                    <div class="c-settings__divider" />
+
+                    <div class="c-settings__description-wrap" style="margin-bottom: var(--spacing-md)">
+                        <Heading :level="3">Accent Color</Heading>
+                    </div>
+
+                    <div class="c-accent-swatches">
+                        <button
+                            v-for="preset in themeStore.accentPresets"
+                            :key="preset.id"
+                            class="c-accent-swatch"
+                            :class="{ 'c-accent-swatch--active': themeStore.accentId === preset.id }"
+                            :style="{ background: `oklch(0.59 ${preset.chroma} ${preset.hue})` }"
+                            :title="preset.label"
+                            :aria-label="preset.label"
+                            :aria-pressed="themeStore.accentId === preset.id"
+                            @click="themeStore.setAccent(preset.id)"
+                        />
+
+                        <button
+                            class="c-accent-swatch c-accent-swatch--custom"
+                            :class="{ 'c-accent-swatch--active': themeStore.accentId === 'custom' }"
+                            :style="{ background: `oklch(0.59 0.15 ${themeStore.customHue})` }"
+                            title="Custom Color"
+                            aria-label="Custom Color"
+                            :aria-pressed="themeStore.accentId === 'custom'"
+                            @click="themeStore.setAccent('custom')"
+                        >
+                            <Pipette :size="14" />
+                        </button>
+                    </div>
+
+                    <div v-if="themeStore.accentId === 'custom'" class="c-custom-accent">
+                        <div class="c-custom-accent__header">
+                            <Text size="sm" variant="muted">Hue: {{ themeStore.customHue }}°</Text>
+                        </div>
+                        <input
+                            type="range"
+                            min="0"
+                            max="360"
+                            step="1"
+                            :value="themeStore.customHue"
+                            class="c-hue-slider"
+                            @input="(e) => themeStore.setCustomHue(Number((e.target as HTMLInputElement).value))"
+                        />
+                    </div>
                 </div>
             </section>
 
@@ -306,12 +310,6 @@ onUnmounted(() => {
                 </section>
             </Transition>
         </div>
-
-        <Transition name="konami-toast">
-            <div v-if="konamiToast" class="c-settings__konami-toast">
-                {{ konamiToast }}
-            </div>
-        </Transition>
     </div>
 </template>
 
@@ -444,19 +442,100 @@ onUnmounted(() => {
         font-variant-numeric: tabular-nums;
     }
 
-    &__konami-toast {
-        position: fixed;
-        bottom: 24px;
-        right: 24px;
-        background: var(--color-surface);
-        border: 1px solid var(--color-border);
-        border-radius: var(--radius-lg);
-        padding: 12px 18px;
-        font-size: 0.85rem;
-        font-weight: 600;
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
-        z-index: 9999;
-        pointer-events: none;
+    &__divider {
+        height: 1px;
+        background: var(--color-border);
+        margin: var(--spacing-lg) 0;
+        opacity: 0.5;
+    }
+}
+
+.c-accent-swatches {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spacing-md);
+}
+
+.c-accent-swatch {
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-full);
+    border: 3px solid transparent;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    padding: 0;
+
+    &:hover {
+        transform: scale(1.15);
+    }
+
+    &--active {
+        border-color: white;
+        box-shadow:
+            0 0 0 2px var(--color-primary),
+            0 0 15px rgba(var(--color-primary-rgb), 0.4);
+        transform: scale(1.1);
+    }
+
+    &--custom {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+    }
+
+    body.is-controller-navigating &:focus {
+        outline-offset: 4px;
+        transform: scale(1.2);
+    }
+}
+
+.c-custom-accent {
+    margin-top: var(--spacing-lg);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+
+    &__header {
+        display: flex;
+        justify-content: flex-end;
+    }
+}
+
+.c-hue-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 8px;
+    border-radius: var(--radius-full);
+    background: linear-gradient(
+        to right,
+        oklch(0.6 0.15 0),
+        oklch(0.6 0.15 60),
+        oklch(0.6 0.15 120),
+        oklch(0.6 0.15 180),
+        oklch(0.6 0.15 240),
+        oklch(0.6 0.15 300),
+        oklch(0.6 0.15 360)
+    );
+    outline: none;
+
+    &::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: white;
+        border: 2px solid var(--color-primary);
+        cursor: pointer;
+        box-shadow: var(--shadow-sm);
+        transition: transform 0.15s ease;
+
+        &:hover {
+            transform: scale(1.2);
+        }
     }
 }
 
@@ -476,21 +555,5 @@ onUnmounted(() => {
 .fade-enter-from,
 .fade-leave-to {
     opacity: 0;
-}
-
-.konami-toast-enter-active {
-    transition:
-        opacity 0.3s ease,
-        transform 0.3s ease;
-}
-.konami-toast-leave-active {
-    transition:
-        opacity 0.4s ease,
-        transform 0.4s ease;
-}
-.konami-toast-enter-from,
-.konami-toast-leave-to {
-    opacity: 0;
-    transform: translateY(12px);
 }
 </style>

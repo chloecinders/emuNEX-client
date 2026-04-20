@@ -4,7 +4,7 @@ import { useControllerStore } from "../stores/ControllerStore";
 import { useGameStore } from "../stores/GameStore";
 
 const FOCUSABLE_SEL =
-    'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [role="switch"]:not([tabindex="-1"]), [tabindex]:not([tabindex="-1"])';
 const CONTENT_SEL = ".c-shell__content";
 const NAV_SEL = ".c-shell__top-nav-link";
 const CTRL_CLASS = "is-controller-navigating";
@@ -55,7 +55,14 @@ function getFocusableElements(): HTMLElement[] {
     }
 
     const shell = document.querySelector<HTMLElement>(".c-shell") ?? document.body;
-    return Array.from(shell.querySelectorAll<HTMLElement>(FOCUSABLE_SEL)).filter(isVisible);
+    return Array.from(shell.querySelectorAll<HTMLElement>(FOCUSABLE_SEL))
+        .filter(isVisible)
+        .filter(el => {
+            const inNav = el.closest(".c-shell__top-nav");
+            const inPanel = el.closest(".c-bottom-panel");
+            const inSearch = el.closest(".c-search");
+            return !inNav && !inPanel && !inSearch;
+        });
 }
 
 function getNavLinks(): HTMLElement[] {
@@ -102,17 +109,31 @@ function getDistance(rect1: DOMRect, rect2: DOMRect, direction: string): number 
     const dy = p2.y - p1.y;
 
     if (direction === "up" || direction === "down") {
-        return Math.sqrt(dx * dx + (dy * dy * 0.05));
+        return Math.sqrt((dx * dx * 0.15) + dy * dy);
     } else {
-        return Math.sqrt((dx * dx * 0.05) + dy * dy);
+        return Math.sqrt(dx * dx + (dy * dy * 0.15));
     }
 }
 
-function moveFocus(direction: string) {
+function moveFocus(direction: string, isRepeat = false) {
     const active = document.activeElement as HTMLElement | null;
     if (!active || active === document.body) {
         focusFirstInContent();
         return;
+    }
+
+    if (active instanceof HTMLInputElement && active.type === "range") {
+        if (direction === "left" || direction === "right") {
+            const turbo = isRepeat ? 10 : 1;
+            for (let i = 0; i < turbo; i++) {
+                if (direction === "left") active.stepDown();
+                else active.stepUp();
+            }
+
+            active.dispatchEvent(new Event("input", { bubbles: true }));
+            active.dispatchEvent(new Event("change", { bubbles: true }));
+            return;
+        }
     }
 
     const rect = active.getBoundingClientRect();
@@ -279,8 +300,8 @@ const NAV_ACTIONS = {
 
 type NavDir = keyof typeof NAV_ACTIONS;
 
-const INITIAL_DELAY = 380;
-const REPEAT_MS = 110;
+const INITIAL_DELAY = 300;
+const REPEAT_MS = 50;
 
 export function useControllerNav() {
     const store = useControllerStore();
@@ -308,13 +329,13 @@ export function useControllerNav() {
         return (NAV_ACTIONS[dir] as readonly string[]).some((a) => !!store.pressedActions[a]);
     }
 
-    function act(dir: NavDir) {
+    function act(dir: NavDir, isRepeat = false) {
         switch (dir) {
             case "up":
             case "down":
             case "left":
             case "right":
-                moveFocus(dir);
+                moveFocus(dir, isRepeat);
                 break;
             case "confirm":
                 clickFocused();
@@ -387,15 +408,16 @@ export function useControllerNav() {
         stopRepeat(dir);
         repeatTimers[dir] = setTimeout(() => {
             if (!isPressed(dir)) return;
-            act(dir);
+            act(dir, true);
             repeatIntervals[dir] = setInterval(() => {
                 if (!isPressed(dir)) { stopRepeat(dir); return; }
-                act(dir);
+                act(dir, true);
             }, REPEAT_MS);
         }, INITIAL_DELAY);
     }
 
     let lastNavEnabled = true;
+    let syncFrames = 0;
     let rafHandle: number | null = null;
 
     function tick() {
@@ -403,22 +425,27 @@ export function useControllerNav() {
 
         if (isEnabled) {
             if (!lastNavEnabled) {
+                syncFrames = 10;
+            }
+
+            if (syncFrames > 0) {
                 for (const dir of Object.keys(NAV_ACTIONS) as NavDir[]) {
                     prev[dir] = isPressed(dir);
                 }
-            }
+                syncFrames--;
+            } else {
+                for (const dir of Object.keys(NAV_ACTIONS) as NavDir[]) {
+                    const now = isPressed(dir);
+                    const was = prev[dir];
 
-            for (const dir of Object.keys(NAV_ACTIONS) as NavDir[]) {
-                const now = isPressed(dir);
-                const was = prev[dir];
-
-                if (now && !was) {
-                    act(dir);
-                    startRepeat(dir);
-                } else if (!now && was) {
-                    stopRepeat(dir);
+                    if (now && !was) {
+                        act(dir);
+                        startRepeat(dir);
+                    } else if (!now && was) {
+                        stopRepeat(dir);
+                    }
+                    prev[dir] = now;
                 }
-                prev[dir] = now;
             }
         } else {
             const actions = store.pressedActions;

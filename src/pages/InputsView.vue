@@ -2,16 +2,19 @@
 /* WARNING: THIS FILE IS A MESS, BLAME CONTROLLER BUTTON DESIGNERS!!! */
 
 import { invoke } from "@tauri-apps/api/core";
-import { Check, Gamepad2, Pencil } from "lucide-vue-next";
+import { Check, Gamepad2, Pencil, Play, Plus, Square, Trash2 } from "lucide-vue-next";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import Button from "../components/ui/Button.vue";
 import Heading from "../components/ui/Heading.vue";
 import IconButton from "../components/ui/IconButton.vue";
 import Select from "../components/ui/Select.vue";
 import Switch from "../components/ui/Switch.vue";
+import Tooltip from "../components/ui/Tooltip.vue";
 import { useControllerStore } from "../stores/ControllerStore";
 
 const listeningFor = ref<string | null>(null);
+const isSequenceActive = ref(false);
+const sequenceIndex = ref(-1);
 const isApplying = ref(false);
 const isSaving = ref(false);
 const consoleFilter = ref("all");
@@ -250,6 +253,49 @@ const createScheme = () => {
     activeSchemeId.value = id;
 };
 
+const visibleKeys = computed(() => {
+    const keys = [
+        "DPad-Up",
+        "DPad-Down",
+        "DPad-Left",
+        "DPad-Right",
+        "Y",
+        "X",
+        "B",
+        "A",
+        "L",
+        "R",
+        "LT",
+        "RT",
+        "Select",
+        "Start",
+        "Home",
+        "LS Click",
+        "RS Click",
+        "LS Up",
+        "LS Down",
+        "LS Left",
+        "LS Right",
+        "RS Up",
+        "RS Down",
+        "RS Left",
+        "RS Right",
+    ];
+    return keys.filter(isButtonVisible);
+});
+
+const startSequenceBind = () => {
+    isSequenceActive.value = true;
+    sequenceIndex.value = 0;
+    listenForInput(visibleKeys.value[0]);
+};
+
+const stopSequenceBind = () => {
+    isSequenceActive.value = false;
+    sequenceIndex.value = -1;
+    stopListening(false);
+};
+
 const deleteScheme = () => {
     if (!activeSchemeId.value || activeSchemeId.value === controllerStore.EMUNEX_ID) return;
     controllerStore.schemes = controllerStore.schemes.filter((s) => s.id !== activeSchemeId.value);
@@ -281,6 +327,7 @@ const setEmulatorSchemeId = (emuId: string, val: string) => {
 const isRenamingScheme = ref(false);
 const renameSchemeValue = ref("");
 const ignoredInitialInputs = ref<Set<string>>(new Set());
+const isWaitingForRelease = ref(false);
 
 const startRename = () => {
     if (!activeScheme.value) return;
@@ -302,6 +349,7 @@ const AXIS_THRESHOLD = 0.5;
 
 const formatMapping = (val: string) => {
     if (!val || val === "Unmapped" || val === "...") return val;
+
     if (val.startsWith("Kbd.")) {
         const code = val.slice(4);
         if (code.startsWith("Key")) return code.slice(3);
@@ -375,6 +423,26 @@ const pollGamepad = () => {
     if (!listeningFor.value) return;
 
     const gamepads = navigator.getGamepads();
+
+    if (isWaitingForRelease.value) {
+        let anyPressed = false;
+        for (const gamepad of gamepads) {
+            if (!gamepad) continue;
+            if (gamepad.buttons.some((b) => b.pressed)) anyPressed = true;
+            if (gamepad.axes.some((a) => Math.abs(a) > AXIS_THRESHOLD)) anyPressed = true;
+            if (anyPressed) break;
+        }
+
+        if (heldKeyboardKeys.value.size > 0) anyPressed = true;
+
+        if (!anyPressed) {
+            finishStop();
+        } else {
+            pollFrame = requestAnimationFrame(pollGamepad);
+        }
+        return;
+    }
+
     let mapped = false;
 
     for (const gamepad of gamepads) {
@@ -413,7 +481,7 @@ const pollGamepad = () => {
     }
 };
 
-const stopListening = () => {
+const stopListening = (shouldWait = true) => {
     if (pollFrame) {
         cancelAnimationFrame(pollFrame);
         pollFrame = null;
@@ -422,21 +490,46 @@ const stopListening = () => {
         document.removeEventListener("keydown", keyboardHandler);
         keyboardHandler = null;
     }
+
+    if (shouldWait) {
+        isWaitingForRelease.value = true;
+        pollFrame = requestAnimationFrame(pollGamepad);
+    } else {
+        finishStop();
+    }
+};
+
+const finishStop = () => {
+    if (pollFrame) cancelAnimationFrame(pollFrame);
+    pollFrame = null;
+    isWaitingForRelease.value = false;
     listeningFor.value = null;
     pressedKeys.value = {};
 
-    setTimeout(() => {
-        controllerStore.isNavEnabled = true;
-    }, 300);
+    if (isSequenceActive.value && sequenceIndex.value + 1 < visibleKeys.value.length) {
+        sequenceIndex.value++;
+        listenForInput(visibleKeys.value[sequenceIndex.value]);
+        return;
+    }
+
+    isSequenceActive.value = false;
+    sequenceIndex.value = -1;
+    controllerStore.isNavEnabled = true;
 };
 
 const listenForInput = (key: string) => {
-    stopListening();
+    if (pollFrame) cancelAnimationFrame(pollFrame);
+    pollFrame = null;
+    if (keyboardHandler) document.removeEventListener("keydown", keyboardHandler);
+    keyboardHandler = null;
+    isWaitingForRelease.value = false;
+
     if (!activeScheme.value) return;
     controllerStore.isNavEnabled = false;
     listeningFor.value = key;
 
     ignoredInitialInputs.value.clear();
+
     const gamepads = navigator.getGamepads();
     for (const gamepad of gamepads) {
         if (!gamepad) continue;
@@ -451,14 +544,21 @@ const listenForInput = (key: string) => {
         }
     }
 
+    for (const code of heldKeyboardKeys.value) {
+        ignoredInitialInputs.value.add(`Kbd.${code}`);
+    }
+
     activeScheme.value.mappings[key] = "...";
 
     keyboardHandler = (e: KeyboardEvent) => {
+        if (ignoredInitialInputs.value.has(`Kbd.${e.code}`)) return;
         e.preventDefault();
+
         if (e.code === "Escape") {
             stopListening();
             return;
         }
+
         if (!listeningFor.value || !activeScheme.value) return;
         activeScheme.value.mappings[listeningFor.value] = `Kbd.${e.code}`;
         stopListening();
@@ -508,6 +608,7 @@ const handleGlobalKeyDown = (e: KeyboardEvent) => {
 
 const handleGlobalKeyUp = (e: KeyboardEvent) => {
     heldKeyboardKeys.value.delete(e.code);
+    ignoredInitialInputs.value.delete(`Kbd.${e.code}`);
 };
 
 onMounted(async () => {
@@ -591,14 +692,14 @@ const applySchemeToEmulator = async (emulatorId: string) => {
                                     placeholder="Select scheme..."
                                     @update:model-value="activeSchemeId = $event"
                                 />
-                                <IconButton
-                                    class="c-scheme-icon-btn"
-                                    title="Rename scheme"
-                                    @click="startRename"
-                                    :disabled="activeSchemeId === controllerStore.EMUNEX_ID"
+                                <Tooltip
+                                    text="Rename Scheme"
+                                    v-if="activeSchemeId && activeSchemeId !== controllerStore.EMUNEX_ID"
                                 >
-                                    <Pencil :size="18" />
-                                </IconButton>
+                                    <IconButton class="c-scheme-icon-btn" @click="startRename">
+                                        <Pencil :size="18" />
+                                    </IconButton>
+                                </Tooltip>
                             </template>
                             <template v-else>
                                 <input
@@ -609,20 +710,39 @@ const applySchemeToEmulator = async (emulatorId: string) => {
                                     @keydown.escape="isRenamingScheme = false"
                                     autofocus
                                 />
-                                <IconButton class="c-scheme-icon-btn" title="Save name" @click="saveRename">
-                                    <Check :size="18" />
-                                </IconButton>
+                                <Tooltip text="Save Name">
+                                    <IconButton class="c-scheme-icon-btn" @click="saveRename">
+                                        <Check :size="18" />
+                                    </IconButton>
+                                </Tooltip>
                             </template>
-                            <div class="c-scheme-btns">
-                                <Button @click="createScheme">New Scheme</Button>
-                                <Button
-                                    @click="deleteScheme"
-                                    color="red"
-                                    :disabled="activeSchemeId === controllerStore.EMUNEX_ID"
-                                >
-                                    Delete
-                                </Button>
-                            </div>
+
+                            <Tooltip text="New Scheme">
+                                <IconButton class="c-scheme-icon-btn" @click="createScheme">
+                                    <Plus :size="20" />
+                                </IconButton>
+                            </Tooltip>
+
+                            <Tooltip
+                                text="Delete Scheme"
+                                v-if="activeSchemeId && activeSchemeId !== controllerStore.EMUNEX_ID"
+                            >
+                                <IconButton class="c-scheme-icon-btn" @click="deleteScheme" color="red">
+                                    <Trash2 :size="20" />
+                                </IconButton>
+                            </Tooltip>
+
+                            <Tooltip text="Sequence Bind" v-if="!isSequenceActive && activeSchemeId">
+                                <IconButton class="c-scheme-icon-btn" @click="startSequenceBind">
+                                    <Play :size="20" />
+                                </IconButton>
+                            </Tooltip>
+
+                            <Tooltip text="Stop Sequence" v-else-if="isSequenceActive">
+                                <IconButton class="c-scheme-icon-btn" @click="stopSequenceBind" color="red">
+                                    <Square :size="20" />
+                                </IconButton>
+                            </Tooltip>
                         </div>
                     </div>
 
@@ -1141,7 +1261,7 @@ const applySchemeToEmulator = async (emulatorId: string) => {
 
 .c-scheme-actions {
     display: flex;
-    align-items: flex-end;
+    align-items: center;
     gap: var(--spacing-sm);
 
     :deep(.c-select) {

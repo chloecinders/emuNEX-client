@@ -52,7 +52,14 @@ onUnmounted(() => {
 </script>
 
 <template>
-    <div ref="triggerRef" style="display: contents" @mouseenter="showTooltip" @mouseleave="hideTooltip">
+    <div
+        ref="triggerRef"
+        style="display: contents"
+        @mouseenter="showTooltip"
+        @mouseleave="hideTooltip"
+        @focusin="showTooltip"
+        @focusout="hideTooltip"
+    >
         <slot />
 
         <Teleport to="body">

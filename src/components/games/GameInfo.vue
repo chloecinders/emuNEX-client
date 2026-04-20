@@ -5,6 +5,7 @@ import { ChevronDown, Gamepad2, Library } from "lucide-vue-next";
 import { computed, onMounted, ref, type Ref, watch } from "vue";
 import { http, useStoragePath } from "../../lib/http";
 import { DiscordRPC } from "../../lib/rpc";
+import { useToast } from "../../lib/useToast";
 import { useConsoleStore } from "../../stores/ConsoleStore";
 import { useEmulatorStore } from "../../stores/EmulatorStore";
 import { type Game, useGameStore } from "../../stores/GameStore";
@@ -23,6 +24,7 @@ import ShelfManager from "./ShelfManager.vue";
 const gameStore = useGameStore();
 const emulatorStore = useEmulatorStore();
 const consoleStore = useConsoleStore();
+const toast = useToast();
 
 const game: Ref<Game | null> = ref(null);
 const isReadyToPlay = ref(false);
@@ -105,7 +107,7 @@ const formatDate = (dateString: string | null) => {
 onMounted(async () => {
     consoleStore.fetchConsoles();
     await listen("close-prevented", (event) => {
-        alert(event.payload);
+        toast.warning(String(event.payload));
     });
 
     window.addEventListener("request-play-game", (event: Event) => {
@@ -186,7 +188,7 @@ const handleInstall = async () => {
                 pendingEmulatorInfo.value = serverEms[0] || null;
 
                 if (!pendingEmulatorInfo.value) {
-                    alert(
+                    toast.error(
                         `No emulator found on the server for ${game.value.console.toUpperCase()}. You might need to add one in the Emulator Management page.`,
                     );
                     return;
@@ -226,7 +228,7 @@ const handleInstall = async () => {
         await checkInstallation();
         gameStore.fetchInstalledGames();
     } catch (error) {
-        alert(`Failed to install: ${formatError(error)}`);
+        toast.error(`Failed to install: ${formatError(error)}`);
     } finally {
         isDownloading.value = false;
         pendingEmulatorInfo.value = null;
@@ -322,7 +324,7 @@ const handlePlay = async (customEmulatorId?: string) => {
             emulatorId: customEmulatorId || null,
         });
     } catch (error) {
-        alert(`Launch Failed: ${formatError(error)}`);
+        toast.error(`Launch Failed: ${formatError(error)}`);
         gameStore.isLaunching = false;
     } finally {
         gameStore.isLaunching = false;

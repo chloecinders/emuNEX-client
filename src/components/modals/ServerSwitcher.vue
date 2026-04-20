@@ -1,8 +1,8 @@
 <script lang="ts" setup>
 import { invoke } from "@tauri-apps/api/core";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import { ChevronRight } from "lucide-vue-next";
 import { onMounted, ref, watch } from "vue";
+import { openExternalUrl } from "../../lib/opener";
 import { getDomainStore, getGlobalStore, getSavedDomains, normalizeDomain } from "../../lib/store";
 import Button from "../ui/Button.vue";
 import Input from "../ui/Input.vue";
@@ -48,7 +48,7 @@ async function startConnection(normalizedDomain: string) {
         await store.save();
 
         const fullUrl = new URL(resp.login_url, normalizedDomain).href;
-        await openUrl(fullUrl);
+        await openExternalUrl(fullUrl);
         emit("close");
     } catch (err) {
         errorMessage.value = String(err);

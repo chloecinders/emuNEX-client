@@ -5,6 +5,7 @@ use std::{
 use tauri::{AppHandle, Runtime};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
+use tokio::sync::oneshot;
 
 use crate::store;
 
@@ -52,11 +53,17 @@ pub fn get_data_dir<R: Runtime>(app: AppHandle<R>) -> Result<String, String> {
 }
 
 #[tauri::command]
-pub fn pick_directory<R: Runtime>(app: AppHandle<R>) -> Result<Option<String>, String> {
-    let result = app.dialog().file().blocking_pick_folder();
-    Ok(result
-        .and_then(|fp| fp.into_path().ok())
-        .map(|p| p.to_string_lossy().into_owned()))
+pub async fn pick_directory<R: Runtime>(app: AppHandle<R>) -> Result<Option<String>, String> {
+    let (tx, rx) = oneshot::channel();
+
+    app.dialog().file().pick_folder(move |result| {
+        let path = result
+            .and_then(|fp| fp.into_path().ok())
+            .map(|p| p.to_string_lossy().into_owned());
+        let _ = tx.send(path);
+    });
+
+    rx.await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -65,8 +72,28 @@ pub fn open_data_dir<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
     if !path.exists() {
         create_dir_all(&path).map_err(|e| e.to_string())?;
     }
+
+    let path_str = path.to_string_lossy().to_string();
+
+    #[cfg(target_os = "linux")]
+    {
+        let uri = if path_str.starts_with('/') {
+            format!("file://{}", path_str)
+        } else {
+            path_str.clone()
+        };
+
+        if std::process::Command::new("xdg-open")
+            .arg(&uri)
+            .spawn()
+            .is_ok()
+        {
+            return Ok(());
+        }
+    }
+
     app.opener()
-        .open_path(path.to_string_lossy(), None::<&str>)
+        .open_path(path_str, None::<&str>)
         .map_err(|e| e.to_string())
 }
 
@@ -117,4 +144,22 @@ pub async fn set_custom_data_path<R: Runtime>(
     global.save().map_err(|e| e.to_string())?;
 
     Ok(())
+}
+
+#[tauri::command]
+pub fn open_external_url<R: Runtime>(app: AppHandle<R>, url: String) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    {
+        if std::process::Command::new("xdg-open")
+            .arg(&url)
+            .spawn()
+            .is_ok()
+        {
+            return Ok(());
+        }
+    }
+
+    app.opener()
+        .open_url(url, None::<&str>)
+        .map_err(|e| e.to_string())
 }
