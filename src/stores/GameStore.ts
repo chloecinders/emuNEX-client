@@ -1,5 +1,5 @@
 import { defineStore } from "pinia";
-import { ref } from "vue";
+import { ref, watch } from "vue";
 import { http } from "../lib/http";
 import { DiscordRPC } from "../lib/rpc";
 
@@ -40,6 +40,9 @@ export type Game = {
     release_year: number;
     languages?: string[] | null;
     versions_count: number;
+    zipped?: boolean;
+    zipped_entry?: string | null;
+    multi_disc_disclaimer?: boolean;
 };
 
 interface FetchFilters {
@@ -322,6 +325,12 @@ export const useGameStore = defineStore("gameStore", () => {
         }
     }
 
+    const hideMultiDiscDisclaimer = ref(localStorage.getItem("hide_multi_disc_disclaimer") === "true");
+
+    watch(hideMultiDiscDisclaimer, (val) => {
+        localStorage.setItem("hide_multi_disc_disclaimer", val ? "true" : "false");
+    });
+
     return {
         currentSelectedGame,
         partialGames,
@@ -347,6 +356,7 @@ export const useGameStore = defineStore("gameStore", () => {
         isPlaying,
         isDimmed,
         installedGameIds,
+        hideMultiDiscDisclaimer,
         fetchInstalledGames,
     };
 });

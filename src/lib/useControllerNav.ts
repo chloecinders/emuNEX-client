@@ -326,7 +326,7 @@ export function useControllerNav() {
     const repeatIntervals: Partial<Record<NavDir, ReturnType<typeof setInterval>>> = {};
 
     function isPressed(dir: NavDir): boolean {
-        return (NAV_ACTIONS[dir] as readonly string[]).some((a) => !!store.pressedActions[a]);
+        return (NAV_ACTIONS[dir] as readonly string[]).some((a) => !!store.navActions[a]);
     }
 
     function act(dir: NavDir, isRepeat = false) {
@@ -421,7 +421,8 @@ export function useControllerNav() {
     let rafHandle: number | null = null;
 
     function tick() {
-        const isEnabled = store.isNavEnabled;
+        const gameStore = useGameStore();
+        const isEnabled = store.isNavEnabled && !gameStore.isPlaying && !gameStore.isLaunching;
 
         if (isEnabled) {
             if (!lastNavEnabled) {
@@ -448,7 +449,7 @@ export function useControllerNav() {
                 }
             }
         } else {
-            const actions = store.pressedActions;
+            const actions = store.navActions;
             if (actions["L"] && actions["R"] && actions["LS Click"] && actions["RS Click"]) {
                 store.isNavEnabled = true;
             }

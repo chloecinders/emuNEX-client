@@ -14,6 +14,14 @@ use crate::{
 };
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct ExtraFile {
+    pub s3_path: String,
+    pub windows_path: String,
+    pub linux_path: String,
+    pub macos_path: String,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct ApiEmulator {
     pub id: String,
     pub name: String,
@@ -30,6 +38,8 @@ pub struct ApiEmulator {
     pub file_size: i64,
     pub md5_hash: Option<String>,
     pub version: Option<String>,
+    #[serde(default)]
+    pub extra_files: Vec<ExtraFile>,
 }
 
 #[derive(Serialize, Debug, Clone)]
@@ -64,6 +74,8 @@ pub struct StoreEmulator {
     pub version: Option<String>,
     #[serde(default)]
     pub source_server: Option<String>,
+    #[serde(default)]
+    pub extra_files: Vec<ExtraFile>,
 }
 
 #[tauri::command]
@@ -321,6 +333,100 @@ pub async fn download_emulator<R: Runtime>(
         }
     }
 
+    let data_dir = store::get_base_dir(&app)?;
+    let save_dir = data_dir.join("saves");
+    let temp_dir = std::env::temp_dir();
+
+    let ctx = crate::utils::TemplateContext {
+        emu_dir: app_data_dir.to_string_lossy().to_string(),
+        data_dir: data_dir.to_string_lossy().to_string(),
+        save_dir: save_dir.to_string_lossy().to_string(),
+        temp_dir: temp_dir.to_string_lossy().to_string(),
+        rom_name: String::new(),
+        game_id: String::new(),
+        console: console.clone(),
+        rom_path: String::new(),
+        bin_path: final_binary_path.to_string_lossy().to_string(),
+        documents_dir: crate::utils::get_documents_dir(),
+    };
+
+    let current_os = std::env::consts::OS;
+    for extra in &emulator.extra_files {
+        let install_path_str = match current_os {
+            "windows" => &extra.windows_path,
+            "linux" => &extra.linux_path,
+            "macos" => &extra.macos_path,
+            _ => continue,
+        };
+
+        if install_path_str.is_empty() || extra.s3_path.is_empty() {
+            continue;
+        }
+
+        let mut install_path = ctx.resolve_path(install_path_str);
+
+        let path_has_no_ext = install_path.extension().is_none()
+            && !install_path_str.ends_with('/')
+            && !install_path_str.ends_with('\\');
+        let s3_filename = extra.s3_path.split('/').last().unwrap_or("").to_string();
+        if path_has_no_ext && !s3_filename.is_empty() {
+            if std::path::Path::new(&s3_filename).extension().is_some() {
+                install_path = install_path.join(&s3_filename);
+            }
+        }
+
+        if install_path_str.ends_with('/') || install_path_str.ends_with('\\') {
+            if !s3_filename.is_empty() {
+                install_path = install_path.join(&s3_filename);
+            }
+        }
+
+        let parent_dir = install_path
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new("."));
+        if let Err(e) = create_dir_all(parent_dir) {
+            if e.kind() != std::io::ErrorKind::AlreadyExists {
+                return Err(format!(
+                    "Failed to create directory '{}': {}",
+                    parent_dir.display(),
+                    e
+                ));
+            }
+        }
+
+        let extra_url = format!(
+            "{}{}/{}",
+            domain.trim_end_matches('/'),
+            storage_path,
+            extra.s3_path.trim_start_matches('/')
+        );
+
+        let extra_response = perform_backend_request(
+            &app,
+            reqwest::Method::GET,
+            &extra_url,
+            Some(&token),
+            BackendBody::None,
+            true,
+        )
+        .await
+        .map_err(|e| format!("Failed to download extra file '{}': {}", extra.s3_path, e))?;
+
+        let extra_reqwest_response = extra_response
+            .into_stream()
+            .map_err(|e| format!("Failed to stream extra file '{}': {}", extra.s3_path, e))?;
+        let mut extra_stream = extra_reqwest_response.bytes_stream();
+        let mut extra_file = File::create(&install_path)
+            .map_err(|e| format!("Failed to create file '{}': {}", install_path.display(), e))?;
+
+        while let Some(item) = extra_stream.next().await {
+            let chunk = item.map_err(|e| format!("Stream error for '{}': {}", extra.s3_path, e))?;
+            extra_file
+                .write_all(&chunk)
+                .map_err(|e| format!("Write error for '{}': {}", install_path.display(), e))?;
+        }
+    }
+
     let mut stored_emulators: HashMap<String, StoreEmulator> = global_store
         .get("emulators")
         .and_then(|v| serde_json::from_value(v.clone()).ok())
@@ -343,6 +449,7 @@ pub async fn download_emulator<R: Runtime>(
             existing.input_config_file = emulator.input_config_file.clone();
             existing.input_mapper = emulator.input_mapper.clone();
             existing.zipped = emulator.zipped;
+            existing.extra_files = emulator.extra_files.clone();
         }
         existing.version = emulator.version.clone();
         existing.source_server = Some(domain.clone());
@@ -370,6 +477,7 @@ pub async fn download_emulator<R: Runtime>(
                 file_size: emulator.file_size,
                 version: emulator.version,
                 source_server: Some(domain.clone()),
+                extra_files: emulator.extra_files,
             },
         );
     }
@@ -601,6 +709,7 @@ pub async fn refresh_emulator_config<R: Runtime>(
                 existing.input_mapper = server_emu.input_mapper;
                 existing.zipped = server_emu.zipped;
                 existing.file_size = server_emu.file_size;
+                existing.extra_files = server_emu.extra_files;
 
                 for c in &server_emu.consoles {
                     if !existing.consoles.contains(c) {

@@ -130,11 +130,13 @@ const confirmUpdate = async (keepConfig: boolean) => {
             id,
             keepConfig,
             pendingUpdateLocal.value.source_server,
+            pendingUpdateLocal.value.name,
+            emulatorStore.updatesAvailable[pendingUpdateLocal.value.id]?.file_size,
         );
-        toast.success("Emulator updated successfully!");
+        toast.success(`${pendingUpdateLocal.value.name} added to download queue!`);
         emulatorStore.checkForUpdates();
     } catch (e: any) {
-        toast.error(`Failed to update emulator: ${e}`);
+        toast.error(`Failed to queue emulator update: ${e}`);
     } finally {
         cancelUpdate();
     }
@@ -190,12 +192,20 @@ const cancelConfirmDownload = () => {
 const downloadFromServer = async (serverEmulator: ServerEmulator) => {
     try {
         const targetConsole = (serverEmulator.consoles && serverEmulator.consoles[0]) || "unknown";
-        await emulatorStore.downloadEmulator(targetConsole, serverEmulator.id, false, serverEmulator.source_server);
+        await emulatorStore.downloadEmulator(
+            targetConsole,
+            serverEmulator.id,
+            false,
+            serverEmulator.source_server,
+            serverEmulator.name,
+            serverEmulator.file_size,
+        );
+        toast.success(`${serverEmulator.name} added to download queue!`);
         showDownloadModal.value = false;
         showConfirmDownloadModal.value = false;
         pendingDownloadEmulator.value = null;
     } catch (e) {
-        console.error("Failed to download emulator.", e);
+        console.error("Failed to queue emulator.", e);
     }
 };
 
@@ -230,20 +240,23 @@ const confirmDelete = async () => {
 <template>
     <div class="c-emulator-management">
         <div class="c-emulator-management__header-wrap">
-            <Heading :level="2" color="primary" is-badge class="c-emulator-management__badge">
-                Manage Emulators
-            </Heading>
+            <Heading :level="2" color="primary" is-badge class="c-emulator-management__badge">Manage Emulators</Heading>
 
             <div style="display: flex; gap: 8px">
-                <PillButton @click="addCustomEmulator()"> <Plus /> Add Custom </PillButton>
-                <PillButton @click="openDownloadModal()"> <Download /> Download More </PillButton>
+                <PillButton @click="addCustomEmulator()">
+                    <Plus />
+                    Add Custom
+                </PillButton>
+                <PillButton @click="openDownloadModal()">
+                    <Download />
+                    Download More
+                </PillButton>
             </div>
         </div>
 
         <div
             v-if="(consoleStore.loading || emulatorStore.loading) && Object.keys(emulatorStore.emulators).length === 0"
-            class="c-emulator-management__loading"
-        >
+            class="c-emulator-management__loading">
             <Spinner />
             <Text>Loading configurations...</Text>
         </div>
@@ -264,8 +277,7 @@ const confirmDelete = async () => {
                     @delete="promptDelete(emulator.id)"
                     @set-default="handleSetDefault(emulator.id)"
                     @refresh-config="handleRefreshConfig(emulator.id)"
-                    @update="handleUpdateClick(emulator)"
-                />
+                    @update="handleUpdateClick(emulator)" />
             </div>
         </div>
 
@@ -275,8 +287,7 @@ const confirmDelete = async () => {
             :is-fetching="isFetchingServer"
             :loading="emulatorStore.loading"
             @close="showDownloadModal = false"
-            @download="promptDownload"
-        />
+            @download="promptDownload" />
 
         <AlertModal
             :show="showDeleteModal"
@@ -285,8 +296,7 @@ const confirmDelete = async () => {
             confirm-label="Remove"
             confirm-color="red"
             @close="showDeleteModal = false"
-            @confirm="confirmDelete"
-        />
+            @confirm="confirmDelete" />
 
         <InstallModal
             :show="showConfirmDownloadModal"
@@ -294,15 +304,13 @@ const confirmDelete = async () => {
             :items="installItems"
             :loading="emulatorStore.loading"
             @close="cancelConfirmDownload()"
-            @confirm="downloadFromServer(pendingDownloadEmulator!)"
-        />
+            @confirm="downloadFromServer(pendingDownloadEmulator!)" />
 
         <EditEmulatorModal
             :show="!!editingEmulatorId"
             :emulator-id="editingEmulatorId"
             @close="handleEditClose"
-            @save="handleEditSave"
-        />
+            @save="handleEditSave" />
 
         <UpdateEmulatorModal
             :show="!!pendingUpdateLocal"
@@ -311,8 +319,7 @@ const confirmDelete = async () => {
             :server-emulator="pendingUpdateServer"
             :loading="emulatorStore.loading"
             @close="cancelUpdate"
-            @confirm="confirmUpdate"
-        />
+            @confirm="confirmUpdate" />
     </div>
 </template>
 

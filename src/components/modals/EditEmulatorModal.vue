@@ -36,6 +36,9 @@ watch(
                 JSON.stringify({
                     ...emulatorStore.emulators[newId],
                     save_extensions: emulatorStore.emulators[newId].save_extensions ?? [],
+                    input_config_file: emulatorStore.emulators[newId].input_config_file ?? "",
+                    input_mapper: emulatorStore.emulators[newId].input_mapper ?? "",
+                    save_path: emulatorStore.emulators[newId].save_path ?? "",
                 }),
             );
             newSaveExtInputs.value[newId] = "";
@@ -77,8 +80,7 @@ const closeModal = () => {
         :show="show"
         :title="props.emulatorId && editState[props.emulatorId]?.name ? 'Edit Emulator' : 'Emulator Configuration'"
         width="600px"
-        @close="closeModal"
-    >
+        @close="closeModal">
         <div v-if="props.emulatorId && editState[props.emulatorId]" class="c-emulator-form">
             <div class="c-emulator-field">
                 <Text variant="label" size="sm">Name</Text>
@@ -104,8 +106,7 @@ const closeModal = () => {
                                 } else {
                                     editState[props.emulatorId].consoles.push(c);
                                 }
-                            "
-                        >
+                            ">
                             <input type="checkbox" :value="c" v-model="editState[props.emulatorId].consoles" />
                             {{ c.toUpperCase() }}
                         </label>
@@ -127,8 +128,7 @@ const closeModal = () => {
                 <Text variant="label" size="sm">Input Config File (optional)</Text>
                 <Input
                     v-model="editState[props.emulatorId].input_config_file"
-                    placeholder="e.g. %LocalAppData%/vbam/vbam.ini"
-                />
+                    placeholder="e.g. %LocalAppData%/vbam/vbam.ini" />
             </div>
 
             <div class="c-emulator-field">
@@ -153,20 +153,19 @@ const closeModal = () => {
                             role="button"
                             :aria-label="`Remove extension ${ext}`"
                             @click="removeSaveExtFromEmulator(props.emulatorId!, ext)"
-                            @keydown.enter.space.prevent="removeSaveExtFromEmulator(props.emulatorId!, ext)"
-                            >.{{ ext.replace(/^\./, "") }} ×</span
-                        >
-                        <Text v-if="editState[props.emulatorId].save_extensions.length === 0" variant="muted" size="sm"
-                            >No extensions - will use snapshot diffing</Text
-                        >
+                            @keydown.enter.space.prevent="removeSaveExtFromEmulator(props.emulatorId!, ext)">
+                            .{{ ext.replace(/^\./, "") }} ×
+                        </span>
+                        <Text v-if="editState[props.emulatorId].save_extensions.length === 0" variant="muted" size="sm">
+                            No extensions - will use snapshot diffing
+                        </Text>
                     </div>
                     <div style="display: flex; gap: 8px; align-items: center">
                         <Input
                             v-model="newSaveExtInputs[props.emulatorId]"
                             placeholder="e.g. sra, srm, eep"
                             style="flex: 1; margin-bottom: 0"
-                            @keydown.enter.prevent="addSaveExtToEmulator(props.emulatorId!)"
-                        />
+                            @keydown.enter.prevent="addSaveExtToEmulator(props.emulatorId!)" />
                         <Button @click="addSaveExtToEmulator(props.emulatorId!)">Add</Button>
                     </div>
                 </div>
@@ -174,7 +173,10 @@ const closeModal = () => {
 
             <div class="c-emulator-form__actions">
                 <Button color="grey" @click="closeModal">Cancel</Button>
-                <Button color="primary" @click="saveEmulatorChanges"> <Save :size="16" /> Save </Button>
+                <Button color="primary" @click="saveEmulatorChanges">
+                    <Save :size="16" />
+                    Save
+                </Button>
             </div>
         </div>
     </Modal>

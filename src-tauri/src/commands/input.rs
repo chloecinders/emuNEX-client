@@ -4,8 +4,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use tauri::{command, AppHandle, Runtime};
+use crate::mappers::{mesen::map_mesen, mgba::map_mgba, project64::map_project64, snes9x::map_snes9x, vbam::map_vbam};
 
-const SUPPORTED_MAPPERS: [&str; 1] = ["vbam"];
+const SUPPORTED_MAPPERS: [&str; 5] = ["vbam", "mesen", "mgba", "snes9x", "project64"];
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct SupportedEmulator {
@@ -32,7 +33,6 @@ pub struct EmulatorInputConfig {
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct InputManagerConfig {
     pub schemes: Vec<InputScheme>,
-    pub active_scheme_id: Option<String>,
     pub emulator_configs: HashMap<String, EmulatorInputConfig>,
 }
 
@@ -44,9 +44,9 @@ pub async fn save_global_inputs<R: Runtime>(
     let global_store = store::get_global_store(&app)?;
     global_store.set(
         "input_manager_config",
-        serde_json::to_value(&config).unwrap(),
+        serde_json::to_value(&config).map_err(|e| e.to_string())?,
     );
-    let _ = global_store.save();
+    global_store.save().map_err(|e| e.to_string())?;
     Ok("Successfully saved input config globally".into())
 }
 
@@ -58,12 +58,49 @@ pub async fn load_global_inputs<R: Runtime>(
 
     let mut config: InputManagerConfig = global_store
         .get("input_manager_config")
-        .and_then(|v| serde_json::from_value(v.clone()).ok())
+        .and_then(|v| {
+            let res: Result<InputManagerConfig, _> = serde_json::from_value(v.clone());
+            if let Err(ref e) = res {
+                eprintln!("Failed to deserialize input_manager_config: {}", e);
+            }
+            res.ok()
+        })
         .unwrap_or_else(|| {
             let mappings: HashMap<String, String> = global_store
                 .get("input_mappings")
                 .and_then(|v| serde_json::from_value(v.clone()).ok())
-                .unwrap_or_default();
+                .unwrap_or_else(|| {
+                    let mut m = HashMap::new();
+                    m.insert("DPad-Up".to_string(), "Joy0.Btn12".to_string());
+                    m.insert("DPad-Down".to_string(), "Joy0.Btn13".to_string());
+                    m.insert("DPad-Left".to_string(), "Joy0.Btn14".to_string());
+                    m.insert("DPad-Right".to_string(), "Joy0.Btn15".to_string());
+                    m.insert("LS Up".to_string(), "Joy0.Axis1-".to_string());
+                    m.insert("LS Down".to_string(), "Joy0.Axis1+".to_string());
+                    m.insert("LS Left".to_string(), "Joy0.Axis0-".to_string());
+                    m.insert("LS Right".to_string(), "Joy0.Axis0+".to_string());
+                    m.insert("RS Up".to_string(), "Joy0.Axis3-".to_string());
+                    m.insert("RS Down".to_string(), "Joy0.Axis3+".to_string());
+                    m.insert("A".to_string(), "Joy0.Btn0".to_string());
+                    m.insert("B".to_string(), "Joy0.Btn1".to_string());
+                    m.insert("X".to_string(), "Joy0.Btn2".to_string());
+                    m.insert("Y".to_string(), "Joy0.Btn3".to_string());
+                    m.insert("L".to_string(), "Joy0.Btn4".to_string());
+                    m.insert("R".to_string(), "Joy0.Btn5".to_string());
+                    m.insert("ZL".to_string(), "Joy0.Btn6".to_string());
+                    m.insert("ZR".to_string(), "Joy0.Btn7".to_string());
+                    m.insert("Select".to_string(), "Joy0.Btn8".to_string());
+                    m.insert("Start".to_string(), "Joy0.Btn9".to_string());
+                    m.insert("LS Click".to_string(), "Joy0.Btn10".to_string());
+                    m.insert("RS Click".to_string(), "Joy0.Btn11".to_string());
+                    m.insert("confirm".to_string(), "Kbd.Enter".to_string());
+                    m.insert("back".to_string(), "Kbd.Backspace".to_string());
+                    m.insert("up".to_string(), "Kbd.ArrowUp".to_string());
+                    m.insert("down".to_string(), "Kbd.ArrowDown".to_string());
+                    m.insert("left".to_string(), "Kbd.ArrowLeft".to_string());
+                    m.insert("right".to_string(), "Kbd.ArrowRight".to_string());
+                    m
+                });
             let layout_mode = global_store
                 .get("input_layout_mode")
                 .and_then(|v| v.as_str().map(|s| s.to_string()))
@@ -71,15 +108,15 @@ pub async fn load_global_inputs<R: Runtime>(
             let gamepad_id = global_store
                 .get("input_gamepad_id")
                 .and_then(|v| v.as_str().map(|s| s.to_string()))
-                .unwrap_or_default();
+                .unwrap_or_else(|| "any".to_string());
             let auto_apply = global_store
                 .get("input_auto_apply_on_start")
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false);
 
             let default_scheme = InputScheme {
-                id: "default-scheme".to_string(),
-                name: "Default Profile".to_string(),
+                id: "emunex_default".to_string(),
+                name: "emuNEX (Built-in)".to_string(),
                 mappings,
                 layout_mode,
                 gamepad_id,
@@ -95,7 +132,7 @@ pub async fn load_global_inputs<R: Runtime>(
                 emu_configs.insert(
                     id.clone(),
                     EmulatorInputConfig {
-                        scheme_id: Some("default-scheme".to_string()),
+                        scheme_id: Some("emunex_default".to_string()),
                         auto_apply_on_start: auto_apply,
                     },
                 );
@@ -103,7 +140,6 @@ pub async fn load_global_inputs<R: Runtime>(
 
             InputManagerConfig {
                 schemes: vec![default_scheme],
-                active_scheme_id: Some("default-scheme".to_string()),
                 emulator_configs: emu_configs,
             }
         });
@@ -146,172 +182,6 @@ pub async fn load_global_inputs<R: Runtime>(
     Ok(val)
 }
 
-fn map_vbam(config_content: &str, global_mappings: &HashMap<String, String>) -> String {
-    let mut out_lines = Vec::new();
-    let mut in_target_block = false;
-
-    let convert_value = |v: &str| -> String {
-        if v == "Unmapped" || v == "..." || v.is_empty() {
-            return "".to_string();
-        }
-        if v.starts_with("Kbd.") {
-            let code = &v[4..];
-            return match code {
-                "ArrowUp" => "UP".to_string(),
-                "ArrowDown" => "DOWN".to_string(),
-                "ArrowLeft" => "LEFT".to_string(),
-                "ArrowRight" => "RIGHT".to_string(),
-                "Enter" => "ENTER".to_string(),
-                "Backspace" => "BACK".to_string(),
-                "Space" => "SPACE".to_string(),
-                "Tab" => "TAB".to_string(),
-                "ShiftLeft" | "ShiftRight" => "SHIFT".to_string(),
-                "ControlLeft" | "ControlRight" => "CTRL".to_string(),
-                "AltLeft" | "AltRight" => "ALT".to_string(),
-                c if c.starts_with("Key") => c[3..].to_string(),
-                c if c.starts_with("Digit") => c[5..].to_string(),
-                _ => "".to_string(),
-            };
-        }
-
-        if !v.starts_with("Joy") {
-            return v.to_string();
-        }
-
-        let rest = &v[3..];
-        let Some(dot_idx) = rest.find('.') else {
-            return v.to_string();
-        };
-
-        let joy_idx_str = &rest[..dot_idx];
-        let Ok(joy_idx) = joy_idx_str.parse::<u32>() else {
-            return v.to_string();
-        };
-
-        let joy_1_idx = joy_idx + 1;
-        let control = &rest[dot_idx + 1..];
-
-        if control.starts_with("Btn") {
-            let mut btn_idx = control[3..].parse::<u32>().unwrap_or(u32::MAX);
-
-            btn_idx = match btn_idx {
-                4 => 9,
-                5 => 10,
-                8 => 4,
-                9 => 6,
-                12 => 11,
-                13 => 12,
-                14 => 13,
-                15 => 14,
-                _ => btn_idx,
-            };
-
-            if btn_idx != u32::MAX {
-                return format!("Joy{}-Button{}", joy_1_idx, btn_idx);
-            } else {
-                return v.to_string();
-            }
-        } else if control.starts_with("Axis") {
-            let axis_val = &control[4..];
-            return format!("Joy{}-Axis{}", joy_1_idx, axis_val);
-        }
-
-        v.to_string()
-    };
-
-    let target_keys = std::collections::HashMap::from([
-        ("Up", "DPad-Up"),
-        ("Down", "DPad-Down"),
-        ("Left", "DPad-Left"),
-        ("Right", "DPad-Right"),
-        ("A", "A"),
-        ("B", "B"),
-        ("L", "L"),
-        ("R", "R"),
-        ("Select", "Select"),
-        ("Start", "Start"),
-    ]);
-
-    for line in config_content.lines() {
-        let trimmed = line.trim();
-        if trimmed.starts_with('[') && trimmed.ends_with(']') {
-            in_target_block = trimmed == "[Joypad/1]";
-            out_lines.push(line.to_string());
-            continue;
-        }
-
-        if !in_target_block {
-            out_lines.push(line.to_string());
-            continue;
-        }
-
-        let Some(eq_idx) = line.find('=') else {
-            out_lines.push(line.to_string());
-            continue;
-        };
-
-        let key = line[..eq_idx].trim();
-        let Some(global_key) = target_keys.get(key) else {
-            out_lines.push(line.to_string());
-            continue;
-        };
-
-        let Some(mapping) = global_mappings.get(*global_key) else {
-            out_lines.push(line.to_string());
-            continue;
-        };
-
-        let new_val = convert_value(mapping);
-        out_lines.push(format!("{}={}", key, new_val));
-    }
-
-    out_lines.join("\n")
-}
-
-fn expand_env_vars(path: &str) -> std::path::PathBuf {
-    let mut result = String::new();
-    let chars: Vec<char> = path.chars().collect();
-    let mut i = 0;
-
-    while i < chars.len() {
-        if chars[i] == '%' {
-            let mut j = i + 1;
-            let mut found_end = false;
-            while j < chars.len() {
-                if chars[j] == '%' {
-                    found_end = true;
-                    break;
-                }
-                j += 1;
-            }
-            if found_end {
-                let var_name: String = chars[i + 1..j].iter().collect();
-                if let Ok(val) = std::env::var(&var_name) {
-                    result.push_str(&val);
-                } else {
-                    let mut matched = false;
-                    for (k, v) in std::env::vars() {
-                        if k.eq_ignore_ascii_case(&var_name) {
-                            result.push_str(&v);
-                            matched = true;
-                            break;
-                        }
-                    }
-                    if !matched {
-                        result.push_str(&format!("%{}%", var_name));
-                    }
-                }
-                i = j + 1;
-                continue;
-            }
-        }
-        result.push(chars[i]);
-        i += 1;
-    }
-
-    std::path::PathBuf::from(result)
-}
-
 pub fn apply_inputs_to_emulator(emu: &StoreEmulator, mappings: &HashMap<String, String>) {
     let Some(mapper) = &emu.input_mapper else {
         return;
@@ -320,15 +190,23 @@ pub fn apply_inputs_to_emulator(emu: &StoreEmulator, mappings: &HashMap<String, 
         return;
     };
 
-    let expanded_path = expand_env_vars(config_file);
+    let ctx = crate::utils::TemplateContext {
+        emu_dir: std::path::Path::new(&emu.binary_path)
+            .parent()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_default(),
+        ..Default::default()
+    };
 
-    let config_path = if expanded_path.is_absolute() {
-        expanded_path
+    let config_path = ctx.resolve_path(config_file);
+
+    let config_path = if config_path.is_absolute() {
+        config_path
     } else {
         let Some(parent) = std::path::Path::new(&emu.binary_path).parent() else {
             return;
         };
-        parent.join(expanded_path)
+        parent.join(config_path)
     };
 
     if !config_path.exists() {
@@ -343,6 +221,22 @@ pub fn apply_inputs_to_emulator(emu: &StoreEmulator, mappings: &HashMap<String, 
     match m_low.as_str() {
         "vbam" => {
             let new_content = map_vbam(&content, mappings);
+            let _ = fs::write(&config_path, new_content);
+        }
+        "mesen" => {
+            let new_content = map_mesen(&content, mappings);
+            let _ = fs::write(&config_path, new_content);
+        }
+        "mgba" => {
+            let new_content = map_mgba(&content, mappings);
+            let _ = fs::write(&config_path, new_content);
+        }
+        "snes9x" => {
+            let new_content = map_snes9x(&content, mappings);
+            let _ = fs::write(&config_path, new_content);
+        }
+        "project64" => {
+            let new_content = map_project64(&content, mappings);
             let _ = fs::write(&config_path, new_content);
         }
         _ => {}

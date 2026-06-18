@@ -8,6 +8,7 @@ import { router } from "./router";
 import { useUpdateStore } from "./stores/UpdateStore";
 import { DiscordRPC } from "./lib/rpc";
 import { useAuthStore } from "./stores/AuthStore";
+import { useDownloadStore } from "./stores/DownloadStore";
 
 const app = createApp(App);
 const pinia = createPinia();
@@ -93,3 +94,6 @@ if (devParam === "requests") {
 }
 
 await DiscordRPC.start("1483456544556449842");
+
+const downloadStore = useDownloadStore(pinia);
+await downloadStore.init();

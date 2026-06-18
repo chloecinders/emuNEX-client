@@ -1,10 +1,14 @@
 <script setup lang="ts">
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { CircleHelp } from "lucide-vue-next";
+import { CircleHelp, Download } from "lucide-vue-next";
 import { ref } from "vue";
+import { useRouter } from "vue-router";
 import { openExternalUrl } from "../../lib/opener";
+import { useDownloadStore } from "../../stores/DownloadStore";
 const appWindow = getCurrentWindow();
 const isRequestsWindow = appWindow.label === "requests";
+const router = useRouter();
+const downloadStore = useDownloadStore();
 
 const minimize = () => appWindow.minimize();
 const toggleMaximize = async () => {
@@ -42,6 +46,16 @@ const openIssueLink = async (url: string) => {
             <span class="c-titlebar__title">{{ isRequestsWindow ? "Request Viewer" : "client" }}</span>
         </div>
         <div class="c-titlebar__controls">
+            <button
+                v-if="!isRequestsWindow"
+                class="c-titlebar__btn c-titlebar__btn--downloads"
+                title="Downloads"
+                @click="router.push('/downloads')">
+                <Download class="c-titlebar__lucide-icon" :size="16" />
+                <span v-if="downloadStore.activeCount > 0" class="c-titlebar__download-badge">
+                    {{ downloadStore.activeCount }}
+                </span>
+            </button>
             <button class="c-titlebar__btn" @click="onHelpClick" title="Help">
                 <CircleHelp class="c-titlebar__lucide-icon" :size="16" />
             </button>
@@ -52,8 +66,7 @@ const openIssueLink = async (url: string) => {
                     height="1"
                     viewBox="0 0 10 1"
                     fill="none"
-                    xmlns="http://www.w3.org/2000/svg"
-                >
+                    xmlns="http://www.w3.org/2000/svg">
                     <line y1="0.5" x2="10" y2="0.5" stroke="currentColor" stroke-width="1" />
                 </svg>
             </button>
@@ -64,8 +77,7 @@ const openIssueLink = async (url: string) => {
                     height="10"
                     viewBox="0 0 10 10"
                     fill="none"
-                    xmlns="http://www.w3.org/2000/svg"
-                >
+                    xmlns="http://www.w3.org/2000/svg">
                     <rect x="0.5" y="0.5" width="9" height="9" stroke="currentColor" stroke-width="1" />
                 </svg>
             </button>
@@ -76,8 +88,7 @@ const openIssueLink = async (url: string) => {
                     height="10"
                     viewBox="0 0 10 10"
                     fill="none"
-                    xmlns="http://www.w3.org/2000/svg"
-                >
+                    xmlns="http://www.w3.org/2000/svg">
                     <path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1" stroke-linecap="round" />
                 </svg>
             </button>
@@ -87,13 +98,12 @@ const openIssueLink = async (url: string) => {
             v-if="helpMenu.show"
             class="c-titlebar__help-menu"
             :style="{ left: helpMenu.x + 'px', top: helpMenu.y + 'px' }"
-            @click.stop
-        >
+            @click.stop>
             <button class="c-titlebar__help-item" @click="openIssueLink(discordUrl)">Join the Discord...</button>
             <button class="c-titlebar__help-item" @click="openIssueLink(bugReportUrl)">Report a bug...</button>
-            <button class="c-titlebar__help-item" @click="openIssueLink(featureRequestUrl)"
-                >Suggest a feature...</button
-            >
+            <button class="c-titlebar__help-item" @click="openIssueLink(featureRequestUrl)">
+                Suggest a feature...
+            </button>
         </div>
     </div>
 </template>
@@ -178,6 +188,34 @@ const openIssueLink = async (url: string) => {
     &__lucide-icon {
         display: block;
         shape-rendering: geometricPrecision;
+    }
+
+    &__btn--downloads {
+        position: relative;
+
+        &:hover {
+            color: var(--color-primary);
+            background: rgba(0, 0, 0, 0.05);
+        }
+    }
+
+    &__download-badge {
+        position: absolute;
+        top: 4px;
+        right: 4px;
+        min-width: 14px;
+        height: 14px;
+        border-radius: var(--radius-full);
+        background: var(--color-primary);
+        color: white;
+        font-size: 0.55rem;
+        font-weight: 900;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0 3px;
+        animation: badge-pop 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        pointer-events: none;
     }
 
     &__help-menu {

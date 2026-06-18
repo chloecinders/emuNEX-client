@@ -6,6 +6,7 @@ interface Props {
     size?: "sm" | "md";
     disabled?: boolean;
     full?: boolean;
+    progress?: number;
 }
 
 withDefaults(defineProps<Props>(), {
@@ -23,11 +24,11 @@ const emit = defineEmits(["click"]);
         class="c-button"
         :class="[`c-button--${color}`, `c-button--${size}`, { 'c-button--disabled': disabled, 'c-button--full': full }]"
         :disabled="disabled"
-        @click="emit('click', $event)"
-    >
+        @click="emit('click', $event)">
         <span class="c-button__edge"></span>
         <span class="c-button__front">
-            <slot />
+            <span v-if="progress !== undefined" class="c-button__progress" :style="{ width: `${progress}%` }"></span>
+            <span class="c-button__content"><slot /></span>
         </span>
     </button>
 </template>
@@ -75,6 +76,28 @@ const emit = defineEmits(["click"]);
         border: 1px solid rgba(255, 255, 255, 0.1);
         user-select: none;
         z-index: 2;
+        overflow: hidden;
+    }
+
+    &__content {
+        position: relative;
+        z-index: 2;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        width: 100%;
+        height: 100%;
+    }
+
+    &__progress {
+        position: absolute;
+        top: 0;
+        left: 0;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.2);
+        z-index: 1;
+        transition: width 0.2s ease-out;
     }
 
     &__edge {

@@ -3,6 +3,7 @@ import { Download } from "lucide-vue-next";
 import { computed } from "vue";
 import Button from "../ui/Button.vue";
 import Modal from "../ui/Modal.vue";
+import Select from "../ui/Select.vue";
 import Text from "../ui/Text.vue";
 
 export type InstallItem = {
@@ -17,9 +18,11 @@ const props = defineProps<{
     title?: string;
     items: InstallItem[];
     loading?: boolean;
+    emulatorOptions?: { name: string; value: string; description?: string }[];
+    selectedEmulatorId?: string;
 }>();
 
-const emit = defineEmits(["close", "confirm"]);
+const emit = defineEmits(["close", "confirm", "update:selectedEmulatorId"]);
 
 const totalSize = computed(() => {
     return props.items.reduce((acc, item) => acc + item.size, 0);
@@ -40,9 +43,15 @@ const formatBytes = (bytes: number, decimals = 2) => {
         <div class="c-install-modal">
             <div class="c-install-modal__content">
                 <div class="c-install-modal__info">
-                    <Text variant="muted"> Are you sure you want to download the following files? </Text>
+                    <Text variant="muted">Are you sure you want to download the following files?</Text>
 
-                    <slot name="header"></slot>
+                    <div style="margin-top: 12px; margin-bottom: 8px">
+                        <Select
+                            label="Choose Emulator"
+                            :modelValue="selectedEmulatorId || ''"
+                            @update:modelValue="(val) => emit('update:selectedEmulatorId', val)"
+                            :options="emulatorOptions || []" />
+                    </div>
 
                     <div class="c-install-modal__breakdown">
                         <div v-for="item in items" :key="item.name" class="c-install-modal__item">
@@ -64,7 +73,8 @@ const formatBytes = (bytes: number, decimals = 2) => {
             <div class="c-install-modal__actions">
                 <Button color="grey" @click="emit('close')">Cancel</Button>
                 <Button color="primary" @click="emit('confirm')" :loading="loading">
-                    <Download :size="16" /> Install
+                    <Download :size="16" />
+                    Install
                 </Button>
             </div>
         </div>

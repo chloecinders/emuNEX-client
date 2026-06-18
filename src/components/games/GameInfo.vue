@@ -7,15 +7,16 @@ import { http, useStoragePath } from "../../lib/http";
 import { DiscordRPC } from "../../lib/rpc";
 import { useToast } from "../../lib/useToast";
 import { useConsoleStore } from "../../stores/ConsoleStore";
+import { useDownloadStore } from "../../stores/DownloadStore";
 import { useEmulatorStore } from "../../stores/EmulatorStore";
 import { type Game, useGameStore } from "../../stores/GameStore";
 import InstallModal, { type InstallItem } from "../modals/InstallModal.vue";
+import MultiDiscDisclaimer from "../modals/MultiDiscDisclaimer.vue";
 import SaveConflict from "../modals/SaveConflict.vue";
 import Badge from "../ui/Badge.vue";
 import Button from "../ui/Button.vue";
 import Heading from "../ui/Heading.vue";
 import IconButton from "../ui/IconButton.vue";
-import Select from "../ui/Select.vue";
 import Text from "../ui/Text.vue";
 import Tooltip from "../ui/Tooltip.vue";
 import PlayWithModal from "./PlayWithModal.vue";
@@ -24,11 +25,47 @@ import ShelfManager from "./ShelfManager.vue";
 const gameStore = useGameStore();
 const emulatorStore = useEmulatorStore();
 const consoleStore = useConsoleStore();
+const downloadStore = useDownloadStore();
 const toast = useToast();
 
 const game: Ref<Game | null> = ref(null);
 const isReadyToPlay = ref(false);
-const isDownloading = ref(false);
+const isRomInstalled = ref(false);
+const isDownloading = computed(() => {
+    if (!game.value) return false;
+    return downloadStore.isGameQueued(game.value.id.toString()) || downloadStore.isEmulatorQueued(game.value.console);
+});
+
+const activeDownloadItem = computed(() => {
+    if (!game.value) return undefined;
+    const romItem = downloadStore.getItemForGame(game.value.id.toString());
+    if (romItem && (romItem.status === "queued" || romItem.status === "downloading")) {
+        return romItem;
+    }
+    const emuItem = downloadStore.getEmulatorItem(game.value.console);
+    if (emuItem && (emuItem.status === "queued" || emuItem.status === "downloading")) {
+        return emuItem;
+    }
+    return romItem || emuItem;
+});
+
+const downloadProgress = computed(() => {
+    if (!activeDownloadItem.value || !isDownloading.value) return undefined;
+    const item = activeDownloadItem.value;
+    if (!item.total_bytes) return 0;
+    return Math.min(100, Math.round((item.downloaded_bytes / item.total_bytes) * 100));
+});
+
+const extractionProgress = computed(() => {
+    if (!activeDownloadItem.value || !isDownloading.value) return undefined;
+    return activeDownloadItem.value.extraction_progress;
+});
+
+const downloadStatus = computed(() => {
+    if (!activeDownloadItem.value || !isDownloading.value) return undefined;
+    return activeDownloadItem.value.status;
+});
+
 const showShelfManager = ref(false);
 const showConfirmInstallModal = ref(false);
 const availableEmulators = ref<any[]>([]);
@@ -135,6 +172,7 @@ const checkInstallation = async () => {
             console: game.value.console,
         });
 
+        isRomInstalled.value = romInstalled;
         isReadyToPlay.value = emulatorInstalled && romInstalled;
     }
 };
@@ -150,6 +188,22 @@ watch(
         }
     },
     { immediate: true },
+);
+
+watch(
+    () => gameStore.installedGameIds,
+    () => {
+        checkInstallation();
+    },
+    { deep: true },
+);
+
+watch(
+    () => emulatorStore.emulators,
+    () => {
+        checkInstallation();
+    },
+    { deep: true },
 );
 
 watch(
@@ -181,73 +235,142 @@ const handleInstall = async () => {
             console: game.value.console,
         });
 
-        if (!showConfirmInstallModal.value && (!emulatorInstalled || !romInstalled)) {
-            if (!emulatorInstalled) {
-                const serverEms = await emulatorStore.fetchServerEmulators(game.value.console);
-                availableEmulators.value = serverEms;
-                pendingEmulatorInfo.value = serverEms[0] || null;
+        if (!showConfirmInstallModal.value) {
+            const allServerEms = await emulatorStore.fetchAllServerEmulators();
 
-                if (!pendingEmulatorInfo.value) {
-                    toast.error(
-                        `No emulator found on the server for ${game.value.console.toUpperCase()}. You might need to add one in the Emulator Management page.`,
-                    );
-                    return;
+            const serverEms = allServerEms.filter((se) =>
+                (se.consoles || []).some((c) => c.toLowerCase() === game.value!.console.toLowerCase()),
+            );
+
+            const uniqueServerEmsMap = new Map();
+            for (const se of serverEms) {
+                uniqueServerEmsMap.set(se.id, se);
+            }
+            const uniqueServerEms = Array.from(uniqueServerEmsMap.values());
+
+            const localEms = Object.values(emulatorStore.emulators).filter((e) =>
+                (e.consoles || []).some((c) => c.toLowerCase() === game.value!.console.toLowerCase()),
+            );
+
+            const combinedOptions = [];
+
+            for (const le of localEms) {
+                combinedOptions.push({
+                    id: le.id,
+                    name: le.name,
+                    file_size: 0,
+                    is_local: true,
+                    is_default: le.is_default,
+                });
+            }
+
+            for (const se of uniqueServerEms) {
+                const isInstalled = localEms.some((le) => String(le.id).endsWith(String(se.id)));
+                if (!isInstalled) {
+                    combinedOptions.push({
+                        ...se,
+                        id: String(se.id),
+                        is_local: false,
+                        is_default: false,
+                    });
                 }
             }
+
+            availableEmulators.value = combinedOptions;
+
+            if (combinedOptions.length > 0) {
+                const defaultEmu =
+                    combinedOptions.find((e) => e.is_default) ||
+                    combinedOptions.find((e) => e.is_local) ||
+                    combinedOptions[0];
+                pendingEmulatorInfo.value = defaultEmu;
+            } else {
+                pendingEmulatorInfo.value = null;
+            }
+
+            if (!pendingEmulatorInfo.value && !emulatorInstalled) {
+                toast.error(
+                    `No emulator found for ${game.value.console.toUpperCase()}. You might need to add one in the Emulator Management page.`,
+                );
+                return;
+            }
+
             showConfirmInstallModal.value = true;
             return;
         }
 
         showConfirmInstallModal.value = false;
-        isDownloading.value = true;
 
-        if (!emulatorInstalled) {
-            await invoke("download_emulator", {
+        if (pendingEmulatorInfo.value && !pendingEmulatorInfo.value.is_local) {
+            await downloadStore.enqueueEmulator({
+                label: `${pendingEmulatorInfo.value.name} (${game.value.console.toUpperCase()})`,
                 console: game.value.console,
-                emulatorId: pendingEmulatorInfo.value?.id,
+                emulator_id: pendingEmulatorInfo.value.id,
+                total_bytes: pendingEmulatorInfo.value.file_size || 0,
             });
-            await emulatorStore.fetchEmulators();
+        } else if (pendingEmulatorInfo.value && pendingEmulatorInfo.value.is_local) {
+            await emulatorStore.setDefaultEmulator(pendingEmulatorInfo.value.id);
         }
 
         if (!romInstalled) {
-            const dlRes = await http.post<string>(`/roms/${game.value.id}/download`, {});
+            const dlRes = await http.post<any>(`/roms/${game.value.id}/download`, {});
 
             if (!dlRes.success) {
-                throw new Error(dlRes.message || "Failed to register download or get rom path from server");
+                throw new Error(dlRes.message || "Failed to get ROM path from server");
             }
 
-            await invoke("install_game", {
-                gameId: game.value.id.toString(),
+            let romPath = "";
+            let zipped = false;
+            let zippedEntry = null;
+
+            if (typeof dlRes.data === "string") {
+                romPath = dlRes.data;
+            } else {
+                romPath = dlRes.data.rom_path;
+                zipped = dlRes.data.zipped || false;
+                zippedEntry = dlRes.data.zipped_entry || null;
+            }
+
+            await downloadStore.enqueueRom({
+                label: game.value.realname || game.value.title,
+                game_id: game.value.id.toString(),
                 console: game.value.console,
-                romPath: dlRes.data,
+                rom_path: romPath,
                 extension: game.value.file_extension || "rom",
                 name: game.value.realname || game.value.title,
+                zipped: zipped,
+                zipped_entry: zippedEntry,
+                total_bytes: game.value.file_size_bytes || 0,
+                md5: dlRes.data?.md5 || undefined,
             });
         }
-
-        await checkInstallation();
-        gameStore.fetchInstalledGames();
-    } catch (error) {
-        toast.error(`Failed to install: ${formatError(error)}`);
-    } finally {
-        isDownloading.value = false;
         pendingEmulatorInfo.value = null;
         availableEmulators.value = [];
+    } catch (error) {
+        toast.error(`Failed to queue install: ${formatError(error)}`);
     }
+};
+
+const handleCancelInstall = () => {
+    showConfirmInstallModal.value = false;
+    pendingEmulatorInfo.value = null;
+    availableEmulators.value = [];
 };
 
 const installItems = computed<InstallItem[]>(() => {
     if (!game.value) return [];
-    const items: InstallItem[] = [
-        {
+    const items: InstallItem[] = [];
+
+    if (!isRomInstalled.value) {
+        items.push({
             name: game.value.title,
             description: `Game data for ${game.value.console.toUpperCase()}`,
             size: game.value.file_size_bytes || 0,
             type: "game",
-        },
-    ];
+        });
+    }
 
-    if (pendingEmulatorInfo.value) {
+    if (pendingEmulatorInfo.value && !pendingEmulatorInfo.value.is_local) {
         items.push({
             name: pendingEmulatorInfo.value.name,
             description: `Emulator for ${game.value.console.toUpperCase()}`,
@@ -259,11 +382,45 @@ const installItems = computed<InstallItem[]>(() => {
     return items;
 });
 
+const formatBytes = (bytes: number, decimals = 2) => {
+    if (!+bytes) return "0 Bytes";
+    const k = 1024;
+    const dm = decimals < 0 ? 0 : decimals;
+    const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+};
+
 const emulatorOptions = computed(() => {
-    return availableEmulators.value.map((emu) => ({
-        name: emu.name,
-        value: emu.id,
-    }));
+    const options = availableEmulators.value.map((emu) => {
+        let domain = "Local";
+        if (emu.source_server) {
+            domain = emu.source_server.replace(/^https?:\/\//, "").replace(/\/$/, "");
+        } else if (String(emu.id).startsWith("server-")) {
+            const idParts = String(emu.id).split("-");
+            if (idParts.length >= 3) {
+                const domainEncoded = idParts[1];
+                domain = domainEncoded
+                    .replace(/___/g, "://")
+                    .replace(/_/g, ".")
+                    .replace(/^https?:\/\//, "");
+            }
+        }
+
+        let desc = "";
+        if (emu.is_local) {
+            desc = `${domain} (Installed)`;
+        } else {
+            desc = `${domain} - ${formatBytes(emu.file_size)}`;
+        }
+
+        return {
+            value: String(emu.id),
+            name: emu.name,
+            description: desc,
+        };
+    });
+    return options;
 });
 
 const showConflictModal = ref(false);
@@ -284,6 +441,21 @@ const handleConflictChoice = (choice: boolean) => {
     if (resolveConflict) resolveConflict(choice);
 };
 
+const showDisclaimerModal = ref(false);
+let resolveDisclaimer: ((value: boolean) => void) | null = null;
+
+const promptDisclaimer = (): Promise<boolean> => {
+    showDisclaimerModal.value = true;
+    return new Promise((resolve) => {
+        resolveDisclaimer = resolve;
+    });
+};
+
+const handleDisclaimerChoice = (choice: boolean) => {
+    showDisclaimerModal.value = false;
+    if (resolveDisclaimer) resolveDisclaimer(choice);
+};
+
 const showEmulatorModal = ref(false);
 
 const handlePlay = async (customEmulatorId?: string) => {
@@ -298,6 +470,14 @@ const handlePlay = async (customEmulatorId?: string) => {
         gameStore.isLaunching = true;
         showEmulatorModal.value = false;
         const gameIdStr = game.value.id.toString();
+
+        if (game.value.multi_disc_disclaimer && !gameStore.hideMultiDiscDisclaimer) {
+            const proceed = await promptDisclaimer();
+            if (!proceed) {
+                gameStore.isLaunching = false;
+                return;
+            }
+        }
 
         const status: any = await invoke("check_save_status", { gameId: gameIdStr });
 
@@ -336,19 +516,12 @@ const handlePlay = async (customEmulatorId?: string) => {
     <div class="c-bottom-panel-container">
         <div v-if="game" class="c-bottom-panel">
             <div class="c-bottom-panel__header">
-                <div class="c-bottom-panel__banner" :style="{ background: consoleStore.getConsoleColor(game.console) }">
+                <div class="c-bottom-panel__banner">
                     <img
                         v-if="game"
                         :src="useStoragePath(game.image_path)"
                         alt="Game Icon"
-                        class="c-bottom-panel__thumb"
-                    />
-                    <Badge
-                        class="c-bottom-panel__tag"
-                        :bg-color="consoleStore.getConsoleColor(game.console) || 'var(--color-primary)'"
-                    >
-                        {{ game.console.toUpperCase() }}
-                    </Badge>
+                        class="c-bottom-panel__thumb" />
                 </div>
 
                 <div class="c-bottom-panel__titles">
@@ -356,21 +529,39 @@ const handlePlay = async (customEmulatorId?: string) => {
                         <Heading :level="3" class="c-bottom-panel__title">{{ game.title }}</Heading>
                     </Tooltip>
 
-                    <Text variant="label" size="xs" class="c-bottom-panel__subtitle"
-                        >{{ game.category }} | {{ game.region }} | {{ game.release_year }} | {{ game.languages }}</Text
-                    >
+                    <div class="c-bottom-panel__tags">
+                        <Badge :bg-color="consoleStore.getConsoleColor(game.console) || 'var(--color-primary)'">
+                            {{ game.console.toUpperCase() }}
+                        </Badge>
+
+                        <span v-if="game.category" class="c-bottom-panel__dot"></span>
+                        <Text v-if="game.category" variant="label" size="xs" class="c-bottom-panel__tag-text">
+                            {{ game.category }}
+                        </Text>
+
+                        <span v-if="game.region" class="c-bottom-panel__dot"></span>
+                        <Text v-if="game.region" variant="label" size="xs" class="c-bottom-panel__tag-text">
+                            {{ game.region }}
+                        </Text>
+
+                        <span v-if="game.release_year" class="c-bottom-panel__dot"></span>
+                        <Text v-if="game.release_year" variant="label" size="xs" class="c-bottom-panel__tag-text">
+                            {{ game.release_year }}
+                        </Text>
+                    </div>
 
                     <transition name="fade">
                         <div v-if="libraryStats" class="c-bottom-panel__meta">
                             <span class="c-bottom-panel__stat">
-                                <span class="c-bottom-panel__stat-label">PLAYED:</span> {{ libraryStats.play_count }}
+                                <span class="c-bottom-panel__stat-label">PLAYED</span>
+                                <span class="c-bottom-panel__stat-value">{{ libraryStats.play_count }}</span>
                             </span>
 
-                            <span class="c-bottom-panel__separator">/</span>
-
                             <span class="c-bottom-panel__stat">
-                                <span class="c-bottom-panel__stat-label">LAST:</span>
-                                {{ formatDate(libraryStats.last_played) }}
+                                <span class="c-bottom-panel__stat-label">LAST</span>
+                                <span class="c-bottom-panel__stat-value">
+                                    {{ formatDate(libraryStats.last_played) }}
+                                </span>
                             </span>
                         </div>
                     </transition>
@@ -388,28 +579,42 @@ const handlePlay = async (customEmulatorId?: string) => {
                         size="lg"
                         title="Play with..."
                         @click="showEmulatorModal = true"
-                        :disabled="gameStore.isLaunching || gameStore.isPlaying"
-                    >
+                        :disabled="gameStore.isLaunching || gameStore.isPlaying">
                         <Gamepad2 />
                     </IconButton>
 
                     <div
                         v-if="!game.versions_count || game.versions_count <= 1"
-                        class="c-bottom-panel__split-container"
-                    >
+                        class="c-bottom-panel__split-container">
                         <Button
                             v-if="isReadyToPlay"
                             color="primary"
                             full
                             @click="handlePlay()"
-                            :disabled="gameStore.isLaunching || gameStore.isPlaying"
-                        >
+                            :disabled="gameStore.isLaunching || gameStore.isPlaying">
                             <template v-if="gameStore.isLaunching">LAUNCHING</template>
                             <template v-else-if="gameStore.isPlaying">PLAYING</template>
                             <template v-else>PLAY</template>
                         </Button>
-                        <Button v-else color="green" full @click="handleInstall" :disabled="isDownloading">
-                            {{ isDownloading ? "DOWNLOADING" : "INSTALL" }}
+                        <Button
+                            v-else
+                            color="green"
+                            full
+                            @click="handleInstall"
+                            :disabled="isDownloading"
+                            :progress="downloadProgress === 100 ? extractionProgress : downloadProgress">
+                            <template v-if="isDownloading">
+                                {{
+                                    downloadStatus === "queued"
+                                        ? "QUEUED"
+                                        : downloadProgress === 100
+                                          ? game?.zipped
+                                              ? `UNPACKING ${extractionProgress ?? 0}%`
+                                              : `INSTALLING ${extractionProgress ?? 0}%`
+                                          : `DOWNLOADING ${downloadProgress ?? 0}%`
+                                }}
+                            </template>
+                            <template v-else>INSTALL</template>
                         </Button>
                     </div>
 
@@ -420,8 +625,7 @@ const handlePlay = async (customEmulatorId?: string) => {
                                 color="primary"
                                 class="c-bottom-panel__split-main"
                                 @click="handlePlay()"
-                                :disabled="gameStore.isLaunching || gameStore.isPlaying"
-                            >
+                                :disabled="gameStore.isLaunching || gameStore.isPlaying">
                                 <template v-if="gameStore.isLaunching">LAUNCHING</template>
                                 <template v-else-if="gameStore.isPlaying">PLAYING</template>
                                 <template v-else>PLAY</template>
@@ -432,8 +636,19 @@ const handlePlay = async (customEmulatorId?: string) => {
                                 class="c-bottom-panel__split-main"
                                 @click="handleInstall"
                                 :disabled="isDownloading"
-                            >
-                                {{ isDownloading ? "DOWNLOADING" : "INSTALL" }}
+                                :progress="downloadProgress === 100 ? extractionProgress : downloadProgress">
+                                <template v-if="isDownloading">
+                                    {{
+                                        downloadStatus === "queued"
+                                            ? "QUEUED"
+                                            : downloadProgress === 100
+                                              ? game?.zipped
+                                                  ? `UNPACKING ${extractionProgress ?? 0}%`
+                                                  : `INSTALLING ${extractionProgress ?? 0}%`
+                                              : `DOWNLOADING ${downloadProgress ?? 0}%`
+                                    }}
+                                </template>
+                                <template v-else>INSTALL</template>
                             </Button>
 
                             <Button
@@ -444,8 +659,7 @@ const handlePlay = async (customEmulatorId?: string) => {
                                     'is-ready': isReadyToPlay,
                                 }"
                                 @click="toggleVersionPicker"
-                                title="Choose version"
-                            >
+                                title="Choose version">
                                 <ChevronDown :size="18" />
                             </Button>
                         </div>
@@ -458,9 +672,8 @@ const handlePlay = async (customEmulatorId?: string) => {
                                     position: 'fixed',
                                     right: `calc(100vw - ${versionPickerX}px)`,
                                     bottom: `calc(100vh - ${versionPickerY}px + 8px)`,
-                                }"
-                            >
-                                <div class="c-bottom-panel__versions-header"> {{ game.versions_count }} VERSIONS </div>
+                                }">
+                                <div class="c-bottom-panel__versions-header">{{ game.versions_count }} VERSIONS</div>
                                 <div v-if="loadingVersions" class="c-bottom-panel__versions-loading">
                                     Loading versions…
                                 </div>
@@ -471,26 +684,23 @@ const handlePlay = async (customEmulatorId?: string) => {
                                         v-show="v"
                                         class="c-bottom-panel__version-item"
                                         @click="selectVersion(v)"
-                                        :class="{ 'is-active': v?.id === game.id }"
-                                    >
+                                        :class="{ 'is-active': v?.id === game.id }">
                                         <img
                                             v-if="v?.image_path"
                                             :src="useStoragePath(v.image_path)"
                                             class="c-bottom-panel__version-thumb"
-                                            :alt="v.title"
-                                        />
+                                            :alt="v.title" />
                                         <div class="c-bottom-panel__version-info" v-if="v">
                                             <span class="c-bottom-panel__version-name">
                                                 {{ v.realname || v.region || v.title }}
                                             </span>
-                                            <span v-if="v.region" class="c-bottom-panel__version-region">{{
-                                                v.region
-                                            }}</span>
+                                            <span v-if="v.region" class="c-bottom-panel__version-region">
+                                                {{ v.region }}
+                                            </span>
                                         </div>
                                         <div
                                             v-if="v && gameStore.installedGameIds.includes(v.id)"
-                                            class="c-bottom-panel__version-installed"
-                                        >
+                                            class="c-bottom-panel__version-installed">
                                             installed
                                         </div>
                                     </button>
@@ -508,6 +718,10 @@ const handlePlay = async (customEmulatorId?: string) => {
 
         <ShelfManager v-if="game" :game-id="game.id" :show="showShelfManager" @close="showShelfManager = false" />
         <SaveConflict :show="showConflictModal" :version="conflictVersion" @choice="handleConflictChoice" />
+        <MultiDiscDisclaimer
+            :show="showDisclaimerModal"
+            @confirm="handleDisclaimerChoice(true)"
+            @cancel="handleDisclaimerChoice(false)" />
 
         <PlayWithModal
             v-if="game"
@@ -517,8 +731,7 @@ const handlePlay = async (customEmulatorId?: string) => {
                 Object.values(emulatorStore.emulators).filter((e) => e.consoles.some((c) => c === game!.console))
             "
             @close="showEmulatorModal = false"
-            @play="handlePlay"
-        />
+            @play="handlePlay" />
 
         <InstallModal
             v-if="game"
@@ -526,24 +739,15 @@ const handlePlay = async (customEmulatorId?: string) => {
             :title="`Install ${game.title}`"
             :items="installItems"
             :loading="isDownloading"
-            @close="showConfirmInstallModal = false"
-            @confirm="handleInstall"
-        >
-            <template #header v-if="availableEmulators.length > 1">
-                <div style="margin-top: 12px; margin-bottom: 8px">
-                    <Select
-                        label="Choose Emulator to Install"
-                        :modelValue="pendingEmulatorInfo?.id || ''"
-                        @update:modelValue="
-                            (val) => {
-                                pendingEmulatorInfo = availableEmulators.find((em) => em.id === val);
-                            }
-                        "
-                        :options="emulatorOptions"
-                    />
-                </div>
-            </template>
-        </InstallModal>
+            :emulatorOptions="emulatorOptions"
+            :selectedEmulatorId="pendingEmulatorInfo?.id || ''"
+            @update:selectedEmulatorId="
+                (val) => {
+                    pendingEmulatorInfo = availableEmulators.find((em) => String(em.id) === String(val));
+                }
+            "
+            @close="handleCancelInstall"
+            @confirm="handleInstall" />
     </div>
 </template>
 
@@ -581,35 +785,28 @@ const handlePlay = async (customEmulatorId?: string) => {
 
     &__banner {
         position: relative;
-        width: 80px;
-        height: 80px;
+        width: 88px;
+        height: 88px;
         flex-shrink: 0;
-        background: var(--color-surface);
-        border-radius: var(--radius-md);
-        padding: var(--spacing-xs);
-        box-shadow: var(--shadow-subtle);
+        background: var(--color-surface-hover);
+        border-radius: var(--radius-lg);
         display: flex;
         align-items: center;
         justify-content: center;
-        border: 1px solid var(--color-border);
+        border: 1px solid rgba(255, 255, 255, 0.1);
     }
 
     &__thumb {
         width: 100%;
         height: 100%;
         object-fit: cover;
-        border-radius: calc(var(--radius-md) - 4px);
-    }
-
-    &__tag {
-        position: absolute;
-        top: -8px;
-        right: -8px;
+        border-radius: calc(var(--radius-lg) - 1px);
     }
 
     &__titles {
         display: flex;
         flex-direction: column;
+        justify-content: center;
         flex: 1;
         min-width: 0;
         overflow: hidden;
@@ -622,35 +819,60 @@ const handlePlay = async (customEmulatorId?: string) => {
         width: fit-content;
         max-width: 100%;
         margin: 0;
+        line-height: 1.2;
     }
 
-    &__subtitle {
-        margin: var(--spacing-xs) 0 0 0;
-        white-space: nowrap;
+    &__tags {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 6px 0 10px 0;
+        flex-wrap: nowrap;
         overflow: hidden;
-        text-overflow: ellipsis;
     }
 
-    &__languages {
-        margin-top: 2px;
+    &__dot {
+        width: 4px;
+        height: 4px;
+        border-radius: 50%;
+        background: var(--color-text-muted);
+        opacity: 0.5;
+        flex-shrink: 0;
+    }
+
+    &__tag-text {
+        color: var(--color-text-muted);
+        white-space: nowrap;
+        flex-shrink: 0;
     }
 
     &__meta {
         display: flex;
         align-items: center;
-        gap: var(--spacing-md);
-        font-size: 0.85rem;
-        font-weight: 700;
-        color: var(--color-text-muted);
+        gap: 12px;
+    }
+
+    &__stat {
+        display: flex;
+        align-items: baseline;
+        gap: 6px;
+        background: rgba(255, 255, 255, 0.04);
+        padding: 4px 10px;
+        border-radius: var(--radius-sm);
+        border: 1px solid rgba(255, 255, 255, 0.05);
     }
 
     &__stat-label {
-        opacity: 0.6;
-        margin-right: var(--spacing-xs);
+        font-size: 0.7rem;
+        font-weight: 800;
+        color: var(--color-text-muted);
+        letter-spacing: 0.5px;
     }
 
-    &__separator {
-        opacity: 0.3;
+    &__stat-value {
+        font-size: 0.85rem;
+        font-weight: 700;
+        color: var(--color-text);
     }
 
     &__action-area {

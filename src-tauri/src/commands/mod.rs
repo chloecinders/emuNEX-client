@@ -1,8 +1,9 @@
 pub mod auth;
+pub mod download;
+pub mod drpc;
 pub mod emulator;
 pub mod http;
+pub mod input;
 pub mod play;
 pub mod save;
 pub mod storage;
-pub mod drpc;
-pub mod input;

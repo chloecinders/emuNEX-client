@@ -9,12 +9,14 @@ import Switch from "../components/ui/Switch.vue";
 import Text from "../components/ui/Text.vue";
 import { useToast } from "../lib/useToast";
 import { useDevStore } from "../stores/DevStore";
+import { useGameStore } from "../stores/GameStore";
 import { useThemeStore } from "../stores/ThemeStore";
 import { useUpdateStore } from "../stores/UpdateStore";
 import { useUserStore } from "../stores/UserStore";
 
 const userStore = useUserStore();
 const themeStore = useThemeStore();
+const gameStore = useGameStore();
 const devStore = useDevStore();
 const updateStore = useUpdateStore();
 
@@ -147,9 +149,9 @@ onUnmounted(() => {
                     <div class="c-settings__card-top">
                         <div class="c-settings__description-wrap">
                             <Heading :level="3">Client Updates</Heading>
-                            <Text v-if="currentVersion" variant="muted" size="sm"
-                                >Current Version: {{ currentVersion }}</Text
-                            >
+                            <Text v-if="currentVersion" variant="muted" size="sm">
+                                Current Version: {{ currentVersion }}
+                            </Text>
                         </div>
                     </div>
 
@@ -158,8 +160,7 @@ onUnmounted(() => {
                             color="grey"
                             size="sm"
                             :disabled="updateStore.isChecking || updateStore.isUpdating"
-                            @click="updateStore.checkForUpdates()"
-                        >
+                            @click="updateStore.checkForUpdates()">
                             <RefreshCw :size="16" :class="{ 'c-settings__spin': updateStore.isChecking }" />
                             <span>Check for Updates</span>
                         </Button>
@@ -169,8 +170,7 @@ onUnmounted(() => {
                             color="primary"
                             size="sm"
                             :disabled="updateStore.isUpdating"
-                            @click="updateStore.installUpdate()"
-                        >
+                            @click="updateStore.installUpdate()">
                             <Download :size="16" />
                             <span>Install Updates</span>
                         </Button>
@@ -180,11 +180,14 @@ onUnmounted(() => {
                         <div
                             v-if="updateStore.updateStatus.message"
                             class="c-settings__status"
-                            :class="`c-settings__status--${updateStore.updateStatus.type}`"
-                        >
+                            :class="`c-settings__status--${updateStore.updateStatus.type}`">
                             <Text size="sm">{{ updateStore.updateStatus.message }}</Text>
                         </div>
                     </Transition>
+
+                    <div class="c-settings__divider" />
+
+                    <Switch v-model="gameStore.hideMultiDiscDisclaimer" label="Hide Multi-Disc Swap Disclaimer" />
                 </div>
             </section>
 
@@ -210,8 +213,7 @@ onUnmounted(() => {
                             :title="preset.label"
                             :aria-label="preset.label"
                             :aria-pressed="themeStore.accentId === preset.id"
-                            @click="themeStore.setAccent(preset.id)"
-                        />
+                            @click="themeStore.setAccent(preset.id)" />
 
                         <button
                             class="c-accent-swatch c-accent-swatch--custom"
@@ -220,8 +222,7 @@ onUnmounted(() => {
                             title="Custom Color"
                             aria-label="Custom Color"
                             :aria-pressed="themeStore.accentId === 'custom'"
-                            @click="themeStore.setAccent('custom')"
-                        >
+                            @click="themeStore.setAccent('custom')">
                             <Pipette :size="14" />
                         </button>
                     </div>
@@ -237,8 +238,7 @@ onUnmounted(() => {
                             step="1"
                             :value="themeStore.customHue"
                             class="c-hue-slider"
-                            @input="(e) => themeStore.setCustomHue(Number((e.target as HTMLInputElement).value))"
-                        />
+                            @input="(e) => themeStore.setCustomHue(Number((e.target as HTMLInputElement).value))" />
                     </div>
                 </div>
             </section>
@@ -274,8 +274,7 @@ onUnmounted(() => {
                         <div
                             v-if="storageStatus.message"
                             class="c-settings__status"
-                            :class="`c-settings__status--${storageStatus.type}`"
-                        >
+                            :class="`c-settings__status--${storageStatus.type}`">
                             <Text size="sm">{{ storageStatus.message }}</Text>
                         </div>
                     </Transition>
@@ -293,10 +292,9 @@ onUnmounted(() => {
                         <div class="c-settings__card-top">
                             <div class="c-settings__description-wrap">
                                 <Heading :level="3">Request Viewer</Heading>
-                                <Text variant="muted" size="sm"
-                                    >Inspect all API requests made through the Rust HTTP bridge. Opens in a new
-                                    window.</Text
-                                >
+                                <Text variant="muted" size="sm">
+                                    Inspect all API requests made through the Rust HTTP bridge. Opens in a new window.
+                                </Text>
                             </div>
                         </div>
                         <div class="c-settings__actions">

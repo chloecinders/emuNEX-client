@@ -163,3 +163,27 @@ pub fn open_external_url<R: Runtime>(app: AppHandle<R>, url: String) -> Result<(
         .open_url(url, None::<&str>)
         .map_err(|e| e.to_string())
 }
+
+#[tauri::command]
+pub fn open_folder<R: Runtime>(app: AppHandle<R>, path: String) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    {
+        let uri = if path.starts_with('/') {
+            format!("file://{}", path)
+        } else {
+            path.clone()
+        };
+
+        if std::process::Command::new("xdg-open")
+            .arg(&uri)
+            .spawn()
+            .is_ok()
+        {
+            return Ok(());
+        }
+    }
+
+    app.opener()
+        .open_path(path, None::<&str>)
+        .map_err(|e| e.to_string())
+}

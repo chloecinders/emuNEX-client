@@ -12,6 +12,8 @@ use crate::commands::http::{perform_backend_request, BackendBody};
 use crate::commands::save::upload_save_files;
 use crate::{store, ApiResponse, AppState};
 
+
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct InstalledRom {
     pub game_id: String,
@@ -19,7 +21,10 @@ pub struct InstalledRom {
     pub rom_filename: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub _name: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub companion_filenames: Vec<String>,
 }
+
 
 #[derive(Serialize, Deserialize, Default, Debug)]
 pub struct InstalledRomsManifest {
@@ -53,6 +58,10 @@ fn write_manifest(data_dir: &Path, manifest: &InstalledRomsManifest) -> Result<(
     let content = serde_json::to_string_pretty(manifest).map_err(|e| e.to_string())?;
     write(&path, content)
         .map_err(|e| format!("Failed writing manifest to {}: {}", path.display(), e))
+}
+
+pub fn write_manifest_pub(data_dir: &Path, manifest: &InstalledRomsManifest) -> Result<(), String> {
+    write_manifest(data_dir, manifest)
 }
 
 async fn migrate_to_manifest<R: Runtime>(
@@ -167,6 +176,7 @@ async fn migrate_to_manifest<R: Runtime>(
                 console,
                 rom_filename: file_name,
                 _name: name,
+                companion_filenames: Vec::new(),
             },
         );
     }
@@ -178,7 +188,7 @@ async fn migrate_to_manifest<R: Runtime>(
     manifest
 }
 
-async fn get_or_create_manifest<R: Runtime>(
+pub async fn get_or_create_manifest<R: Runtime>(
     app: &AppHandle<R>,
 ) -> Result<InstalledRomsManifest, String> {
     let data_dir = store::get_data_dir(app)?;
@@ -302,17 +312,19 @@ fn collect_by_extension(dir: &Path, extensions: &[String]) -> Vec<(PathBuf, Path
         return results;
     }
 
-    let exts_lower: Vec<String> = extensions
-        .iter()
-        .map(|e| {
-            let lower = e.to_lowercase();
-            if lower.starts_with('.') {
-                lower
-            } else {
-                format!(".{}", lower)
-            }
-        })
-        .collect();
+    let mut match_numeric = false;
+    let mut literal_exts: Vec<String> = Vec::new();
+
+    for e in extensions {
+        let lower = e.to_lowercase();
+        if lower == "numeric" {
+            match_numeric = true;
+        } else if lower.starts_with('.') {
+            literal_exts.push(lower);
+        } else {
+            literal_exts.push(format!(".{}", lower));
+        }
+    }
 
     let mut stack = vec![dir.to_path_buf()];
 
@@ -327,13 +339,26 @@ fn collect_by_extension(dir: &Path, extensions: &[String]) -> Vec<(PathBuf, Path
 
             if path.is_dir() {
                 stack.push(path);
-            } else if path.is_file() {
-                let path_str = path.to_string_lossy().to_lowercase();
+                continue;
+            }
 
-                if exts_lower.iter().any(|ext| path_str.ends_with(ext)) {
-                    let rel = path.strip_prefix(dir).unwrap_or(&path).to_path_buf();
-                    results.push((rel, path));
-                }
+            if !path.is_file() {
+                continue;
+            }
+
+            let path_str = path.to_string_lossy().to_lowercase();
+            let literal_match = literal_exts.iter().any(|ext| path_str.ends_with(ext));
+
+            let numeric_match = match_numeric
+                && path
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .map(|e| !e.is_empty() && e.chars().all(|c| c.is_ascii_digit()))
+                    .unwrap_or(false);
+
+            if literal_match || numeric_match {
+                let rel = path.strip_prefix(dir).unwrap_or(&path).to_path_buf();
+                results.push((rel, path));
             }
         }
     }
@@ -348,6 +373,8 @@ pub async fn install_game<R: Runtime>(
     rom_path: String,
     extension: String,
     name: Option<String>,
+    zipped: Option<bool>,
+    zipped_entry: Option<String>,
 ) -> Result<(), String> {
     let store = store::get_current_store(&app)?;
     let domain = store
@@ -375,11 +402,20 @@ pub async fn install_game<R: Runtime>(
     save_dir.push(&game_id);
     create_dir_all(&save_dir).map_err(|e| e.to_string())?;
 
-    let extension = extension.trim_start_matches('.');
-    let file_name = format!("{}.{}", game_id, extension);
-    rom_dir.push(&file_name);
+    let mut companion_filenames = Vec::new();
+    let entry_filename = zipped_entry.clone().unwrap_or_else(|| {
+        let extension = extension.trim_start_matches('.');
+        format!("{}.{}", game_id, extension)
+    });
 
-    if !rom_dir.exists() {
+    let is_zipped = zipped.unwrap_or(false);
+    let dest_path = if is_zipped {
+        rom_dir.join(format!("temp_{}.zip", game_id))
+    } else {
+        rom_dir.join(&entry_filename)
+    };
+
+    if !dest_path.exists() {
         let download_url = format!(
             "{}{}/{}",
             domain.trim_end_matches('/'),
@@ -399,12 +435,47 @@ pub async fn install_game<R: Runtime>(
         .into_stream()?;
 
         let mut stream = response.bytes_stream();
-        let mut file = File::create(&rom_dir).map_err(|e| e.to_string())?;
+        let mut file = File::create(&dest_path).map_err(|e| e.to_string())?;
 
         while let Some(item) = stream.next().await {
             let chunk = item.map_err(|e| e.to_string())?;
             file.write_all(&chunk).map_err(|e| e.to_string())?;
         }
+        drop(file);
+    }
+
+    if is_zipped {
+        let zip_file = File::open(&dest_path).map_err(|e| e.to_string())?;
+        let mut archive = zip::ZipArchive::new(zip_file).map_err(|e| e.to_string())?;
+
+        for i in 0..archive.len() {
+            let mut file = archive.by_index(i).map_err(|e| e.to_string())?;
+            let relative_path = match file.enclosed_name() {
+                Some(path) => path.to_path_buf(),
+                None => continue,
+            };
+
+            let outpath = rom_dir.join(&relative_path);
+
+            if (*file.name()).ends_with('/') {
+                create_dir_all(&outpath).map_err(|e| e.to_string())?;
+            } else {
+                if let Some(p) = outpath.parent() {
+                    if !p.exists() {
+                        create_dir_all(p).map_err(|e| e.to_string())?;
+                    }
+                }
+                let mut outfile = File::create(&outpath).map_err(|e| e.to_string())?;
+                std::io::copy(&mut file, &mut outfile).map_err(|e| e.to_string())?;
+
+                let rel_str = relative_path.to_string_lossy().replace('\\', "/");
+                if rel_str != entry_filename {
+                    companion_filenames.push(rel_str);
+                }
+            }
+        }
+
+        std::fs::remove_file(&dest_path).ok();
     }
 
     let mut manifest = get_or_create_manifest(&app).await?;
@@ -413,8 +484,9 @@ pub async fn install_game<R: Runtime>(
         InstalledRom {
             game_id,
             console,
-            rom_filename: file_name,
+            rom_filename: entry_filename,
             _name: name,
+            companion_filenames,
         },
     );
     write_manifest(&base_path, &manifest)?;
@@ -543,41 +615,51 @@ pub async fn play_game<R: Runtime>(
     let temp_rom_path = temp_dir.join(rom_filename);
     copy(&persistent_rom_path, &temp_rom_path).map_err(|e| e.to_string())?;
 
+    let parent_dir = persistent_rom_path.parent().ok_or("Invalid ROM parent directory")?;
+    for comp_name in &rom_info.companion_filenames {
+        let comp_src = parent_dir.join(comp_name);
+
+        if comp_src.exists() {
+            let comp_dest = temp_dir.join(comp_name);
+
+            if let Some(p) = comp_dest.parent() {
+                if !p.exists() {
+                    create_dir_all(p).map_err(|e| e.to_string())?;
+                }
+            }
+            copy(&comp_src, &comp_dest).map_err(|e| format!("Failed to copy companion file {}: {}", comp_name, e))?;
+        }
+    }
+
     for entry in read_dir(&save_dir).map_err(|e| e.to_string())? {
         let entry = entry.map_err(|e| e.to_string())?;
         copy(entry.path(), temp_dir.join(entry.file_name())).ok();
     }
+
 
     let rom_name = persistent_rom_path
         .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or("");
 
-    let data_dir = base_path.to_string_lossy().to_string();
-    let save_dir_str = save_dir.to_string_lossy().to_string();
-    let temp_dir_str = temp_dir.to_string_lossy().to_string();
-    let emu_dir_str = emu_dir.to_string_lossy().to_string();
-    let bin_name = Path::new(&emulator.binary_path)
-        .file_name()
-        .and_then(|f| f.to_str())
-        .unwrap_or("")
-        .to_string();
-
-    let _rom_path_escaped = format!("'{}'", temp_rom_path.to_string_lossy().replace("'", "''"));
+    let ctx = crate::utils::TemplateContext {
+        emu_dir: emu_dir.to_string_lossy().to_string(),
+        data_dir: base_path.to_string_lossy().to_string(),
+        save_dir: save_dir.to_string_lossy().to_string(),
+        temp_dir: temp_dir.to_string_lossy().to_string(),
+        rom_name: rom_name.to_string(),
+        game_id: game_id.clone(),
+        console: console.clone(),
+        rom_path: temp_rom_path.to_string_lossy().to_string(),
+        bin_path: emulator.binary_path.clone(),
+        documents_dir: crate::utils::get_documents_dir(),
+    };
 
     let resolved_save_path = if let Some(ref template) = emulator.save_path {
         if template.is_empty() {
             None
         } else {
-            let path = template
-                .replace("$rom_name", rom_name)
-                .replace("$game_id", &game_id)
-                .replace("$console", &console)
-                .replace("$data_dir", &data_dir)
-                .replace("$save_dir", &save_dir_str)
-                .replace("$temp_dir", &temp_dir_str)
-                .replace("$emu_dir", &emu_dir_str);
-            Some(path)
+            Some(ctx.resolve_path(template).to_string_lossy().to_string())
         }
     } else {
         None
@@ -620,12 +702,6 @@ pub async fn play_game<R: Runtime>(
     let pre_snapshot = recursive_snapshot(&scan_dir_for_snapshot);
 
     let child = if !emulator.binary_path.is_empty() || !emulator.run_command.is_empty() {
-        let bin_to_use = if !emulator.binary_path.is_empty() {
-            &emulator.binary_path
-        } else {
-            &bin_name
-        };
-
         let cmd_template = if !emulator.run_command.is_empty() {
             let cmd = emulator.run_command.clone();
             if !cmd.contains("$bin") && !cmd.contains("$exe") && !emulator.binary_path.is_empty() {
@@ -641,18 +717,7 @@ pub async fn play_game<R: Runtime>(
         let mut final_parts = Vec::new();
 
         for part in parts {
-            let replaced = part
-                .replace("$bin", bin_to_use)
-                .replace("$exe", bin_to_use)
-                .replace("$rom", &temp_rom_path.to_string_lossy())
-                .replace("$rom_name", rom_name)
-                .replace("$game_id", &game_id)
-                .replace("$console", &console)
-                .replace("$data_dir", &data_dir)
-                .replace("$save_dir", &save_dir_str)
-                .replace("$temp_dir", &temp_dir_str)
-                .replace("$emu_dir", &emu_dir_str);
-            final_parts.push(replaced);
+            final_parts.push(ctx.resolve_path(&part).to_string_lossy().to_string());
         }
 
         if final_parts.is_empty() {
@@ -839,15 +904,21 @@ pub async fn get_local_storage<R: Runtime>(
     let mut entries: HashMap<String, LocalStorageEntry> = HashMap::new();
 
     for (game_id, rom_info) in &manifest.roms {
-        let rom_path = base_path
-            .join("roms")
-            .join(&rom_info.console)
-            .join(&rom_info.rom_filename);
-        let rom_size = if rom_path.exists() {
+        let console_dir = base_path.join("roms").join(&rom_info.console);
+        let rom_path = console_dir.join(&rom_info.rom_filename);
+        
+        let mut rom_size = if rom_path.exists() {
             rom_path.metadata().map(|m| m.len()).unwrap_or(0)
         } else {
             0
         };
+
+        for companion in &rom_info.companion_filenames {
+            let companion_path = console_dir.join(companion);
+            if companion_path.exists() {
+                rom_size += companion_path.metadata().map(|m| m.len()).unwrap_or(0);
+            }
+        }
 
         let local_version = sync_versions
             .get(game_id)
@@ -909,13 +980,22 @@ pub async fn delete_installed_rom<R: Runtime>(
     let mut manifest = get_or_create_manifest(&app).await?;
 
     if let Some(rom_info) = manifest.roms.remove(&game_id) {
-        let rom_path = base_path
+        let parent_dir = base_path
             .join("roms")
-            .join(&rom_info.console.to_lowercase())
-            .join(&rom_info.rom_filename);
+            .join(&rom_info.console.to_lowercase());
+        
+        let rom_path = parent_dir.join(&rom_info.rom_filename);
         if rom_path.exists() {
             std::fs::remove_file(&rom_path).map_err(|e| e.to_string())?;
         }
+
+        for comp_name in &rom_info.companion_filenames {
+            let comp_path = parent_dir.join(comp_name);
+            if comp_path.exists() {
+                std::fs::remove_file(&comp_path).ok();
+            }
+        }
+
         write_manifest(&base_path, &manifest)?;
     }
 

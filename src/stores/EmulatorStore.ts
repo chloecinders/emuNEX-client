@@ -165,6 +165,7 @@ export const useEmulatorStore = defineStore("emulatorStore", () => {
         try {
             await runMigrations();
             const globalStore = await getGlobalStore();
+            await globalStore.reload();
             const ems = (await globalStore.get<Record<string, any>>("emulators")) || {};
             const validEms = parseStoredEmulators(ems);
             await backfillMetadata(validEms);
@@ -177,7 +178,7 @@ export const useEmulatorStore = defineStore("emulatorStore", () => {
     async function isEmulatorInstalled(cs: string): Promise<boolean> {
         if (Object.keys(emulators.value).length === 0) await fetchEmulators();
         return Object.values(emulators.value).some(e =>
-            e.consoles.some(c => c === cs)
+            e.consoles.some(c => c.toLowerCase() === cs.toLowerCase())
         );
     }
 
@@ -227,22 +228,24 @@ export const useEmulatorStore = defineStore("emulatorStore", () => {
         }
     }
 
-    async function downloadEmulator(consoleName: string, serverEmulatorId: string, keepConfig: boolean = false, sourceServer?: string) {
-        loading.value = true;
-        try {
-            await invoke("download_emulator", {
-                console: consoleName,
-                emulator_id: serverEmulatorId,
-                keep_config: keepConfig,
-                source_server: sourceServer || null
-            });
-
-            await fetchEmulators();
-        } catch (e) {
-            throw e;
-        } finally {
-            loading.value = false;
-        }
+    async function downloadEmulator(
+        consoleName: string,
+        serverEmulatorId: string,
+        keepConfig: boolean = false,
+        sourceServer?: string,
+        emulatorLabel?: string,
+        fileSize?: number,
+    ) {
+        const { useDownloadStore } = await import("./DownloadStore");
+        const downloadStore = useDownloadStore();
+        await downloadStore.enqueueEmulator({
+            label: emulatorLabel || `Emulator (${consoleName.toUpperCase()})`,
+            console: consoleName,
+            emulator_id: serverEmulatorId,
+            keep_config: keepConfig,
+            source_server: sourceServer,
+            total_bytes: fileSize || 0,
+        });
     }
 
     async function fetchAllServerEmulators(): Promise<ServerEmulator[]> {

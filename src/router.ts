@@ -1,6 +1,7 @@
 import { markRaw } from "vue";
 import { createMemoryHistory, createRouter } from "vue-router";
 import ShellLayout from "./layouts/ShellLayout.vue";
+import DownloadsView from "./pages/DownloadsView.vue";
 import IndexView from "./pages/IndexView.vue";
 import InputsView from "./pages/InputsView.vue";
 import LoginView from "./pages/LoginView.vue";
@@ -48,6 +49,12 @@ const routes = [
         path: "/settings",
         name: "settings",
         component: SettingsView,
+        meta: { layout: markRaw(ShellLayout) },
+    },
+    {
+        path: "/downloads",
+        name: "downloads",
+        component: DownloadsView,
         meta: { layout: markRaw(ShellLayout) },
     },
     {

@@ -18,6 +18,7 @@ const sequenceIndex = ref(-1);
 const isApplying = ref(false);
 const isSaving = ref(false);
 const consoleFilter = ref("all");
+const isInitialLoad = ref(true);
 
 const controllerStore = useControllerStore();
 
@@ -158,23 +159,40 @@ const dpadOrder = computed(() => (consoleFilter.value === "n64" ? 1 : isLSOnTop.
 const rsOrder = computed(() => (consoleFilter.value === "n64" ? 1 : 2));
 const actionOrder = computed(() => (consoleFilter.value === "n64" ? 2 : 1));
 
-type EmulatorInputConfig = {
-    scheme_id: string | null;
-    auto_apply_on_start: boolean;
-};
-
 type SupportedEmulator = {
     id: string;
     name: string;
     input_mapper: string;
 };
 
-const activeSchemeId = ref<string | null>(null);
-const emulatorConfigs = ref<Record<string, EmulatorInputConfig>>({});
+const editingSchemeId = computed({
+    get: () => controllerStore.editingSchemeId,
+    set: (v) => {
+        if (v) controllerStore.editingSchemeId = v;
+    },
+});
+const emulatorConfigs = computed(() => controllerStore.emulatorConfigs);
+
+watch(
+    () => [
+        controllerStore.schemes,
+        controllerStore.editingSchemeId,
+        controllerStore.emulatorConfigs,
+        listeningFor.value,
+    ],
+    () => {
+        if (isInitialLoad.value || controllerStore.isLoaded === false || listeningFor.value) {
+            return;
+        }
+
+        autoSaveConfig();
+    },
+    { deep: true },
+);
 const supportedEmulators = ref<SupportedEmulator[]>([]);
 
 const activeScheme = computed(
-    () => controllerStore.allSchemes.find((s) => s.id === activeSchemeId.value) || controllerStore.allSchemes[0],
+    () => controllerStore.schemes.find((s) => s.id === editingSchemeId.value) || controllerStore.schemes[0],
 );
 
 const layoutMode = computed({
@@ -250,7 +268,7 @@ const createScheme = () => {
             Start: "Unmapped",
         },
     });
-    activeSchemeId.value = id;
+    editingSchemeId.value = id;
 };
 
 const visibleKeys = computed(() => {
@@ -297,16 +315,20 @@ const stopSequenceBind = () => {
 };
 
 const deleteScheme = () => {
-    if (!activeSchemeId.value || activeSchemeId.value === controllerStore.EMUNEX_ID) return;
-    controllerStore.schemes = controllerStore.schemes.filter((s) => s.id !== activeSchemeId.value);
+    if (!editingSchemeId.value || editingSchemeId.value === controllerStore.EMUNEX_ID) return;
+    if (editingSchemeId.value !== controllerStore.editingSchemeId) {
+        controllerStore.editingSchemeId = editingSchemeId.value as string;
+    }
+
+    controllerStore.schemes = controllerStore.schemes.filter((s) => s.id !== editingSchemeId.value);
 
     for (const emuId of Object.keys(emulatorConfigs.value)) {
-        if (emulatorConfigs.value[emuId].scheme_id === activeSchemeId.value) {
+        if (emulatorConfigs.value[emuId].scheme_id === editingSchemeId.value) {
             emulatorConfigs.value[emuId].scheme_id = null;
         }
     }
 
-    activeSchemeId.value = controllerStore.EMUNEX_ID;
+    editingSchemeId.value = controllerStore.EMUNEX_ID;
 };
 
 const schemeOptions = computed(() => controllerStore.allSchemes.map((s) => ({ name: s.name, value: s.id })));
@@ -316,13 +338,29 @@ const schemeOptionsWithNone = computed(() => [
     ...controllerStore.allSchemes.map((s) => ({ name: s.name, value: s.id })),
 ]);
 
-const getEmulatorSchemeId = (emuId: string) => emulatorConfigs.value[emuId]?.scheme_id || "";
-
+const getEmulatorSchemeId = (emuId: string) => controllerStore.emulatorConfigs[emuId]?.scheme_id || "";
 const setEmulatorSchemeId = (emuId: string, val: string) => {
-    if (emulatorConfigs.value[emuId]) {
-        emulatorConfigs.value[emuId].scheme_id = val || null;
+    if (!controllerStore.emulatorConfigs[emuId]) {
+        controllerStore.emulatorConfigs[emuId] = { scheme_id: val || null, auto_apply_on_start: false };
+    } else {
+        controllerStore.emulatorConfigs[emuId].scheme_id = val || null;
     }
 };
+
+watch(
+    supportedEmulators,
+    (newList) => {
+        newList.forEach((emu) => {
+            if (!controllerStore.emulatorConfigs[emu.id]) {
+                controllerStore.emulatorConfigs[emu.id] = {
+                    scheme_id: null,
+                    auto_apply_on_start: false,
+                };
+            }
+        });
+    },
+    { deep: true },
+);
 
 const isRenamingScheme = ref(false);
 const renameSchemeValue = ref("");
@@ -330,7 +368,7 @@ const ignoredInitialInputs = ref<Set<string>>(new Set());
 const isWaitingForRelease = ref(false);
 
 const startRename = () => {
-    if (!activeScheme.value) return;
+    if (!activeScheme.value || activeScheme.value.id === controllerStore.EMUNEX_ID) return;
     renameSchemeValue.value = activeScheme.value.name;
     isRenamingScheme.value = true;
 };
@@ -452,7 +490,9 @@ const pollGamepad = () => {
             const id = `Joy${gamepad.index}.Btn${i}`;
             if (gamepad.buttons[i].pressed) {
                 if (ignoredInitialInputs.value.has(id)) continue;
-                if (activeScheme.value) activeScheme.value.mappings[listeningFor.value] = id;
+                if (activeScheme.value) {
+                    activeScheme.value.mappings[listeningFor.value] = id;
+                }
                 mapped = true;
                 break;
             } else {
@@ -568,38 +608,22 @@ const listenForInput = (key: string) => {
     pollFrame = requestAnimationFrame(pollGamepad);
 };
 
-let autoSaveTimeout: any = null;
-
 const autoSaveConfig = async () => {
-    if (autoSaveTimeout) clearTimeout(autoSaveTimeout);
+    isSaving.value = true;
 
-    autoSaveTimeout = setTimeout(async () => {
-        isSaving.value = true;
-        try {
-            await invoke("save_global_inputs", {
-                config: {
-                    schemes: controllerStore.schemes,
-                    active_scheme_id: activeSchemeId.value,
-                    emulator_configs: emulatorConfigs.value,
-                },
-            });
-        } catch (error) {
-            console.error("Auto-save failed:", error);
-        } finally {
-            isSaving.value = false;
-        }
-    }, 1000);
+    try {
+        await invoke("save_global_inputs", {
+            config: {
+                schemes: [...controllerStore.schemes],
+                emulator_configs: { ...controllerStore.emulatorConfigs },
+            },
+        });
+    } catch (error) {
+        console.error("Auto-save failed:", error);
+    } finally {
+        isSaving.value = false;
+    }
 };
-
-watch(
-    [() => controllerStore.schemes, activeSchemeId, emulatorConfigs],
-    () => {
-        if (!listeningFor.value) {
-            autoSaveConfig();
-        }
-    },
-    { deep: true },
-);
 
 const handleGlobalKeyDown = (e: KeyboardEvent) => {
     if (listeningFor.value || isRenamingScheme.value) return;
@@ -613,13 +637,18 @@ const handleGlobalKeyUp = (e: KeyboardEvent) => {
 
 onMounted(async () => {
     try {
+        await controllerStore.load();
+        editingSchemeId.value = controllerStore.editingSchemeId;
+
         const data: any = await invoke("load_global_inputs");
-        console.log(data);
-        controllerStore.schemes = data.schemes || [];
-        activeSchemeId.value = data.active_scheme_id || null;
-        emulatorConfigs.value = data.emulator_configs || {};
         supportedEmulators.value = data.supported_emulators || [];
-    } catch (e) {}
+    } catch (e) {
+        console.error("Failed to load inputs in view:", e);
+    } finally {
+        setTimeout(() => {
+            isInitialLoad.value = false;
+        }, 100);
+    }
 
     window.addEventListener("keydown", handleGlobalKeyDown);
     window.addEventListener("keyup", handleGlobalKeyUp);
@@ -666,8 +695,7 @@ const applySchemeToEmulator = async (emulatorId: string) => {
                         ? 'Enable Test Mode (disables app navigation so you can test buttons)'
                         : 'Disable Test Mode'
                 "
-                @click="controllerStore.isNavEnabled = !controllerStore.isNavEnabled"
-            >
+                @click="controllerStore.isNavEnabled = !controllerStore.isNavEnabled">
                 <Gamepad2 :size="16" />
                 {{ controllerStore.isNavEnabled ? "Test Mode" : "Testing..." }}
             </button>
@@ -687,15 +715,13 @@ const applySchemeToEmulator = async (emulatorId: string) => {
                         <div class="c-scheme-actions">
                             <template v-if="!isRenamingScheme">
                                 <Select
-                                    :model-value="activeSchemeId || ''"
+                                    :model-value="editingSchemeId || ''"
                                     :options="schemeOptions"
                                     placeholder="Select scheme..."
-                                    @update:model-value="activeSchemeId = $event"
-                                />
+                                    @update:model-value="editingSchemeId = $event" />
                                 <Tooltip
                                     text="Rename Scheme"
-                                    v-if="activeSchemeId && activeSchemeId !== controllerStore.EMUNEX_ID"
-                                >
+                                    v-if="editingSchemeId && editingSchemeId !== controllerStore.EMUNEX_ID">
                                     <IconButton class="c-scheme-icon-btn" @click="startRename">
                                         <Pencil :size="18" />
                                     </IconButton>
@@ -708,8 +734,7 @@ const applySchemeToEmulator = async (emulatorId: string) => {
                                     placeholder="Scheme name..."
                                     @keydown.enter="saveRename"
                                     @keydown.escape="isRenamingScheme = false"
-                                    autofocus
-                                />
+                                    autofocus />
                                 <Tooltip text="Save Name">
                                     <IconButton class="c-scheme-icon-btn" @click="saveRename">
                                         <Check :size="18" />
@@ -725,14 +750,13 @@ const applySchemeToEmulator = async (emulatorId: string) => {
 
                             <Tooltip
                                 text="Delete Scheme"
-                                v-if="activeSchemeId && activeSchemeId !== controllerStore.EMUNEX_ID"
-                            >
+                                v-if="editingSchemeId && editingSchemeId !== controllerStore.EMUNEX_ID">
                                 <IconButton class="c-scheme-icon-btn" @click="deleteScheme" color="red">
                                     <Trash2 :size="20" />
                                 </IconButton>
                             </Tooltip>
 
-                            <Tooltip text="Sequence Bind" v-if="!isSequenceActive && activeSchemeId">
+                            <Tooltip text="Sequence Bind" v-if="!isSequenceActive && editingSchemeId">
                                 <IconButton class="c-scheme-icon-btn" @click="startSequenceBind">
                                     <Play :size="20" />
                                 </IconButton>
@@ -757,8 +781,7 @@ const applySchemeToEmulator = async (emulatorId: string) => {
                             @keydown.enter.space="
                                 layoutMode = 'xbox';
                                 consoleFilter = 'all';
-                            "
-                        >
+                            ">
                             Xbox
                         </button>
                         <button
@@ -771,8 +794,7 @@ const applySchemeToEmulator = async (emulatorId: string) => {
                             @keydown.enter.space="
                                 layoutMode = 'playstation';
                                 consoleFilter = 'all';
-                            "
-                        >
+                            ">
                             PlayStation
                         </button>
                         <button
@@ -785,8 +807,7 @@ const applySchemeToEmulator = async (emulatorId: string) => {
                             @keydown.enter.space="
                                 layoutMode = 'nintendo';
                                 consoleFilter = 'all';
-                            "
-                        >
+                            ">
                             Nintendo
                         </button>
                         <div class="c-layout-tab-divider"></div>
@@ -794,32 +815,28 @@ const applySchemeToEmulator = async (emulatorId: string) => {
                             class="c-layout-tab"
                             :class="{ 'is-active': consoleFilter === 'nes' }"
                             @click="consoleFilter = 'nes'"
-                            @keydown.enter.space="consoleFilter = 'nes'"
-                        >
+                            @keydown.enter.space="consoleFilter = 'nes'">
                             NES/GB
                         </button>
                         <button
                             class="c-layout-tab"
                             :class="{ 'is-active': consoleFilter === 'snes' }"
                             @click="consoleFilter = 'snes'"
-                            @keydown.enter.space="consoleFilter = 'snes'"
-                        >
+                            @keydown.enter.space="consoleFilter = 'snes'">
                             SNES/NDS
                         </button>
                         <button
                             class="c-layout-tab"
                             :class="{ 'is-active': consoleFilter === 'gba' }"
                             @click="consoleFilter = 'gba'"
-                            @keydown.enter.space="consoleFilter = 'gba'"
-                        >
+                            @keydown.enter.space="consoleFilter = 'gba'">
                             GBA
                         </button>
                         <button
                             class="c-layout-tab"
                             :class="{ 'is-active': consoleFilter === 'n64' }"
                             @click="consoleFilter = 'n64'"
-                            @keydown.enter.space="consoleFilter = 'n64'"
-                        >
+                            @keydown.enter.space="consoleFilter = 'n64'">
                             N64
                         </button>
                     </div>
@@ -833,20 +850,20 @@ const applySchemeToEmulator = async (emulatorId: string) => {
                                     role="button"
                                     v-show="isButtonVisible('LT')"
                                     :class="{ 'is-listening': listeningFor === 'LT', 'is-pressed': pressedKeys['LT'] }"
-                                    @click="listenForInput('LT')"
-                                    >{{ getOriginalLabel("LT") || shoulderLabels.lt }}
-                                    <span class="val">{{ formatMapping(mappings["LT"]) }}</span></div
-                                >
+                                    @click="listenForInput('LT')">
+                                    {{ getOriginalLabel("LT") || shoulderLabels.lt }}
+                                    <span class="val">{{ formatMapping(mappings["LT"]) }}</span>
+                                </div>
                                 <div
                                     class="c-gp-btn"
                                     tabindex="0"
                                     role="button"
                                     v-show="isButtonVisible('L')"
                                     :class="{ 'is-listening': listeningFor === 'L', 'is-pressed': pressedKeys['L'] }"
-                                    @click="listenForInput('L')"
-                                    >{{ getOriginalLabel("L") || shoulderLabels.l }}
-                                    <span class="val">{{ formatMapping(mappings["L"]) }}</span></div
-                                >
+                                    @click="listenForInput('L')">
+                                    {{ getOriginalLabel("L") || shoulderLabels.l }}
+                                    <span class="val">{{ formatMapping(mappings["L"]) }}</span>
+                                </div>
                             </div>
 
                             <div class="c-gp-left-controls">
@@ -859,10 +876,10 @@ const applySchemeToEmulator = async (emulatorId: string) => {
                                             'is-listening': listeningFor === 'LS Up',
                                             'is-pressed': pressedKeys['LS Up'],
                                         }"
-                                        @click="listenForInput('LS Up')"
-                                        >{{ getOriginalLabel("LS Up") || "LS-UP" }}
-                                        <span class="val">{{ formatMapping(mappings["LS Up"]) }}</span></div
-                                    >
+                                        @click="listenForInput('LS Up')">
+                                        {{ getOriginalLabel("LS Up") || "LS-UP" }}
+                                        <span class="val">{{ formatMapping(mappings["LS Up"]) }}</span>
+                                    </div>
                                     <div
                                         class="c-gp-btn left"
                                         tabindex="0"
@@ -871,10 +888,10 @@ const applySchemeToEmulator = async (emulatorId: string) => {
                                             'is-listening': listeningFor === 'LS Left',
                                             'is-pressed': pressedKeys['LS Left'],
                                         }"
-                                        @click="listenForInput('LS Left')"
-                                        >{{ getOriginalLabel("LS Left") || "LS-LEFT" }}
-                                        <span class="val">{{ formatMapping(mappings["LS Left"]) }}</span></div
-                                    >
+                                        @click="listenForInput('LS Left')">
+                                        {{ getOriginalLabel("LS Left") || "LS-LEFT" }}
+                                        <span class="val">{{ formatMapping(mappings["LS Left"]) }}</span>
+                                    </div>
                                     <div
                                         class="c-gp-btn right"
                                         tabindex="0"
@@ -883,10 +900,10 @@ const applySchemeToEmulator = async (emulatorId: string) => {
                                             'is-listening': listeningFor === 'LS Right',
                                             'is-pressed': pressedKeys['LS Right'],
                                         }"
-                                        @click="listenForInput('LS Right')"
-                                        >{{ getOriginalLabel("LS Right") || "LS-RIGHT" }}
-                                        <span class="val">{{ formatMapping(mappings["LS Right"]) }}</span></div
-                                    >
+                                        @click="listenForInput('LS Right')">
+                                        {{ getOriginalLabel("LS Right") || "LS-RIGHT" }}
+                                        <span class="val">{{ formatMapping(mappings["LS Right"]) }}</span>
+                                    </div>
                                     <div
                                         class="c-gp-btn down"
                                         tabindex="0"
@@ -895,10 +912,10 @@ const applySchemeToEmulator = async (emulatorId: string) => {
                                             'is-listening': listeningFor === 'LS Down',
                                             'is-pressed': pressedKeys['LS Down'],
                                         }"
-                                        @click="listenForInput('LS Down')"
-                                        >{{ getOriginalLabel("LS Down") || "LS-DOWN" }}
-                                        <span class="val">{{ formatMapping(mappings["LS Down"]) }}</span></div
-                                    >
+                                        @click="listenForInput('LS Down')">
+                                        {{ getOriginalLabel("LS Down") || "LS-DOWN" }}
+                                        <span class="val">{{ formatMapping(mappings["LS Down"]) }}</span>
+                                    </div>
                                     <div
                                         class="c-gp-btn click"
                                         tabindex="0"
@@ -908,10 +925,10 @@ const applySchemeToEmulator = async (emulatorId: string) => {
                                             'is-listening': listeningFor === 'LS Click',
                                             'is-pressed': pressedKeys['LS Click'],
                                         }"
-                                        @click="listenForInput('LS Click')"
-                                        >{{ getOriginalLabel("LS Click") || "LS-CLK" }}
-                                        <span class="val">{{ formatMapping(mappings["LS Click"]) }}</span></div
-                                    >
+                                        @click="listenForInput('LS Click')">
+                                        {{ getOriginalLabel("LS Click") || "LS-CLK" }}
+                                        <span class="val">{{ formatMapping(mappings["LS Click"]) }}</span>
+                                    </div>
                                 </div>
 
                                 <div class="c-gp-diamond" :style="{ order: dpadOrder }">
@@ -924,10 +941,10 @@ const applySchemeToEmulator = async (emulatorId: string) => {
                                             'is-listening': listeningFor === 'DPad-Up',
                                             'is-pressed': pressedKeys['DPad-Up'],
                                         }"
-                                        @click="listenForInput('DPad-Up')"
-                                        >{{ getOriginalLabel("DPad-Up") || "D-UP" }}
-                                        <span class="val">{{ formatMapping(mappings["DPad-Up"]) }}</span></div
-                                    >
+                                        @click="listenForInput('DPad-Up')">
+                                        {{ getOriginalLabel("DPad-Up") || "D-UP" }}
+                                        <span class="val">{{ formatMapping(mappings["DPad-Up"]) }}</span>
+                                    </div>
                                     <div
                                         class="c-gp-btn left"
                                         tabindex="0"
@@ -937,10 +954,10 @@ const applySchemeToEmulator = async (emulatorId: string) => {
                                             'is-listening': listeningFor === 'DPad-Left',
                                             'is-pressed': pressedKeys['DPad-Left'],
                                         }"
-                                        @click="listenForInput('DPad-Left')"
-                                        >{{ getOriginalLabel("DPad-Left") || "D-LEFT" }}
-                                        <span class="val">{{ formatMapping(mappings["DPad-Left"]) }}</span></div
-                                    >
+                                        @click="listenForInput('DPad-Left')">
+                                        {{ getOriginalLabel("DPad-Left") || "D-LEFT" }}
+                                        <span class="val">{{ formatMapping(mappings["DPad-Left"]) }}</span>
+                                    </div>
                                     <div
                                         class="c-gp-btn right"
                                         tabindex="0"
@@ -950,10 +967,10 @@ const applySchemeToEmulator = async (emulatorId: string) => {
                                             'is-listening': listeningFor === 'DPad-Right',
                                             'is-pressed': pressedKeys['DPad-Right'],
                                         }"
-                                        @click="listenForInput('DPad-Right')"
-                                        >{{ getOriginalLabel("DPad-Right") || "D-RIGHT" }}
-                                        <span class="val">{{ formatMapping(mappings["DPad-Right"]) }}</span></div
-                                    >
+                                        @click="listenForInput('DPad-Right')">
+                                        {{ getOriginalLabel("DPad-Right") || "D-RIGHT" }}
+                                        <span class="val">{{ formatMapping(mappings["DPad-Right"]) }}</span>
+                                    </div>
                                     <div
                                         class="c-gp-btn down"
                                         tabindex="0"
@@ -963,10 +980,10 @@ const applySchemeToEmulator = async (emulatorId: string) => {
                                             'is-listening': listeningFor === 'DPad-Down',
                                             'is-pressed': pressedKeys['DPad-Down'],
                                         }"
-                                        @click="listenForInput('DPad-Down')"
-                                        >{{ getOriginalLabel("DPad-Down") || "D-DOWN" }}
-                                        <span class="val">{{ formatMapping(mappings["DPad-Down"]) }}</span></div
-                                    >
+                                        @click="listenForInput('DPad-Down')">
+                                        {{ getOriginalLabel("DPad-Down") || "D-DOWN" }}
+                                        <span class="val">{{ formatMapping(mappings["DPad-Down"]) }}</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -981,10 +998,10 @@ const applySchemeToEmulator = async (emulatorId: string) => {
                                     'is-listening': listeningFor === 'Select',
                                     'is-pressed': pressedKeys['Select'],
                                 }"
-                                @click="listenForInput('Select')"
-                                >{{ getOriginalLabel("Select") || centerLabels.select }}
-                                <span class="val">{{ formatMapping(mappings["Select"]) }}</span></div
-                            >
+                                @click="listenForInput('Select')">
+                                {{ getOriginalLabel("Select") || centerLabels.select }}
+                                <span class="val">{{ formatMapping(mappings["Select"]) }}</span>
+                            </div>
                             <div
                                 class="c-gp-btn"
                                 tabindex="0"
@@ -994,10 +1011,10 @@ const applySchemeToEmulator = async (emulatorId: string) => {
                                     'is-listening': listeningFor === 'Start',
                                     'is-pressed': pressedKeys['Start'],
                                 }"
-                                @click="listenForInput('Start')"
-                                >{{ getOriginalLabel("Start") || centerLabels.start }}
-                                <span class="val">{{ formatMapping(mappings["Start"]) }}</span></div
-                            >
+                                @click="listenForInput('Start')">
+                                {{ getOriginalLabel("Start") || centerLabels.start }}
+                                <span class="val">{{ formatMapping(mappings["Start"]) }}</span>
+                            </div>
                         </div>
 
                         <div class="c-gp-side">
@@ -1008,20 +1025,20 @@ const applySchemeToEmulator = async (emulatorId: string) => {
                                     role="button"
                                     v-show="isButtonVisible('RT')"
                                     :class="{ 'is-listening': listeningFor === 'RT', 'is-pressed': pressedKeys['RT'] }"
-                                    @click="listenForInput('RT')"
-                                    >{{ getOriginalLabel("RT") || shoulderLabels.rt }}
-                                    <span class="val">{{ formatMapping(mappings["RT"]) }}</span></div
-                                >
+                                    @click="listenForInput('RT')">
+                                    {{ getOriginalLabel("RT") || shoulderLabels.rt }}
+                                    <span class="val">{{ formatMapping(mappings["RT"]) }}</span>
+                                </div>
                                 <div
                                     class="c-gp-btn"
                                     tabindex="0"
                                     role="button"
                                     v-show="isButtonVisible('R')"
                                     :class="{ 'is-listening': listeningFor === 'R', 'is-pressed': pressedKeys['R'] }"
-                                    @click="listenForInput('R')"
-                                    >{{ getOriginalLabel("R") || shoulderLabels.r }}
-                                    <span class="val">{{ formatMapping(mappings["R"]) }}</span></div
-                                >
+                                    @click="listenForInput('R')">
+                                    {{ getOriginalLabel("R") || shoulderLabels.r }}
+                                    <span class="val">{{ formatMapping(mappings["R"]) }}</span>
+                                </div>
                             </div>
 
                             <div class="c-gp-diamond" :style="{ order: actionOrder }">
@@ -1031,40 +1048,40 @@ const applySchemeToEmulator = async (emulatorId: string) => {
                                     role="button"
                                     v-show="isButtonVisible('Y')"
                                     :class="{ 'is-listening': listeningFor === 'Y', 'is-pressed': pressedKeys['Y'] }"
-                                    @click="listenForInput('Y')"
-                                    >{{ getOriginalLabel("Y") || actionLabels.up }}
-                                    <span class="val">{{ formatMapping(mappings["Y"]) }}</span></div
-                                >
+                                    @click="listenForInput('Y')">
+                                    {{ getOriginalLabel("Y") || actionLabels.up }}
+                                    <span class="val">{{ formatMapping(mappings["Y"]) }}</span>
+                                </div>
                                 <div
                                     class="c-gp-btn left"
                                     tabindex="0"
                                     role="button"
                                     v-show="isButtonVisible('X')"
                                     :class="{ 'is-listening': listeningFor === 'X', 'is-pressed': pressedKeys['X'] }"
-                                    @click="listenForInput('X')"
-                                    >{{ getOriginalLabel("X") || actionLabels.left }}
-                                    <span class="val">{{ formatMapping(mappings["X"]) }}</span></div
-                                >
+                                    @click="listenForInput('X')">
+                                    {{ getOriginalLabel("X") || actionLabels.left }}
+                                    <span class="val">{{ formatMapping(mappings["X"]) }}</span>
+                                </div>
                                 <div
                                     class="c-gp-btn right"
                                     tabindex="0"
                                     role="button"
                                     v-show="isButtonVisible('B')"
                                     :class="{ 'is-listening': listeningFor === 'B', 'is-pressed': pressedKeys['B'] }"
-                                    @click="listenForInput('B')"
-                                    >{{ getOriginalLabel("B") || actionLabels.right }}
-                                    <span class="val">{{ formatMapping(mappings["B"]) }}</span></div
-                                >
+                                    @click="listenForInput('B')">
+                                    {{ getOriginalLabel("B") || actionLabels.right }}
+                                    <span class="val">{{ formatMapping(mappings["B"]) }}</span>
+                                </div>
                                 <div
                                     class="c-gp-btn down"
                                     tabindex="0"
                                     role="button"
                                     v-show="isButtonVisible('A')"
                                     :class="{ 'is-listening': listeningFor === 'A', 'is-pressed': pressedKeys['A'] }"
-                                    @click="listenForInput('A')"
-                                    >{{ getOriginalLabel("A") || actionLabels.down }}
-                                    <span class="val">{{ formatMapping(mappings["A"]) }}</span></div
-                                >
+                                    @click="listenForInput('A')">
+                                    {{ getOriginalLabel("A") || actionLabels.down }}
+                                    <span class="val">{{ formatMapping(mappings["A"]) }}</span>
+                                </div>
                             </div>
 
                             <div class="c-gp-diamond" :style="{ order: rsOrder }" v-show="isButtonVisible('RS Up')">
@@ -1076,10 +1093,10 @@ const applySchemeToEmulator = async (emulatorId: string) => {
                                         'is-listening': listeningFor === 'RS Up',
                                         'is-pressed': pressedKeys['RS Up'],
                                     }"
-                                    @click="listenForInput('RS Up')"
-                                    >{{ getOriginalLabel("RS Up") || "RS-UP" }}
-                                    <span class="val">{{ formatMapping(mappings["RS Up"]) }}</span></div
-                                >
+                                    @click="listenForInput('RS Up')">
+                                    {{ getOriginalLabel("RS Up") || "RS-UP" }}
+                                    <span class="val">{{ formatMapping(mappings["RS Up"]) }}</span>
+                                </div>
                                 <div
                                     class="c-gp-btn left"
                                     tabindex="0"
@@ -1088,10 +1105,10 @@ const applySchemeToEmulator = async (emulatorId: string) => {
                                         'is-listening': listeningFor === 'RS Left',
                                         'is-pressed': pressedKeys['RS Left'],
                                     }"
-                                    @click="listenForInput('RS Left')"
-                                    >{{ getOriginalLabel("RS Left") || "RS-LEFT" }}
-                                    <span class="val">{{ formatMapping(mappings["RS Left"]) }}</span></div
-                                >
+                                    @click="listenForInput('RS Left')">
+                                    {{ getOriginalLabel("RS Left") || "RS-LEFT" }}
+                                    <span class="val">{{ formatMapping(mappings["RS Left"]) }}</span>
+                                </div>
                                 <div
                                     class="c-gp-btn right"
                                     tabindex="0"
@@ -1100,10 +1117,10 @@ const applySchemeToEmulator = async (emulatorId: string) => {
                                         'is-listening': listeningFor === 'RS Right',
                                         'is-pressed': pressedKeys['RS Right'],
                                     }"
-                                    @click="listenForInput('RS Right')"
-                                    >{{ getOriginalLabel("RS Right") || "RS-RIGHT" }}
-                                    <span class="val">{{ formatMapping(mappings["RS Right"]) }}</span></div
-                                >
+                                    @click="listenForInput('RS Right')">
+                                    {{ getOriginalLabel("RS Right") || "RS-RIGHT" }}
+                                    <span class="val">{{ formatMapping(mappings["RS Right"]) }}</span>
+                                </div>
                                 <div
                                     class="c-gp-btn down"
                                     tabindex="0"
@@ -1112,10 +1129,10 @@ const applySchemeToEmulator = async (emulatorId: string) => {
                                         'is-listening': listeningFor === 'RS Down',
                                         'is-pressed': pressedKeys['RS Down'],
                                     }"
-                                    @click="listenForInput('RS Down')"
-                                    >{{ getOriginalLabel("RS Down") || "RS-DOWN" }}
-                                    <span class="val">{{ formatMapping(mappings["RS Down"]) }}</span></div
-                                >
+                                    @click="listenForInput('RS Down')">
+                                    {{ getOriginalLabel("RS Down") || "RS-DOWN" }}
+                                    <span class="val">{{ formatMapping(mappings["RS Down"]) }}</span>
+                                </div>
                                 <div
                                     class="c-gp-btn click"
                                     tabindex="0"
@@ -1125,10 +1142,10 @@ const applySchemeToEmulator = async (emulatorId: string) => {
                                         'is-listening': listeningFor === 'RS Click',
                                         'is-pressed': pressedKeys['RS Click'],
                                     }"
-                                    @click="listenForInput('RS Click')"
-                                    >{{ getOriginalLabel("RS Click") || "RS-CLK" }}
-                                    <span class="val">{{ formatMapping(mappings["RS Click"]) }}</span></div
-                                >
+                                    @click="listenForInput('RS Click')">
+                                    {{ getOriginalLabel("RS Click") || "RS-CLK" }}
+                                    <span class="val">{{ formatMapping(mappings["RS Click"]) }}</span>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1136,9 +1153,9 @@ const applySchemeToEmulator = async (emulatorId: string) => {
             </section>
 
             <section class="c-settings__section">
-                <Heading level="3" color="primary" is-badge class="c-settings__section-title"
-                    >Override Settings</Heading
-                >
+                <Heading level="3" color="primary" is-badge class="c-settings__section-title">
+                    Override Settings
+                </Heading>
 
                 <div class="c-settings__card c-emu-override" v-for="emu in supportedEmulators" :key="emu.id">
                     <div class="c-emu-override__row" v-if="emulatorConfigs[emu.id]">
@@ -1148,16 +1165,15 @@ const applySchemeToEmulator = async (emulatorId: string) => {
                                 :model-value="getEmulatorSchemeId(emu.id)"
                                 :options="schemeOptionsWithNone"
                                 placeholder="No scheme assigned"
-                                @update:model-value="setEmulatorSchemeId(emu.id, $event)"
-                            />
+                                @update:model-value="setEmulatorSchemeId(emu.id, $event)" />
                         </div>
                         <Switch v-model="emulatorConfigs[emu.id].auto_apply_on_start" label="Auto Apply" />
                         <Button
                             @click="applySchemeToEmulator(emu.id)"
                             variant="secondary"
-                            :disabled="isApplying || !emulatorConfigs[emu.id]?.scheme_id"
-                            >Apply Now</Button
-                        >
+                            :disabled="isApplying || !emulatorConfigs[emu.id]?.scheme_id">
+                            Apply Now
+                        </Button>
                     </div>
                 </div>
             </section>
@@ -1464,6 +1480,11 @@ const applySchemeToEmulator = async (emulatorId: string) => {
         background: rgba(var(--color-primary-rgb), 0.25);
         box-shadow: 0 0 15px rgba(var(--color-primary-rgb), 0.5);
         transform: scale(0.95);
+    }
+    &.is-immutable {
+        cursor: not-allowed;
+        opacity: 0.7;
+        pointer-events: none;
     }
 }
 

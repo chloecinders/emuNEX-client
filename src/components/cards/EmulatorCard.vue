@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { ArrowDownToLine, CheckCircle, MoreVertical, Pencil, RefreshCw, Trash2 } from "lucide-vue-next";
+import { invoke } from "@tauri-apps/api/core";
+import { dirname } from "@tauri-apps/api/path";
+import { ArrowDownToLine, CheckCircle, FolderOpen, MoreVertical, Pencil, RefreshCw, Trash2 } from "lucide-vue-next";
 import { onMounted, onUnmounted, ref } from "vue";
 import { formatBytes } from "../../lib/format";
 import type { Emulator } from "../../stores/EmulatorStore";
@@ -7,7 +9,7 @@ import Heading from "../ui/Heading.vue";
 import IconButton from "../ui/IconButton.vue";
 import Text from "../ui/Text.vue";
 
-defineProps<{
+const props = defineProps<{
     emulator: Emulator;
     dirSize?: number;
     hasUpdate?: boolean;
@@ -41,6 +43,17 @@ const handleAction = (action: "edit" | "delete" | "setDefault" | "refreshConfig"
     emit(action);
     showMenu.value = false;
 };
+
+const handleOpenDir = async () => {
+    showMenu.value = false;
+    if (!props.emulator.binary_path) return;
+    try {
+        const dir = await dirname(props.emulator.binary_path);
+        await invoke("open_folder", { path: dir });
+    } catch (e) {
+        console.error("Failed to open directory:", e);
+    }
+};
 </script>
 
 <template>
@@ -51,16 +64,16 @@ const handleAction = (action: "edit" | "delete" | "setDefault" | "refreshConfig"
             'c-emulator-card--menu-open': showMenu,
         }"
         tabindex="0"
-        role="button"
-    >
+        role="button">
         <div class="c-emulator-card__header">
             <div class="c-emulator-card__title-area">
                 <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap">
-                    <Heading :level="3" class="c-emulator-card__name">{{
-                        emulator.name || "Unnamed Emulator"
-                    }}</Heading>
+                    <Heading :level="3" class="c-emulator-card__name">
+                        {{ emulator.name || "Unnamed Emulator" }}
+                    </Heading>
                     <div v-if="emulator.is_default" class="c-emulator-card__default-tag">
-                        <CheckCircle :size="14" /> Default
+                        <CheckCircle :size="14" />
+                        Default
                     </div>
                 </div>
                 <div class="c-emulator-card__meta">
@@ -89,25 +102,30 @@ const handleAction = (action: "edit" | "delete" | "setDefault" | "refreshConfig"
                         <button
                             v-if="!emulator.is_default"
                             class="c-emulator-card__menu-item"
-                            @click="handleAction('setDefault')"
-                        >
-                            <CheckCircle :size="16" /> Make Default
+                            @click="handleAction('setDefault')">
+                            <CheckCircle :size="16" />
+                            Make Default
                         </button>
                         <button
                             v-if="!emulator.id.startsWith('custom-')"
                             class="c-emulator-card__menu-item"
-                            @click="handleAction('refreshConfig')"
-                        >
-                            <RefreshCw :size="16" /> Refresh Config
+                            @click="handleAction('refreshConfig')">
+                            <RefreshCw :size="16" />
+                            Refresh Config
                         </button>
                         <button class="c-emulator-card__menu-item" @click="handleAction('edit')">
-                            <Pencil :size="16" /> Edit
+                            <Pencil :size="16" />
+                            Edit
+                        </button>
+                        <button class="c-emulator-card__menu-item" @click="handleOpenDir">
+                            <FolderOpen :size="16" />
+                            Open Directory
                         </button>
                         <button
                             class="c-emulator-card__menu-item c-emulator-card__menu-item--danger"
-                            @click="handleAction('delete')"
-                        >
-                            <Trash2 :size="16" /> Delete
+                            @click="handleAction('delete')">
+                            <Trash2 :size="16" />
+                            Delete
                         </button>
                     </div>
                 </transition>

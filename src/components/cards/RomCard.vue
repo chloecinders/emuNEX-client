@@ -40,33 +40,52 @@ const toggleSaveDetails = async () => {
         <div class="c-rom-card__info">
             <Heading :level="3" class="c-rom-card__title">{{ gameTitle }}</Heading>
             <div class="c-rom-card__meta">
-                <Text v-if="rom.rom_size > 0" size="sm" variant="muted"
-                    ><strong>ROM:</strong> {{ formatBytes(rom.rom_size) }}</Text
-                >
-                <Text v-else size="sm" color="red"><strong>ROM Missing</strong></Text>
-                <Text v-if="rom.save_size > 0" size="sm" variant="muted"
-                    >• <strong>Save:</strong> {{ formatBytes(rom.save_size) }}</Text
-                >
-                <Text
-                    v-if="rom.local_version !== undefined && rom.local_version !== null"
-                    size="sm"
-                    variant="muted"
-                    >• <strong>Local:</strong> v{{ rom.local_version }}</Text
-                >
-                <Text v-if="cloudVersion !== undefined" size="sm" variant="muted"
-                    >• <strong>Cloud:</strong> v{{ cloudVersion }}</Text
-                >
+                <Text size="sm" variant="muted" style="color: var(--color-text-muted)">
+                    <strong>ID:</strong>
+                    <span style="font-family: monospace; font-size: 0.9em">{{ rom.game_id }}</span>
+                </Text>
+                <Text v-if="rom.rom_size > 0" size="sm" variant="muted">
+                    •
+                    <strong>ROM:</strong>
+                    {{ formatBytes(rom.rom_size) }}
+                </Text>
+                <Text v-else size="sm" color="red">
+                    •
+                    <strong>ROM Missing</strong>
+                </Text>
+                <Text v-if="rom.save_size > 0" size="sm" variant="muted">
+                    •
+                    <strong>Save:</strong>
+                    {{ formatBytes(rom.save_size) }}
+                </Text>
+                <Text v-if="rom.local_version !== undefined && rom.local_version !== null" size="sm" variant="muted">
+                    •
+                    <strong>Local:</strong>
+                    v{{ rom.local_version }}
+                </Text>
+                <Text v-if="cloudVersion !== undefined" size="sm" variant="muted">
+                    •
+                    <strong>Cloud:</strong>
+                    v{{ cloudVersion }}
+                </Text>
             </div>
 
             <button v-if="rom.save_size > 0" class="c-rom-card__toggle-link" @click="toggleSaveDetails">
-                <template v-if="isExpanded"><ChevronUp :size="14" /> Hide save files</template>
-                <template v-else><ChevronDown :size="14" /> Show save files</template>
+                <template v-if="isExpanded">
+                    <ChevronUp :size="14" />
+                    Hide save files
+                </template>
+                <template v-else>
+                    <ChevronDown :size="14" />
+                    Show save files
+                </template>
             </button>
         </div>
 
         <div v-if="isExpanded" class="c-rom-card__save-details">
             <div v-if="isLoadingSaves" class="c-rom-card__loading-saves">
-                <Spinner size="sm" /> <Text size="sm">Loading files...</Text>
+                <Spinner size="sm" />
+                <Text size="sm">Loading files...</Text>
             </div>
             <div v-else-if="saveFiles.length === 0" class="c-rom-card__no-saves">
                 <Text variant="muted" size="sm">No save files found.</Text>
@@ -83,13 +102,16 @@ const toggleSaveDetails = async () => {
 
         <div class="c-rom-card__actions">
             <Button v-if="rom.save_size > 0" color="grey" size="sm" @click="romStore.openSaveFolder(rom.game_id)">
-                <FolderOpen :size="16" /> Open
+                <FolderOpen :size="16" />
+                Open
             </Button>
             <Button v-if="rom.save_size > 0" color="grey" size="sm" @click="emit('deleteSave')">
-                <Trash2 :size="16" /> Delete Save
+                <Trash2 :size="16" />
+                Delete Save
             </Button>
             <Button v-if="rom.rom_size > 0" color="red" size="sm" @click="emit('deleteRom')">
-                <Trash2 :size="16" /> Delete ROM
+                <Trash2 :size="16" />
+                Delete ROM
             </Button>
         </div>
     </div>

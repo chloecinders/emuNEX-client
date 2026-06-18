@@ -157,11 +157,13 @@ const confirmUpdate = async (keepConfig: boolean) => {
             id,
             keepConfig,
             pendingUpdateLocal.value.source_server,
+            pendingUpdateLocal.value.name,
+            emulatorStore.updatesAvailable[pendingUpdateLocal.value.id]?.file_size,
         );
-        toast.success("Emulator updated successfully!");
+        toast.success(`${pendingUpdateLocal.value.name} added to download queue!`);
         emulatorStore.checkForUpdates();
     } catch (e: any) {
-        toast.error(`Failed to update emulator: ${e}`);
+        toast.error(`Failed to queue emulator update: ${e}`);
     } finally {
         cancelUpdate();
     }
@@ -216,12 +218,20 @@ const cancelConfirmDownload = () => {
 const downloadFromServer = async (serverEmulator: ServerEmulator) => {
     try {
         const targetConsole = (serverEmulator.consoles && serverEmulator.consoles[0]) || "unknown";
-        await emulatorStore.downloadEmulator(targetConsole, serverEmulator.id, false, serverEmulator.source_server);
+        await emulatorStore.downloadEmulator(
+            targetConsole,
+            serverEmulator.id,
+            false,
+            serverEmulator.source_server,
+            serverEmulator.name,
+            serverEmulator.file_size,
+        );
+        toast.success(`${serverEmulator.name} added to download queue!`);
         showDownloadModal.value = false;
         showConfirmDownloadModal.value = false;
         pendingDownloadEmulator.value = null;
     } catch (e) {
-        console.error("Failed to download emulator.", e);
+        console.error("Failed to queue emulator.", e);
     }
 };
 
@@ -267,7 +277,8 @@ onMounted(async () => {
         <section class="c-manage__section">
             <div class="c-manage__section-header">
                 <Heading :level="2" color="primary" is-badge>
-                    <HardDrive :size="16" class="c-manage__section-icon" /> Storage
+                    <HardDrive :size="16" class="c-manage__section-icon" />
+                    Storage
                 </Heading>
             </div>
 
@@ -289,19 +300,25 @@ onMounted(async () => {
                     :count="groupedRoms[consoleName].length"
                     :total-size="getConsoleTotalSize(consoleName)"
                     :color="consoleStore.getConsoleColor(consoleName) || 'var(--color-primary)'"
-                    @click="navigateToConsole(consoleName)"
-                />
+                    @click="navigateToConsole(consoleName)" />
             </div>
         </section>
 
         <section class="c-manage__section">
             <div class="c-manage__section-header">
                 <Heading :level="2" color="primary" is-badge>
-                    <GamepadDirectional :size="16" class="c-manage__section-icon" /> Emulators
+                    <GamepadDirectional :size="16" class="c-manage__section-icon" />
+                    Emulators
                 </Heading>
                 <div class="c-manage__section-actions">
-                    <PillButton @click="addCustomEmulator()"><Plus /> Add Custom</PillButton>
-                    <PillButton @click="openDownloadModal()"><Download /> Download More</PillButton>
+                    <PillButton @click="addCustomEmulator()">
+                        <Plus />
+                        Add Custom
+                    </PillButton>
+                    <PillButton @click="openDownloadModal()">
+                        <Download />
+                        Download More
+                    </PillButton>
                 </div>
             </div>
 
@@ -309,8 +326,7 @@ onMounted(async () => {
                 v-if="
                     (consoleStore.loading || emulatorStore.loading) && Object.keys(emulatorStore.emulators).length === 0
                 "
-                class="c-manage__loading"
-            >
+                class="c-manage__loading">
                 <Spinner />
                 <Text>Loading configurations...</Text>
             </div>
@@ -331,8 +347,7 @@ onMounted(async () => {
                     @delete="promptDelete(emulator.id)"
                     @set-default="handleSetDefault(emulator.id)"
                     @refresh-config="handleRefreshConfig(emulator.id)"
-                    @update="handleUpdateClick(emulator)"
-                />
+                    @update="handleUpdateClick(emulator)" />
             </div>
         </section>
 
@@ -342,8 +357,7 @@ onMounted(async () => {
             :is-fetching="isFetchingServer"
             :loading="emulatorStore.loading"
             @close="showDownloadModal = false"
-            @download="promptDownload"
-        />
+            @download="promptDownload" />
 
         <AlertModal
             :show="showDeleteModal"
@@ -352,8 +366,7 @@ onMounted(async () => {
             confirm-label="Remove"
             confirm-color="red"
             @close="showDeleteModal = false"
-            @confirm="confirmDelete"
-        />
+            @confirm="confirmDelete" />
 
         <InstallModal
             :show="showConfirmDownloadModal"
@@ -361,15 +374,13 @@ onMounted(async () => {
             :items="installItems"
             :loading="emulatorStore.loading"
             @close="cancelConfirmDownload()"
-            @confirm="downloadFromServer(pendingDownloadEmulator!)"
-        />
+            @confirm="downloadFromServer(pendingDownloadEmulator!)" />
 
         <EditEmulatorModal
             :show="!!editingEmulatorId"
             :emulator-id="editingEmulatorId"
             @close="handleEditClose"
-            @save="handleEditSave"
-        />
+            @save="handleEditSave" />
 
         <UpdateEmulatorModal
             :show="!!pendingUpdateLocal"
@@ -378,8 +389,7 @@ onMounted(async () => {
             :server-emulator="pendingUpdateServer"
             :loading="emulatorStore.loading"
             @close="cancelUpdate"
-            @confirm="confirmUpdate"
-        />
+            @confirm="confirmUpdate" />
     </div>
 </template>
 

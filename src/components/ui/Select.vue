@@ -4,6 +4,7 @@ import { computed, onMounted, onUnmounted, ref } from "vue";
 interface Option {
     name: string;
     value: string;
+    description?: string;
 }
 
 const props = defineProps<{
@@ -51,15 +52,14 @@ const selectedLabel = computed(() => {
     <div class="c-select" ref="selectRef">
         <label v-if="label" class="c-select__label">{{ label }}</label>
 
-        <div 
-            class="c-select__wrapper" 
-            :class="{ 'c-select__wrapper--open': isOpen }" 
+        <div
+            class="c-select__wrapper"
+            :class="{ 'c-select__wrapper--open': isOpen }"
             @click="toggle"
             tabindex="0"
             role="combobox"
             :aria-expanded="isOpen"
-            @keydown.enter.space.prevent="toggle"
-        >
+            @keydown.enter.space.prevent="toggle">
             <div class="c-select__display">
                 <span class="c-select__display-text" :class="{ 'c-select__display-text--placeholder': !modelValue }">
                     {{ selectedLabel }}
@@ -71,12 +71,11 @@ const selectedLabel = computed(() => {
                             stroke="currentColor"
                             stroke-width="2"
                             stroke-linecap="round"
-                            stroke-linejoin="round"
-                        />
+                            stroke-linejoin="round" />
                     </svg>
                 </span>
             </div>
- 
+
             <transition name="pop">
                 <div v-if="isOpen" class="c-select__menu">
                     <div
@@ -87,9 +86,9 @@ const selectedLabel = computed(() => {
                         @click.stop="selectOption(option.value)"
                         tabindex="0"
                         role="option"
-                        @keydown.enter.space.prevent="selectOption(option.value)"
-                    >
-                        {{ option.name }}
+                        @keydown.enter.space.prevent="selectOption(option.value)">
+                        <div class="c-select__option-name">{{ option.name }}</div>
+                        <div v-if="option.description" class="c-select__option-desc">{{ option.description }}</div>
                     </div>
                 </div>
             </transition>
@@ -181,6 +180,17 @@ const selectedLabel = computed(() => {
         font-weight: 700;
         color: var(--color-text);
         transition: all 0.1s ease;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+
+        &-desc {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--color-text-muted);
+            opacity: 0.8;
+            transition: all 0.1s ease;
+        }
 
         &:hover,
         &:focus {
@@ -188,16 +198,29 @@ const selectedLabel = computed(() => {
             color: white;
             outline: none;
             box-shadow: none !important;
+
+            .c-select__option-desc {
+                color: rgba(255, 255, 255, 0.8);
+            }
         }
 
         &--selected {
             background: var(--color-surface-variant);
             color: var(--color-primary);
 
+            .c-select__option-desc {
+                color: var(--color-primary);
+                opacity: 0.8;
+            }
+
             &:hover,
             &:focus {
                 background: var(--color-primary);
                 color: white;
+
+                .c-select__option-desc {
+                    color: rgba(255, 255, 255, 0.8);
+                }
             }
         }
     }
