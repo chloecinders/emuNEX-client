@@ -11,6 +11,7 @@ export type Emulator = {
     binary_path: string;
     run_command: string;
     save_path?: string;
+    save_paths: string[];
     save_extensions: string[];
     input_config_file: string;
     input_mapper: string;
@@ -29,6 +30,7 @@ export type ServerEmulator = {
     binary_path: string;
     binary_name: string | null;
     save_path: string | null;
+    save_paths: string[];
     save_extensions: string[];
     input_config_file: string;
     input_mapper: string;

@@ -14,11 +14,58 @@ use crate::{
 };
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(from = "ExtraFileHelper")]
 pub struct ExtraFile {
     pub s3_path: String,
-    pub windows_path: String,
-    pub linux_path: String,
-    pub macos_path: String,
+    pub path: String,
+}
+
+#[derive(Deserialize)]
+struct ExtraFileHelper {
+    s3_path: String,
+    #[serde(default)]
+    path: Option<String>,
+    #[serde(default)]
+    windows_path: Option<String>,
+    #[serde(default)]
+    linux_path: Option<String>,
+    #[serde(default)]
+    macos_path: Option<String>,
+}
+
+impl From<ExtraFileHelper> for ExtraFile {
+    fn from(helper: ExtraFileHelper) -> Self {
+        let mut path = helper.path.unwrap_or_default();
+        if path.is_empty() {
+            #[cfg(target_os = "windows")]
+            {
+                path = helper.windows_path.clone().unwrap_or_default();
+            }
+            #[cfg(target_os = "linux")]
+            {
+                path = helper.linux_path.clone().unwrap_or_default();
+            }
+            #[cfg(target_os = "macos")]
+            {
+                path = helper.macos_path.clone().unwrap_or_default();
+            }
+        }
+        
+        if path.is_empty() {
+            path = helper.windows_path.unwrap_or_default();
+        }
+        if path.is_empty() {
+            path = helper.linux_path.unwrap_or_default();
+        }
+        if path.is_empty() {
+            path = helper.macos_path.unwrap_or_default();
+        }
+
+        ExtraFile {
+            s3_path: helper.s3_path,
+            path,
+        }
+    }
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
@@ -30,7 +77,8 @@ pub struct ApiEmulator {
     pub run_command: String,
     pub binary_path: String,
     pub binary_name: Option<String>,
-    pub save_path: Option<String>,
+    #[serde(default)]
+    pub save_paths: Vec<String>,
     pub save_extensions: Vec<String>,
     pub input_config_file: Option<String>,
     pub input_mapper: Option<String>,
@@ -60,6 +108,8 @@ pub struct StoreEmulator {
     pub run_command: String,
     #[serde(default)]
     pub save_path: Option<String>,
+    #[serde(default)]
+    pub save_paths: Vec<String>,
     #[serde(default)]
     pub save_extensions: Vec<String>,
     #[serde(default)]
@@ -350,14 +400,8 @@ pub async fn download_emulator<R: Runtime>(
         documents_dir: crate::utils::get_documents_dir(),
     };
 
-    let current_os = std::env::consts::OS;
     for extra in &emulator.extra_files {
-        let install_path_str = match current_os {
-            "windows" => &extra.windows_path,
-            "linux" => &extra.linux_path,
-            "macos" => &extra.macos_path,
-            _ => continue,
-        };
+        let install_path_str = &extra.path;
 
         if install_path_str.is_empty() || extra.s3_path.is_empty() {
             continue;
@@ -444,7 +488,7 @@ pub async fn download_emulator<R: Runtime>(
 
         if !should_keep {
             existing.run_command = emulator.run_command.clone();
-            existing.save_path = emulator.save_path.clone();
+            existing.save_paths = emulator.save_paths.clone();
             existing.save_extensions = emulator.save_extensions.clone();
             existing.input_config_file = emulator.input_config_file.clone();
             existing.input_mapper = emulator.input_mapper.clone();
@@ -469,7 +513,8 @@ pub async fn download_emulator<R: Runtime>(
                 is_default: is_first,
                 binary_path: final_binary_path.to_string_lossy().to_string(),
                 run_command: emulator.run_command,
-                save_path: emulator.save_path,
+                save_path: None,
+                save_paths: emulator.save_paths,
                 save_extensions: emulator.save_extensions,
                 input_config_file: emulator.input_config_file,
                 input_mapper: emulator.input_mapper,
@@ -703,7 +748,7 @@ pub async fn refresh_emulator_config<R: Runtime>(
         if expected_server_id == emulator_id {
             if let Some(existing) = stored_emulators.get_mut(&emulator_id) {
                 existing.run_command = server_emu.run_command;
-                existing.save_path = server_emu.save_path;
+                existing.save_paths = server_emu.save_paths;
                 existing.save_extensions = server_emu.save_extensions;
                 existing.input_config_file = server_emu.input_config_file;
                 existing.input_mapper = server_emu.input_mapper;

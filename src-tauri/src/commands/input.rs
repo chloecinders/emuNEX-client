@@ -1,12 +1,24 @@
 use crate::commands::emulator::StoreEmulator;
-use crate::store;
+use crate::mappers::{
+    duckstation::map_duckstation, mesen::map_mesen, mgba::map_mgba, project64::map_project64,
+    snes9x::map_snes9x, vbam::map_vbam,
+};
+use crate::utils::TemplateContext;
+use crate::{store, utils};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
+use std::path::Path;
 use tauri::{command, AppHandle, Runtime};
-use crate::mappers::{mesen::map_mesen, mgba::map_mgba, project64::map_project64, snes9x::map_snes9x, vbam::map_vbam};
 
-const SUPPORTED_MAPPERS: [&str; 5] = ["vbam", "mesen", "mgba", "snes9x", "project64"];
+const SUPPORTED_MAPPERS: [&str; 6] = [
+    "vbam",
+    "mesen",
+    "mgba",
+    "snes9x",
+    "project64",
+    "duckstation",
+];
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct SupportedEmulator {
@@ -190,11 +202,12 @@ pub fn apply_inputs_to_emulator(emu: &StoreEmulator, mappings: &HashMap<String, 
         return;
     };
 
-    let ctx = crate::utils::TemplateContext {
-        emu_dir: std::path::Path::new(&emu.binary_path)
+    let ctx = TemplateContext {
+        emu_dir: Path::new(&emu.binary_path)
             .parent()
             .map(|p| p.to_string_lossy().to_string())
             .unwrap_or_default(),
+        documents_dir: utils::get_documents_dir(),
         ..Default::default()
     };
 
@@ -203,7 +216,7 @@ pub fn apply_inputs_to_emulator(emu: &StoreEmulator, mappings: &HashMap<String, 
     let config_path = if config_path.is_absolute() {
         config_path
     } else {
-        let Some(parent) = std::path::Path::new(&emu.binary_path).parent() else {
+        let Some(parent) = Path::new(&emu.binary_path).parent() else {
             return;
         };
         parent.join(config_path)
@@ -237,6 +250,10 @@ pub fn apply_inputs_to_emulator(emu: &StoreEmulator, mappings: &HashMap<String, 
         }
         "project64" => {
             let new_content = map_project64(&content, mappings);
+            let _ = fs::write(&config_path, new_content);
+        }
+        "duckstation" => {
+            let new_content = map_duckstation(&content, mappings);
             let _ = fs::write(&config_path, new_content);
         }
         _ => {}

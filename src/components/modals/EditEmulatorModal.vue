@@ -27,21 +27,31 @@ const consoles = computed(() => {
 
 const editState = ref<any>({});
 const newSaveExtInputs = ref<Record<string, string>>({});
+const newSavePathInputs = ref<Record<string, string>>({});
 
 watch(
     () => props.emulatorId,
     (newId) => {
         if (newId && emulatorStore.emulators[newId]) {
+            const emu = emulatorStore.emulators[newId];
+            const paths = Array.isArray(emu.save_paths) ? [...emu.save_paths] : [];
+            if (emu.save_path && !paths.includes(emu.save_path)) {
+                paths.push(emu.save_path);
+            }
+
             editState.value[newId] = JSON.parse(
                 JSON.stringify({
-                    ...emulatorStore.emulators[newId],
-                    save_extensions: emulatorStore.emulators[newId].save_extensions ?? [],
-                    input_config_file: emulatorStore.emulators[newId].input_config_file ?? "",
-                    input_mapper: emulatorStore.emulators[newId].input_mapper ?? "",
-                    save_path: emulatorStore.emulators[newId].save_path ?? "",
+                    ...emu,
+                    save_extensions: emu.save_extensions ?? [],
+                    save_paths: paths,
+                    input_config_file: emu.input_config_file ?? "",
+                    input_mapper: emu.input_mapper ?? "",
                 }),
             );
+            delete editState.value[newId].save_path;
+
             newSaveExtInputs.value[newId] = "";
+            newSavePathInputs.value[newId] = "";
         }
     },
     { immediate: true },
@@ -59,6 +69,18 @@ const removeSaveExtFromEmulator = (emulatorId: string, ext: string) => {
     editState.value[emulatorId].save_extensions = editState.value[emulatorId].save_extensions.filter(
         (e: string) => e !== ext,
     );
+};
+
+const addSavePathToEmulator = (id: string) => {
+    const val = (newSavePathInputs.value[id] || "").trim();
+    if (val && !editState.value[id].save_paths.includes(val)) {
+        editState.value[id].save_paths.push(val);
+    }
+    newSavePathInputs.value[id] = "";
+};
+
+const removeSavePathFromEmulator = (emulatorId: string, path: string) => {
+    editState.value[emulatorId].save_paths = editState.value[emulatorId].save_paths.filter((p: string) => p !== path);
 };
 
 const saveEmulatorChanges = async () => {
@@ -137,8 +159,33 @@ const closeModal = () => {
             </div>
 
             <div class="c-emulator-field">
-                <Text variant="label" size="sm">Save Path (optional)</Text>
-                <Input v-model="editState[props.emulatorId].save_path" placeholder="e.g. /saves/$rom_name.sav" />
+                <Text variant="label" size="sm">Save Paths</Text>
+                <div style="display: flex; flex-direction: column; gap: 8px">
+                    <div class="c-tag-list">
+                        <span
+                            v-for="path in editState[props.emulatorId].save_paths"
+                            :key="path"
+                            class="c-tag c-tag--button"
+                            tabindex="0"
+                            role="button"
+                            :aria-label="`Remove path ${path}`"
+                            @click="removeSavePathFromEmulator(props.emulatorId!, path)"
+                            @keydown.enter.space.prevent="removeSavePathFromEmulator(props.emulatorId!, path)">
+                            {{ path }} ×
+                        </span>
+                        <Text v-if="editState[props.emulatorId].save_paths.length === 0" variant="muted" size="sm">
+                            No additional paths
+                        </Text>
+                    </div>
+                    <div style="display: flex; gap: 8px; align-items: center">
+                        <Input
+                            v-model="newSavePathInputs[props.emulatorId]"
+                            placeholder="e.g. /saves/$rom_name.sav"
+                            style="flex: 1; margin-bottom: 0"
+                            @keydown.enter.prevent="addSavePathToEmulator(props.emulatorId!)" />
+                        <Button @click="addSavePathToEmulator(props.emulatorId!)">Add</Button>
+                    </div>
+                </div>
             </div>
 
             <div class="c-emulator-field">

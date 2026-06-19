@@ -1,6 +1,6 @@
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
-use std::fs::{copy, create_dir_all, read_dir, write, File};
+use std::fs::{copy, create_dir_all, read_dir, remove_dir_all, remove_file, write, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
@@ -9,10 +9,9 @@ use tauri::{AppHandle, Emitter, Runtime};
 
 use crate::commands::emulator::StoreEmulator;
 use crate::commands::http::{perform_backend_request, BackendBody};
+use crate::commands::input::{apply_inputs_to_emulator, InputManagerConfig};
 use crate::commands::save::upload_save_files;
 use crate::{store, ApiResponse, AppState};
-
-
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct InstalledRom {
@@ -24,7 +23,6 @@ pub struct InstalledRom {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub companion_filenames: Vec<String>,
 }
-
 
 #[derive(Serialize, Deserialize, Default, Debug)]
 pub struct InstalledRomsManifest {
@@ -475,7 +473,7 @@ pub async fn install_game<R: Runtime>(
             }
         }
 
-        std::fs::remove_file(&dest_path).ok();
+        remove_file(&dest_path).ok();
     }
 
     let mut manifest = get_or_create_manifest(&app).await?;
@@ -546,7 +544,7 @@ pub async fn play_game<R: Runtime>(
         return Err("Emulator not found for this console".to_string());
     }
 
-    let emulator = if let Some(id) = emulator_id {
+    let mut emulator = if let Some(id) = emulator_id {
         all_emulators
             .into_iter()
             .find(|e| e.id == id)
@@ -568,9 +566,18 @@ pub async fn play_game<R: Runtime>(
             })?
     };
 
-    if let Some(config) = global_store.get("input_manager_config").and_then(|v| {
-        serde_json::from_value::<crate::commands::input::InputManagerConfig>(v.clone()).ok()
-    }) {
+    if emulator.save_paths.is_empty() {
+        if let Some(sp) = &emulator.save_path {
+            if !sp.is_empty() {
+                emulator.save_paths.push(sp.clone());
+            }
+        }
+    }
+
+    if let Some(config) = global_store
+        .get("input_manager_config")
+        .and_then(|v| serde_json::from_value::<InputManagerConfig>(v.clone()).ok())
+    {
         if let Some(emu_cfg) = config.emulator_configs.get(&emulator.id) {
             if emu_cfg.auto_apply_on_start {
                 if let Some(scheme) = emu_cfg
@@ -578,7 +585,7 @@ pub async fn play_game<R: Runtime>(
                     .as_ref()
                     .and_then(|id| config.schemes.iter().find(|s| &s.id == id))
                 {
-                    crate::commands::input::apply_inputs_to_emulator(&emulator, &scheme.mappings);
+                    apply_inputs_to_emulator(&emulator, &scheme.mappings);
                 }
             }
         }
@@ -604,7 +611,7 @@ pub async fn play_game<R: Runtime>(
 
     let temp_dir = std::env::temp_dir().join(format!("emunex_{}", game_id));
     if temp_dir.exists() {
-        std::fs::remove_dir_all(&temp_dir).ok();
+        remove_dir_all(&temp_dir).ok();
     }
     create_dir_all(&temp_dir).map_err(|e| e.to_string())?;
 
@@ -615,7 +622,9 @@ pub async fn play_game<R: Runtime>(
     let temp_rom_path = temp_dir.join(rom_filename);
     copy(&persistent_rom_path, &temp_rom_path).map_err(|e| e.to_string())?;
 
-    let parent_dir = persistent_rom_path.parent().ok_or("Invalid ROM parent directory")?;
+    let parent_dir = persistent_rom_path
+        .parent()
+        .ok_or("Invalid ROM parent directory")?;
     for comp_name in &rom_info.companion_filenames {
         let comp_src = parent_dir.join(comp_name);
 
@@ -627,7 +636,8 @@ pub async fn play_game<R: Runtime>(
                     create_dir_all(p).map_err(|e| e.to_string())?;
                 }
             }
-            copy(&comp_src, &comp_dest).map_err(|e| format!("Failed to copy companion file {}: {}", comp_name, e))?;
+            copy(&comp_src, &comp_dest)
+                .map_err(|e| format!("Failed to copy companion file {}: {}", comp_name, e))?;
         }
     }
 
@@ -635,7 +645,6 @@ pub async fn play_game<R: Runtime>(
         let entry = entry.map_err(|e| e.to_string())?;
         copy(entry.path(), temp_dir.join(entry.file_name())).ok();
     }
-
 
     let rom_name = persistent_rom_path
         .file_stem()
@@ -655,31 +664,41 @@ pub async fn play_game<R: Runtime>(
         documents_dir: crate::utils::get_documents_dir(),
     };
 
-    let resolved_save_path = if let Some(ref template) = emulator.save_path {
-        if template.is_empty() {
-            None
+    let has_save_paths = !emulator.save_paths.is_empty();
+
+    let mapping_file = save_dir.join("path_mapping.json");
+    let mut path_mapping: HashMap<String, String> = if mapping_file.exists() {
+        if let Ok(data) = std::fs::read_to_string(&mapping_file) {
+            serde_json::from_str(&data).unwrap_or_default()
         } else {
-            Some(ctx.resolve_path(template).to_string_lossy().to_string())
+            HashMap::new()
         }
     } else {
-        None
+        HashMap::new()
     };
 
-    if let Some(ref path) = resolved_save_path {
-        let p = Path::new(path);
-        if p.is_absolute() {
-            if p.is_dir() && p.extension().is_none() {
-                create_dir_all(p).ok();
-                recursive_copy_dir(&save_dir, p);
-            } else {
-                if let Some(parent) = p.parent() {
-                    create_dir_all(parent).ok();
+    if has_save_paths {
+        for entry in read_dir(&save_dir).unwrap_or_else(|_| read_dir(&save_dir).unwrap()) {
+            if let Ok(entry) = entry {
+                let file_name = entry.file_name().to_string_lossy().to_string();
+                if file_name == "path_mapping.json" {
+                    continue;
                 }
-                if let Some(target_name) = p.file_name().and_then(|f| f.to_str()) {
-                    if !target_name.is_empty() {
-                        let src = save_dir.join(target_name);
-                        if src.exists() {
-                            copy(&src, p).ok();
+
+                if let Some(virtual_path) = path_mapping.get(&file_name) {
+                    let real_path = ctx.resolve_path(virtual_path);
+                    if let Some(parent) = real_path.parent() {
+                        create_dir_all(parent).ok();
+                    }
+                    if entry.path().is_file() {
+                        copy(entry.path(), &real_path).ok();
+                    }
+                } else {
+                    let first_path = ctx.resolve_path(&emulator.save_paths[0]);
+                    if first_path.extension().is_none() {
+                        create_dir_all(&first_path).ok();
+                        if entry.path().is_file() {
+                            copy(entry.path(), first_path.join(&file_name)).ok();
                         }
                     }
                 }
@@ -689,17 +708,22 @@ pub async fn play_game<R: Runtime>(
         recursive_copy_dir(&save_dir, &temp_dir);
     }
 
-    let scan_dir_for_snapshot = if let Some(ref path) = resolved_save_path {
-        let p = Path::new(path);
-        if p.is_absolute() && p.is_dir() {
-            p.to_path_buf()
-        } else {
-            temp_dir.clone()
+    let mut pre_snapshots: HashMap<String, HashMap<PathBuf, FileMeta>> = HashMap::new();
+
+    if has_save_paths {
+        for t in &emulator.save_paths {
+            let p = ctx.resolve_path(t);
+            if p.exists() && p.is_dir() {
+                pre_snapshots.insert(t.clone(), recursive_snapshot(&p));
+            } else if p.exists() && p.is_file() {
+                if let Some(parent) = p.parent() {
+                    pre_snapshots.insert(t.clone(), recursive_snapshot(parent));
+                }
+            }
         }
     } else {
-        temp_dir.clone()
-    };
-    let pre_snapshot = recursive_snapshot(&scan_dir_for_snapshot);
+        pre_snapshots.insert("temp".to_string(), recursive_snapshot(&temp_dir));
+    }
 
     let child = if !emulator.binary_path.is_empty() || !emulator.run_command.is_empty() {
         let cmd_template = if !emulator.run_command.is_empty() {
@@ -750,62 +774,134 @@ pub async fn play_game<R: Runtime>(
 
     child.wait().map_err(|e| e.to_string())?;
 
-    let scan_dir = if let Some(ref path) = resolved_save_path {
-        let p = Path::new(path);
-
-        if p.is_absolute() && (p.is_dir() || (!p.exists() && p.extension().is_none())) {
-            p.to_path_buf()
-        } else {
-            temp_dir.clone()
-        }
-    } else {
-        temp_dir.clone()
-    };
-
     let rom_abs = temp_rom_path.clone();
 
-    if !emulator.save_extensions.is_empty() {
-        let matched = collect_by_extension(&scan_dir, &emulator.save_extensions);
-        for (rel, abs_path) in matched {
-            let dest = save_dir.join(&rel);
+    if has_save_paths {
+        for template_path in &emulator.save_paths {
+            let mut real_dir = ctx.resolve_path(template_path);
+            let mut is_file_template = false;
+            let mut expected_filename = String::new();
 
-            if let Some(parent) = dest.parent() {
-                create_dir_all(parent).ok();
+            if !real_dir.is_dir() && real_dir.extension().is_some() {
+                is_file_template = true;
+                expected_filename = real_dir
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .to_string();
+                if let Some(parent) = real_dir.parent() {
+                    real_dir = parent.to_path_buf();
+                }
             }
 
-            if copy(&abs_path, &dest).is_ok() && scan_dir != temp_dir {
-                let _ = std::fs::remove_file(&abs_path);
-            }
-        }
-    } else {
-        let post_snapshot = recursive_snapshot(&scan_dir);
-
-        for (rel, post_meta) in &post_snapshot {
-            let abs_path = scan_dir.join(rel);
-
-            if abs_path == rom_abs {
+            if !real_dir.exists() || !real_dir.is_dir() {
                 continue;
             }
 
-            let is_new_or_changed = match pre_snapshot.get(rel) {
-                None => true,
-                Some(pre_meta) => {
-                    pre_meta.size != post_meta.size || pre_meta.modified != post_meta.modified
+            let post_snapshot = recursive_snapshot(&real_dir);
+            let pre = pre_snapshots.get(template_path);
+
+            for (rel, post_meta) in &post_snapshot {
+                if is_file_template && rel.to_string_lossy() != expected_filename {
+                    continue;
                 }
-            };
 
-            if is_new_or_changed {
-                let dest = save_dir.join(rel);
+                let abs_path = real_dir.join(rel);
+                if abs_path == rom_abs {
+                    continue;
+                }
 
+                let ext = abs_path.extension().and_then(|s| s.to_str()).unwrap_or("");
+                let ext_with_dot = format!(".{}", ext);
+
+                if !emulator.save_extensions.is_empty()
+                    && !emulator
+                        .save_extensions
+                        .iter()
+                        .any(|e| e.to_lowercase() == ext_with_dot.to_lowercase())
+                {
+                    continue;
+                }
+
+                let is_changed = match pre.and_then(|m| m.get(rel)) {
+                    None => true,
+                    Some(pre_meta) => {
+                        pre_meta.size != post_meta.size || pre_meta.modified != post_meta.modified
+                    }
+                };
+
+                if is_changed {
+                    let virtual_path_str = if is_file_template {
+                        template_path.clone()
+                    } else {
+                        format!(
+                            "{}/{}",
+                            template_path.trim_end_matches('/'),
+                            rel.to_string_lossy().replace("\\", "/")
+                        )
+                    };
+
+                    let hash_str = format!("{:x}", md5::compute(virtual_path_str.as_bytes()));
+                    let hash_name = if ext.is_empty() {
+                        hash_str
+                    } else {
+                        format!("{}.{}", hash_str, ext)
+                    };
+
+                    let dest = save_dir.join(&hash_name);
+                    if let Some(parent) = dest.parent() {
+                        create_dir_all(parent).ok();
+                    }
+
+                    if copy(&abs_path, &dest).is_ok() {
+                        path_mapping.insert(hash_name, virtual_path_str);
+                    }
+                }
+            }
+        }
+
+        let mapping_data = serde_json::to_string_pretty(&path_mapping).unwrap_or_default();
+        std::fs::write(&mapping_file, mapping_data).ok();
+    } else {
+        let pre_snapshot = pre_snapshots.get("temp").unwrap();
+        let post_snapshot = recursive_snapshot(&temp_dir);
+
+        if !emulator.save_extensions.is_empty() {
+            let matched = collect_by_extension(&temp_dir, &emulator.save_extensions);
+            for (rel, abs_path) in matched {
+                let dest = save_dir.join(&rel);
                 if let Some(parent) = dest.parent() {
                     create_dir_all(parent).ok();
                 }
-
-                if copy(&abs_path, &dest).is_ok() && scan_dir != temp_dir {
-                    let _ = std::fs::remove_file(&abs_path);
+                if copy(&abs_path, &dest).is_ok() {
+                    let _ = remove_file(&abs_path);
                 }
-            } else if scan_dir != temp_dir {
-                let _ = std::fs::remove_file(&abs_path);
+            }
+        } else {
+            for (rel, post_meta) in &post_snapshot {
+                let abs_path = temp_dir.join(rel);
+                if abs_path == rom_abs {
+                    continue;
+                }
+
+                let is_new_or_changed = match pre_snapshot.get(rel) {
+                    None => true,
+                    Some(pre_meta) => {
+                        pre_meta.size != post_meta.size || pre_meta.modified != post_meta.modified
+                    }
+                };
+
+                if is_new_or_changed {
+                    let dest = save_dir.join(rel);
+                    if let Some(parent) = dest.parent() {
+                        create_dir_all(parent).ok();
+                    }
+                    if copy(&abs_path, &dest).is_ok() {
+                        let _ = remove_file(&abs_path);
+                    }
+                } else {
+                    let _ = remove_file(&abs_path);
+                }
             }
         }
     }
@@ -829,7 +925,7 @@ pub async fn play_game<R: Runtime>(
     store.set("sync_versions", serde_json::json!(sync_versions));
     let _ = store.save();
 
-    std::fs::remove_dir_all(&temp_dir).ok();
+    remove_dir_all(&temp_dir).ok();
     state.is_game_running.store(false, Ordering::SeqCst);
     let _ = app.emit("game-status", "Stopped");
     Ok(())
@@ -906,7 +1002,7 @@ pub async fn get_local_storage<R: Runtime>(
     for (game_id, rom_info) in &manifest.roms {
         let console_dir = base_path.join("roms").join(&rom_info.console);
         let rom_path = console_dir.join(&rom_info.rom_filename);
-        
+
         let mut rom_size = if rom_path.exists() {
             rom_path.metadata().map(|m| m.len()).unwrap_or(0)
         } else {
@@ -983,16 +1079,16 @@ pub async fn delete_installed_rom<R: Runtime>(
         let parent_dir = base_path
             .join("roms")
             .join(&rom_info.console.to_lowercase());
-        
+
         let rom_path = parent_dir.join(&rom_info.rom_filename);
         if rom_path.exists() {
-            std::fs::remove_file(&rom_path).map_err(|e| e.to_string())?;
+            remove_file(&rom_path).map_err(|e| e.to_string())?;
         }
 
         for comp_name in &rom_info.companion_filenames {
             let comp_path = parent_dir.join(comp_name);
             if comp_path.exists() {
-                std::fs::remove_file(&comp_path).ok();
+                remove_file(&comp_path).ok();
             }
         }
 
@@ -1009,7 +1105,7 @@ pub fn delete_local_save<R: Runtime>(app: AppHandle<R>, game_id: String) -> Resu
     let save_dir = base_path.join("saves").join(&game_id);
 
     if save_dir.exists() {
-        std::fs::remove_dir_all(save_dir).map_err(|e| e.to_string())?;
+        remove_dir_all(save_dir).map_err(|e| e.to_string())?;
     }
 
     Ok(())

@@ -152,7 +152,7 @@ const addCustomEmulator = () => {
         is_default: false,
         binary_path: "",
         run_command: "",
-        save_path: "",
+        save_paths: [],
         save_extensions: [],
         input_config_file: "",
         input_mapper: "",

@@ -324,6 +324,7 @@ export function useControllerNav() {
 
     const repeatTimers: Partial<Record<NavDir, ReturnType<typeof setTimeout>>> = {};
     const repeatIntervals: Partial<Record<NavDir, ReturnType<typeof setInterval>>> = {};
+    const holdTimers: Partial<Record<NavDir, ReturnType<typeof setTimeout>>> = {};
 
     function isPressed(dir: NavDir): boolean {
         return (NAV_ACTIONS[dir] as readonly string[]).some((a) => !!store.navActions[a]);
@@ -442,8 +443,17 @@ export function useControllerNav() {
                     if (now && !was) {
                         act(dir);
                         startRepeat(dir);
+                        if (dir === "search") {
+                            holdTimers[dir] = setTimeout(() => {
+                                router.push("/downloads");
+                            }, 1000);
+                        }
                     } else if (!now && was) {
                         stopRepeat(dir);
+                        if (holdTimers[dir]) {
+                            clearTimeout(holdTimers[dir]);
+                            delete holdTimers[dir];
+                        }
                     }
                     prev[dir] = now;
                 }

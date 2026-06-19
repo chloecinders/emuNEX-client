@@ -416,18 +416,12 @@ async fn run_emulator_download<R: Runtime>(
         documents_dir: crate::utils::get_documents_dir(),
     };
 
-    let current_os = std::env::consts::OS;
     for extra in &emulator.extra_files {
         if task.cancel_flag.load(Ordering::SeqCst) {
             return Err("Cancelled".to_string());
         }
 
-        let install_path_str = match current_os {
-            "windows" => &extra.windows_path,
-            "linux" => &extra.linux_path,
-            "macos" => &extra.macos_path,
-            _ => continue,
-        };
+        let install_path_str = &extra.path;
 
         if install_path_str.is_empty() || extra.s3_path.is_empty() {
             continue;
@@ -490,7 +484,7 @@ async fn run_emulator_download<R: Runtime>(
         existing.binary_path = final_binary_path.to_string_lossy().to_string();
         if !keep_config.unwrap_or(false) {
             existing.run_command = emulator.run_command.clone();
-            existing.save_path = emulator.save_path.clone();
+            existing.save_paths = emulator.save_paths.clone();
             existing.save_extensions = emulator.save_extensions.clone();
             existing.input_config_file = emulator.input_config_file.clone();
             existing.input_mapper = emulator.input_mapper.clone();
@@ -514,7 +508,8 @@ async fn run_emulator_download<R: Runtime>(
                 is_default: is_first,
                 binary_path: final_binary_path.to_string_lossy().to_string(),
                 run_command: emulator.run_command,
-                save_path: emulator.save_path,
+                save_path: None,
+                save_paths: emulator.save_paths,
                 save_extensions: emulator.save_extensions,
                 input_config_file: emulator.input_config_file,
                 input_mapper: emulator.input_mapper,

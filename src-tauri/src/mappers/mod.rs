@@ -1,3 +1,4 @@
+pub mod duckstation;
 pub mod mesen;
 pub mod mgba;
 pub mod project64;
