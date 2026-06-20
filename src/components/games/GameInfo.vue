@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { ChevronDown, Gamepad2, Library } from "lucide-vue-next";
+import { ChevronDown, Gamepad2, Library, Loader2 } from "lucide-vue-next";
 import { computed, onMounted, ref, type Ref, watch } from "vue";
 import { http, useStoragePath } from "../../lib/http";
 import { DiscordRPC } from "../../lib/rpc";
@@ -31,6 +31,7 @@ const toast = useToast();
 const game: Ref<Game | null> = ref(null);
 const isReadyToPlay = ref(false);
 const isRomInstalled = ref(false);
+const isPreparingDownload = ref(false);
 const isDownloading = computed(() => {
     if (!game.value) return false;
     return downloadStore.isGameQueued(game.value.id.toString()) || downloadStore.isEmulatorQueued(game.value.console);
@@ -39,13 +40,13 @@ const isDownloading = computed(() => {
 const activeDownloadItem = computed(() => {
     if (!game.value) return undefined;
     const romItem = downloadStore.getItemForGame(game.value.id.toString());
-    if (romItem && (romItem.status === "queued" || romItem.status === "downloading")) {
-        return romItem;
-    }
     const emuItem = downloadStore.getEmulatorItem(game.value.console);
-    if (emuItem && (emuItem.status === "queued" || emuItem.status === "downloading")) {
-        return emuItem;
-    }
+
+    if (emuItem && emuItem.status === "downloading") return emuItem;
+    if (romItem && romItem.status === "downloading") return romItem;
+    if (emuItem && emuItem.status === "queued") return emuItem;
+    if (romItem && romItem.status === "queued") return romItem;
+
     return romItem || emuItem;
 });
 
@@ -229,6 +230,7 @@ const handleInstall = async () => {
     if (!game.value || isDownloading.value) return;
 
     try {
+        isPreparingDownload.value = true;
         const emulatorInstalled = await emulatorStore.isEmulatorInstalled(game.value.console);
         const romInstalled = await invoke<boolean>("is_game_installed", {
             gameId: game.value.id.toString(),
@@ -296,6 +298,7 @@ const handleInstall = async () => {
             }
 
             showConfirmInstallModal.value = true;
+            isPreparingDownload.value = false;
             return;
         }
 
@@ -346,8 +349,10 @@ const handleInstall = async () => {
         }
         pendingEmulatorInfo.value = null;
         availableEmulators.value = [];
+        isPreparingDownload.value = false;
     } catch (error) {
         toast.error(`Failed to queue install: ${formatError(error)}`);
+        isPreparingDownload.value = false;
     }
 };
 
@@ -601,7 +606,7 @@ const handlePlay = async (customEmulatorId?: string) => {
                             color="green"
                             full
                             @click="handleInstall"
-                            :disabled="isDownloading"
+                            :disabled="isDownloading || isPreparingDownload"
                             :progress="downloadProgress === 100 ? extractionProgress : downloadProgress">
                             <template v-if="isDownloading">
                                 {{
@@ -613,6 +618,10 @@ const handlePlay = async (customEmulatorId?: string) => {
                                               : `INSTALLING ${extractionProgress ?? 0}%`
                                           : `DOWNLOADING ${downloadProgress ?? 0}%`
                                 }}
+                            </template>
+                            <template v-else-if="isPreparingDownload">
+                                <Loader2 class="spin" :size="18" />
+                                PREPARING...
                             </template>
                             <template v-else>INSTALL</template>
                         </Button>
@@ -635,7 +644,7 @@ const handlePlay = async (customEmulatorId?: string) => {
                                 color="green"
                                 class="c-bottom-panel__split-main"
                                 @click="handleInstall"
-                                :disabled="isDownloading"
+                                :disabled="isDownloading || isPreparingDownload"
                                 :progress="downloadProgress === 100 ? extractionProgress : downloadProgress">
                                 <template v-if="isDownloading">
                                     {{
@@ -647,6 +656,10 @@ const handlePlay = async (customEmulatorId?: string) => {
                                                   : `INSTALLING ${extractionProgress ?? 0}%`
                                               : `DOWNLOADING ${downloadProgress ?? 0}%`
                                     }}
+                                </template>
+                                <template v-else-if="isPreparingDownload">
+                                    <Loader2 class="spin" :size="18" />
+                                    PREPARING...
                                 </template>
                                 <template v-else>INSTALL</template>
                             </Button>
@@ -738,7 +751,7 @@ const handlePlay = async (customEmulatorId?: string) => {
             :show="showConfirmInstallModal"
             :title="`Install ${game.title}`"
             :items="installItems"
-            :loading="isDownloading"
+            :loading="isDownloading || isPreparingDownload"
             :emulatorOptions="emulatorOptions"
             :selectedEmulatorId="pendingEmulatorInfo?.id || ''"
             @update:selectedEmulatorId="
@@ -1071,5 +1084,18 @@ const handlePlay = async (customEmulatorId?: string) => {
 .fade-enter-from,
 .fade-leave-to {
     opacity: 0;
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.spin {
+    animation: spin 1s linear infinite;
 }
 </style>
